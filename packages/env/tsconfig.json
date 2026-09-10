@@ -1,0 +1,6 @@
+{
+  "extends": "@ppal/config/tsconfig.base.json",
+  "compilerOptions": {
+    "strictNullChecks": true
+  }
+}

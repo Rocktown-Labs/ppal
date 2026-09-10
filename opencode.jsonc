@@ -1,0 +1,37 @@
+{
+  "mcp": {
+    "better-t-stack": {
+      "type": "local",
+      "command": ["bunx", "create-better-t-stack@latest", "mcp"],
+      "environment": {},
+      "enabled": true,
+    },
+    "context7": {
+      "type": "local",
+      "command": ["npx", "-y", "@upstash/context7-mcp"],
+      "environment": {},
+      "enabled": true,
+    },
+    "cloudflare-docs": {
+      "type": "remote",
+      "url": "https://docs.mcp.cloudflare.com/mcp",
+      "enabled": true,
+    },
+    "shadcn": {
+      "type": "local",
+      "command": ["npx", "-y", "shadcn@latest", "mcp"],
+      "environment": {},
+      "enabled": true,
+    },
+    "better-auth": {
+      "type": "remote",
+      "url": "https://mcp.better-auth.com/mcp",
+      "enabled": true,
+    },
+    "expo-mcp": {
+      "type": "remote",
+      "url": "https://mcp.expo.dev/mcp",
+      "enabled": true,
+    },
+  },
+}
