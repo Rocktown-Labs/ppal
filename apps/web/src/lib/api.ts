@@ -9,11 +9,11 @@ import type {
 import { env } from "@ppal/env/web";
 import type { z } from "zod";
 
+import { normalizeServerUrl } from "./server-url";
+
 export type ReviewTicketRequest = z.infer<typeof reviewTicketRequestSchema>;
 
-const BASE_URL = env.VITE_SERVER_URL.endsWith("/")
-  ? env.VITE_SERVER_URL.slice(0, -1)
-  : env.VITE_SERVER_URL;
+const BASE_URL = normalizeServerUrl(env.VITE_SERVER_URL);
 const pathSegment = (value: string): string => encodeURIComponent(value);
 const UPLOAD_URL_PATTERN = /^\/api\/v1\/uploads\/[a-z0-9-]+\/content$/iu;
 

@@ -4,6 +4,8 @@ import { env } from "@ppal/env/web";
 import { twoFactorClient } from "better-auth/client/plugins";
 import { createAuthClient } from "better-auth/react";
 
+import { normalizeServerUrl } from "./server-url";
+
 const getServerUrl = (url: string) => {
   const processEnv = (
     globalThis as {
@@ -16,7 +18,7 @@ const getServerUrl = (url: string) => {
       : processEnv.SERVER_URL;
   }
 
-  const normalized = url.endsWith("/") ? url.slice(0, -1) : url;
+  const normalized = normalizeServerUrl(url);
 
   if (!normalized.startsWith("/")) {
     return normalized;
@@ -37,7 +39,7 @@ const getServerUrl = (url: string) => {
     return `${origin}${normalized}`;
   }
 
-  return `http://localhost:3000${normalized}`;
+  return `http://127.0.0.1:3000${normalized}`;
 };
 
 export const authClient = createAuthClient({
