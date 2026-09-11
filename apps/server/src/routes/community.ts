@@ -6,7 +6,7 @@ import { Hono } from "hono";
 import type { Context } from "hono";
 import { z } from "zod";
 
-import { getAuthDiagnostics, getAuthUser } from "../lib/auth";
+import { getAuthUser } from "../lib/auth";
 import { escapeLikePattern } from "../lib/database";
 import { matchesDeclaredMimeType } from "../lib/upload-security";
 import { writeAuditEvent } from "../services/audit";
@@ -121,18 +121,9 @@ const uploadAvatar = async (c: Context, auth: Auth): Promise<Response> => {
 export const createCommunityRoutes = (auth: Auth) =>
   new Hono()
     .get("/me", async (c) => {
-      if (
-        c.req.query("debug") === "auth" ||
-        c.req.header("x-debug-auth") === "1"
-      ) {
-        return c.json(await getAuthDiagnostics(auth, c.req.raw));
-      }
       const user = await getAuthUser(auth, c.req.raw);
       if (!user) {
-        return c.json(
-          { build: "86be0ff", code: "UNAUTHORIZED", error: "Unauthorized" },
-          401
-        );
+        return c.json({ code: "UNAUTHORIZED", error: "Unauthorized" }, 401);
       }
       const profile = await env.DB.prepare(
         `SELECT bio, is_public, username FROM profiles WHERE user_id = ?`
