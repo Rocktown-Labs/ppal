@@ -30,7 +30,7 @@ jobs:
       - run: bun test packages/domain apps/server/tests
       - name: Deploy Cloudflare stack
         working-directory: packages/infra
-        run: bun alchemy deploy --stage "$ALCHEMY_DEPLOY_STAGE" --yes
+        run: bun alchemy deploy --stage "$ALCHEMY_DEPLOY_STAGE" --yes --force
         env:
           ALCHEMY_DEPLOY_STAGE: ${{ github.event_name == 'workflow_dispatch' && 'production' || format('pr-{0}', github.event.pull_request.number) }}
           APPLE_CLIENT_ID: ${{ secrets.APPLE_CLIENT_ID }}

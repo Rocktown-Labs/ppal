@@ -2,7 +2,7 @@ import type { Auth } from "@ppal/auth";
 import { env } from "@ppal/env/server";
 import { Hono } from "hono";
 
-import { getAuthDiagnostics, getAuthUser } from "../lib/auth";
+import { getAuthUser } from "../lib/auth";
 
 interface PlayerSummaryRow {
   hit_rate: number;
@@ -39,9 +39,6 @@ const mapPlayer = (row: PlayerSummaryRow) => ({
 export const createAnalyticsRoutes = (auth: Auth) =>
   new Hono()
     .get("/analytics/overview", async (c) => {
-      if (c.req.query("debug") === "auth") {
-        return c.json(await getAuthDiagnostics(auth, c.req.raw));
-      }
       const user = await getAuthUser(auth, c.req.raw.headers);
       if (!user) {
         return c.json({ code: "UNAUTHORIZED", error: "Unauthorized" }, 401);
