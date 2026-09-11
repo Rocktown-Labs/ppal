@@ -151,17 +151,29 @@ export const getAuthUser = async (
   auth: Auth,
   input: Headers | Request
 ): Promise<AuthUser | null> => {
+  const headers = new Headers(input instanceof Request ? input.headers : input);
   try {
-    const handlerSession = await getSessionFromHandler(auth, input);
-    if (handlerSession) {
-      return handlerSession.user;
+    const session = (await auth.api.getSession({
+      headers,
+    })) as AuthSession | null;
+    if (session?.user && isRecord(session.user)) {
+      const { email, id, name } = session.user;
+      if (
+        typeof email === "string" &&
+        typeof id === "string" &&
+        typeof name === "string"
+      ) {
+        return { email, id, name };
+      }
     }
   } catch {
-    // Fall through to the direct API helper for non-HTTP test adapters.
+    // Fall through to the request-aware handler for non-HTTP test adapters.
   }
 
-  const session = (await auth.api.getSession({
-    headers: new Headers(input instanceof Request ? input.headers : input),
-  })) as AuthSession | null;
-  return session?.user ?? null;
+  try {
+    const handlerSession = await getSessionFromHandler(auth, input);
+    return handlerSession?.user ?? null;
+  } catch {
+    return null;
+  }
 };
