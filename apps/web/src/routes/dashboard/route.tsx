@@ -2,7 +2,6 @@ import {
   Link,
   Outlet,
   createFileRoute,
-  isRedirect,
   redirect,
   useRouterState,
 } from "@tanstack/react-router";
@@ -288,35 +287,25 @@ export const Route = createFileRoute("/dashboard")({
     const isOnboardingPath = location.pathname === "/dashboard/onboarding";
 
     // The onboarding wizard is the first authenticated destination for a new
-    // account. It creates the profile that the dashboard guard checks, so do
-    // not make the wizard depend on that profile already existing.
-    if (isOnboardingPath) {
-      return { profile: null, session };
+    // account. The profile endpoint returns a null profile until the wizard
+    // creates one, so both paths can use the same guard without a race.
+    const res = await api.community.getMe();
+    const profile = res.user?.profile ?? null;
+    const hasUsername = Boolean(profile?.username?.trim());
+
+    if (!hasUsername && !isOnboardingPath) {
+      throw redirect({
+        to: "/dashboard/onboarding",
+      });
     }
 
-    try {
-      const res = await api.community.getMe();
-      const hasUsername = Boolean(res.user?.profile?.username?.trim());
-
-      if (!hasUsername && !isOnboardingPath) {
-        throw redirect({
-          to: "/dashboard/onboarding",
-        });
-      }
-
-      if (hasUsername && isOnboardingPath) {
-        throw redirect({
-          to: "/dashboard",
-        });
-      }
-
-      return { profile: res.user?.profile ?? null, session };
-    } catch (error) {
-      if (isRedirect(error)) {
-        throw error;
-      }
-      throw error;
+    if (hasUsername && isOnboardingPath) {
+      throw redirect({
+        to: "/dashboard",
+      });
     }
+
+    return { profile, session };
   },
   component: DashboardLayout,
 });
