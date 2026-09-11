@@ -1,6 +1,4 @@
-import { zValidator } from "@hono/zod-validator";
 import { createAuth } from "@ppal/auth";
-import { updateProfileRequestSchema } from "@ppal/contracts/community";
 import { env } from "@ppal/env/server";
 import { initLogger } from "evlog";
 import { createAuthMiddleware } from "evlog/better-auth";
@@ -14,11 +12,7 @@ import { secureHeaders } from "hono/secure-headers";
 import { createAnalyticsRoutes } from "./routes/analytics";
 import { createBillingRoutes } from "./routes/billing";
 import { createCatalogRoutes } from "./routes/catalog";
-import {
-  getCurrentUserProfile,
-  updateCurrentUserProfile,
-  createCommunityRoutes,
-} from "./routes/community";
+import { createCommunityRoutes } from "./routes/community";
 import { createHistoricalImportRoutes } from "./routes/historical-imports";
 import { createNotificationRoutes } from "./routes/notifications";
 import { createOperationRoutes } from "./routes/operations";
@@ -159,10 +153,6 @@ const routes = app
     })
   )
   .get("/api/v1/ping", (c) => c.json({ build: SERVER_BUILD, ok: true }))
-  .get("/api/v1/me", (c) => getCurrentUserProfile(c, auth))
-  .patch("/api/v1/me", zValidator("json", updateProfileRequestSchema), (c) =>
-    updateCurrentUserProfile(c, auth, c.req.valid("json"))
-  )
   .route("/api/v1/uploads", createUploadRoutes(auth))
   .route("/api/v1/tickets", createTicketRoutes(auth))
   .route("/api/v1", createHistoricalImportRoutes(auth))
