@@ -150,7 +150,10 @@ const routes = app
       timestamp: new Date().toISOString(),
     })
   )
-  .get("/api/v1/ping", (c) => c.json({ build: "d97abf4", ok: true }))
+  .get("/api/v1/ping", (c) => c.json({ build: "86be0ff", ok: true }))
+  .get("/api/v1/debug-route", (c) =>
+    c.json({ build: "86be0ff", path: c.req.path, query: c.req.query() })
+  )
   .route("/api/v1/uploads", createUploadRoutes(auth))
   .route("/api/v1/tickets", createTicketRoutes(auth))
   .route("/api/v1", createHistoricalImportRoutes(auth))
