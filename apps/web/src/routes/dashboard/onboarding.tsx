@@ -227,8 +227,6 @@ const OnboardingWizardComponent = () => {
     <div className="min-h-svh lg:grid lg:grid-cols-[minmax(24rem,0.86fr)_minmax(0,1.14fr)]">
       {/* Desktop Left Aside Branding & Live Tracker */}
       <aside className="relative hidden min-h-svh overflow-hidden border-e border-white/10 bg-[#111413] text-white lg:flex">
-        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(0,191,99,0.18),transparent_36%)]" />
-        <div className="pointer-events-none absolute -bottom-40 -left-32 size-[30rem] rounded-full bg-emerald-500/10 blur-3xl" />
         <div className="relative flex min-h-svh w-full flex-col p-8 sm:p-10 xl:p-14">
           <Link to="/" className="inline-flex w-fit items-center">
             <img

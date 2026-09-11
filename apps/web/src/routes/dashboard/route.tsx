@@ -287,6 +287,13 @@ export const Route = createFileRoute("/dashboard")({
 
     const isOnboardingPath = location.pathname === "/dashboard/onboarding";
 
+    // The onboarding wizard is the first authenticated destination for a new
+    // account. It creates the profile that the dashboard guard checks, so do
+    // not make the wizard depend on that profile already existing.
+    if (isOnboardingPath) {
+      return { profile: null, session };
+    }
+
     try {
       const res = await api.community.getMe();
       const hasUsername = Boolean(res.user?.profile?.username?.trim());

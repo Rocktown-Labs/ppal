@@ -54,10 +54,12 @@ export function ProviderButton({
     socialSignInMode,
   } = useAuth();
 
-  const safeRedirectTo =
+  const requestedRedirectTo =
     redirectTo.startsWith("/") && !redirectTo.startsWith("//")
       ? redirectTo
       : "/";
+  const safeRedirectTo =
+    view === "signUp" ? "/dashboard/onboarding" : requestedRedirectTo;
   const callbackURL = new URL(safeRedirectTo, baseURL).toString();
   const { fetchOptions, resetFetchOptions } = useFetchOptions();
 

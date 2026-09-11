@@ -178,7 +178,11 @@ export function SignIn({
                       return (
                         <Field data-invalid={isInvalid}>
                           <FieldLabel htmlFor="email">
-                            {localization.auth.email}
+                            {localization.auth.email}{" "}
+                            <span className="text-red-500" aria-hidden="true">
+                              *
+                            </span>
+                            <span className="sr-only"> required</span>
                           </FieldLabel>
 
                           <Input
@@ -231,7 +235,11 @@ export function SignIn({
                       return (
                         <Field data-invalid={isInvalid}>
                           <FieldLabel htmlFor="password">
-                            {localization.auth.password}
+                            {localization.auth.password}{" "}
+                            <span className="text-red-500" aria-hidden="true">
+                              *
+                            </span>
+                            <span className="sr-only"> required</span>
                           </FieldLabel>
 
                           <InputGroup>

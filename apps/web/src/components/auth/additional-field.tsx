@@ -48,7 +48,7 @@ import { cn } from "@ppal/ui/lib/utils";
 import { format } from "date-fns";
 import { CalendarIcon, Check, ChevronDownIcon, Copy } from "lucide-react";
 import { useRef, useState } from "react";
-import type { ComponentType } from "react";
+import type { ComponentType, ReactNode } from "react";
 import { toast } from "sonner";
 
 export interface AdditionalFieldProps {
@@ -69,6 +69,46 @@ function valueToString(value: AdditionalFieldFormValue) {
     return "";
   }
   return value instanceof Date ? value.toISOString() : String(value);
+}
+
+const PHONE_FIELD_PATTERN = /(?:phone|mobile|telephone)/iu;
+
+function formatPhoneNumber(value: string): string {
+  const digits = value.replace(/\D/gu, "").slice(0, 10);
+  if (digits.length === 0) {
+    return "";
+  }
+  if (digits.length <= 3) {
+    return `(${digits}`;
+  }
+  if (digits.length <= 6) {
+    return `(${digits.slice(0, 3)}) ${digits.slice(3)}`;
+  }
+  return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
+}
+
+function RequiredFieldLabel({
+  children,
+  htmlFor,
+  required,
+}: {
+  children: ReactNode;
+  htmlFor?: string;
+  required?: boolean;
+}) {
+  return (
+    <FieldLabel htmlFor={htmlFor}>
+      {children}
+      {required ? (
+        <>
+          <span className="text-red-500" aria-hidden="true">
+            *
+          </span>
+          <span className="sr-only"> required</span>
+        </>
+      ) : null}
+    </FieldLabel>
+  );
 }
 
 /** Convert a `defaultValue` into a `Date` for the calendar. */
@@ -189,7 +229,9 @@ export function AdditionalField({
   if (inputType === "textarea") {
     return (
       <Field data-invalid={isInvalid}>
-        <FieldLabel htmlFor={name}>{field.label}</FieldLabel>
+        <RequiredFieldLabel htmlFor={name} required={field.required}>
+          {field.label}
+        </RequiredFieldLabel>
 
         <Textarea
           id={name}
@@ -214,7 +256,9 @@ export function AdditionalField({
 
     return (
       <Field data-invalid={isInvalid}>
-        <FieldLabel htmlFor={name}>{field.label}</FieldLabel>
+        <RequiredFieldLabel htmlFor={name} required={field.required}>
+          {field.label}
+        </RequiredFieldLabel>
 
         <Input
           id={name}
@@ -275,7 +319,9 @@ export function AdditionalField({
         />
 
         <FieldContent>
-          <FieldLabel htmlFor={name}>{field.label}</FieldLabel>
+          <RequiredFieldLabel htmlFor={name} required={field.required}>
+            {field.label}
+          </RequiredFieldLabel>
         </FieldContent>
         <FieldError errors={fieldErrors} />
       </Field>
@@ -297,7 +343,9 @@ export function AdditionalField({
         />
 
         <FieldContent>
-          <FieldLabel htmlFor={name}>{field.label}</FieldLabel>
+          <RequiredFieldLabel htmlFor={name} required={field.required}>
+            {field.label}
+          </RequiredFieldLabel>
         </FieldContent>
         <FieldError errors={fieldErrors} />
       </Field>
@@ -307,7 +355,9 @@ export function AdditionalField({
   if (inputType === "select") {
     return (
       <Field data-invalid={isInvalid}>
-        <FieldLabel htmlFor={name}>{field.label}</FieldLabel>
+        <RequiredFieldLabel htmlFor={name} required={field.required}>
+          {field.label}
+        </RequiredFieldLabel>
 
         <Select
           items={field.options ?? []}
@@ -349,7 +399,9 @@ export function AdditionalField({
 
     return (
       <Field data-invalid={isInvalid}>
-        <FieldLabel htmlFor={name}>{field.label}</FieldLabel>
+        <RequiredFieldLabel htmlFor={name} required={field.required}>
+          {field.label}
+        </RequiredFieldLabel>
 
         <Combobox
           items={field.options ?? []}
@@ -425,6 +477,7 @@ function InputField({
 }: AdditionalFieldProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const fieldErrors = getFormFieldErrors(errors ?? []);
+  const isPhoneField = PHONE_FIELD_PATTERN.test(name);
 
   const hasPrefix = field.prefix != null;
   const hasSuffix = field.suffix != null || field.copyable;
@@ -440,11 +493,21 @@ function InputField({
   const nativeStep = maxFractionDigits
     ? 1 / 10 ** maxFractionDigits
     : undefined;
+  const inputType = isPhoneField ? "tel" : nativeInputType;
+  const inputMode = isPhoneField ? "numeric" : nativeInputMode;
+  const inputValue = isPhoneField
+    ? formatPhoneNumber(valueToString(value))
+    : valueToString(value);
+  const handleInputChange = (nextValue: string) => {
+    onChange(isPhoneField ? formatPhoneNumber(nextValue) : nextValue || null);
+  };
 
   if (hasPrefix || hasSuffix) {
     return (
       <Field data-invalid={isInvalid}>
-        <FieldLabel htmlFor={name}>{field.label}</FieldLabel>
+        <RequiredFieldLabel htmlFor={name} required={field.required}>
+          {field.label}
+        </RequiredFieldLabel>
 
         <InputGroup>
           {hasPrefix && (
@@ -457,14 +520,16 @@ function InputField({
             ref={inputRef}
             id={name}
             name={name}
-            type={nativeInputType}
-            inputMode={nativeInputMode}
+            type={inputType}
+            inputMode={inputMode}
             step={nativeStep}
-            value={valueToString(value)}
+            value={inputValue}
             onBlur={onBlur}
-            onChange={(event) => onChange(event.target.value || null)}
+            onChange={(event) => handleInputChange(event.target.value)}
             placeholder={field.placeholder}
             required={field.required}
+            autoComplete={isPhoneField ? "tel" : undefined}
+            maxLength={isPhoneField ? 14 : undefined}
             readOnly={field.readOnly}
             disabled={isPending}
             aria-invalid={isInvalid}
@@ -493,19 +558,23 @@ function InputField({
 
   return (
     <Field data-invalid={isInvalid}>
-      <FieldLabel htmlFor={name}>{field.label}</FieldLabel>
+      <RequiredFieldLabel htmlFor={name} required={field.required}>
+        {field.label}
+      </RequiredFieldLabel>
 
       <Input
         id={name}
         name={name}
-        type={nativeInputType}
-        inputMode={nativeInputMode}
+        type={inputType}
+        inputMode={inputMode}
         step={nativeStep}
-        value={valueToString(value)}
+        value={inputValue}
         onBlur={onBlur}
-        onChange={(event) => onChange(event.target.value || null)}
+        onChange={(event) => handleInputChange(event.target.value)}
         placeholder={field.placeholder}
         required={field.required}
+        autoComplete={isPhoneField ? "tel" : undefined}
+        maxLength={isPhoneField ? 14 : undefined}
         readOnly={field.readOnly}
         disabled={isPending}
         aria-invalid={isInvalid}
@@ -544,7 +613,9 @@ function SliderField({
   return (
     <Field data-invalid={isInvalid}>
       <div className="flex items-center justify-between gap-2">
-        <FieldLabel htmlFor={name}>{field.label}</FieldLabel>
+        <RequiredFieldLabel htmlFor={name} required={field.required}>
+          {field.label}
+        </RequiredFieldLabel>
         <span className="text-muted-foreground text-sm tabular-nums">
           {formatter.format(numericValue)}
         </span>
@@ -600,7 +671,9 @@ function DateInput({
   // "datetime" (date + time).
   return (
     <Field data-invalid={isInvalid}>
-      <FieldLabel htmlFor={`${name}-date`}>{field.label}</FieldLabel>
+      <RequiredFieldLabel htmlFor={`${name}-date`} required={field.required}>
+        {field.label}
+      </RequiredFieldLabel>
 
       <div className="relative flex gap-2">
         <Popover open={open} onOpenChange={setOpen}>

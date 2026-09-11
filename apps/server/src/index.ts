@@ -1,4 +1,6 @@
+import { zValidator } from "@hono/zod-validator";
 import { createAuth } from "@ppal/auth";
+import { updateProfileRequestSchema } from "@ppal/contracts/community";
 import { env } from "@ppal/env/server";
 import { initLogger } from "evlog";
 import { createAuthMiddleware } from "evlog/better-auth";
@@ -9,11 +11,14 @@ import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { secureHeaders } from "hono/secure-headers";
 
-import { getAuthDiagnostics, getAuthUser } from "./lib/auth";
 import { createAnalyticsRoutes } from "./routes/analytics";
 import { createBillingRoutes } from "./routes/billing";
 import { createCatalogRoutes } from "./routes/catalog";
-import { createCommunityRoutes } from "./routes/community";
+import {
+  getCurrentUserProfile,
+  updateCurrentUserProfile,
+  createCommunityRoutes,
+} from "./routes/community";
 import { createHistoricalImportRoutes } from "./routes/historical-imports";
 import { createNotificationRoutes } from "./routes/notifications";
 import { createOperationRoutes } from "./routes/operations";
@@ -109,13 +114,6 @@ app.use("/api/auth/*", async (c, next) => {
 });
 
 app.use("/api/v1/*", async (c, next) => {
-  if (c.req.query("debug") === "headers") {
-    return c.json({
-      cookie: c.req.header("cookie") ?? null,
-      path: c.req.path,
-      url: c.req.url,
-    });
-  }
   const clientKey = await getRateLimitKey(c.req.raw);
   const isUploadMutation =
     c.req.method !== "GET" &&
@@ -160,16 +158,11 @@ const routes = app
       timestamp: new Date().toISOString(),
     })
   )
-  .get("/api/v1/debug-auth", async (c) => {
-    const headersUser = await getAuthUser(auth, c.req.raw.headers);
-    const requestUser = await getAuthUser(auth, c.req.raw);
-    return c.json({
-      diagnostics: await getAuthDiagnostics(auth, c.req.raw),
-      headersUserId: headersUser?.id ?? null,
-      requestUserId: requestUser?.id ?? null,
-    });
-  })
   .get("/api/v1/ping", (c) => c.json({ build: "86be0ff", ok: true }))
+  .get("/api/v1/me", (c) => getCurrentUserProfile(c, auth))
+  .patch("/api/v1/me", zValidator("json", updateProfileRequestSchema), (c) =>
+    updateCurrentUserProfile(c, auth, c.req.valid("json"))
+  )
   .route("/api/v1/uploads", createUploadRoutes(auth))
   .route("/api/v1/tickets", createTicketRoutes(auth))
   .route("/api/v1", createHistoricalImportRoutes(auth))

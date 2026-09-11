@@ -10,12 +10,11 @@ const RouteComponent = () => (
         className="group flex items-center gap-2 transition hover:opacity-90"
         to="/"
       >
-        <div className="flex size-10 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-400 to-emerald-600 font-black text-black shadow-lg shadow-emerald-900/30">
-          P
-        </div>
-        <span className="text-xl font-bold tracking-tight text-white">
-          Parlay<span className="text-emerald-400">Pal</span>
-        </span>
+        <img
+          src="/images/logo.png"
+          alt="ParlayPal"
+          className="h-14 w-auto object-contain"
+        />
       </Link>
     </div>
 

@@ -124,7 +124,9 @@ export function SignUp({
       } else if (onSignUpSuccess) {
         onSignUpSuccess();
       } else {
-        navigate({ to: redirectTo });
+        // New accounts complete the profile wizard before entering the
+        // dashboard. Existing accounts still use the dashboard guard.
+        navigate({ to: "/dashboard/onboarding" });
       }
     },
   });
@@ -227,7 +229,11 @@ export function SignUp({
                         return (
                           <Field data-invalid={isInvalid}>
                             <FieldLabel htmlFor="name">
-                              {localization.auth.name}
+                              {localization.auth.name}{" "}
+                              <span className="text-red-500" aria-hidden="true">
+                                *
+                              </span>
+                              <span className="sr-only"> required</span>
                             </FieldLabel>
 
                             <Input
@@ -271,7 +277,11 @@ export function SignUp({
                       return (
                         <Field data-invalid={isInvalid}>
                           <FieldLabel htmlFor="email">
-                            {localization.auth.email}
+                            {localization.auth.email}{" "}
+                            <span className="text-red-500" aria-hidden="true">
+                              *
+                            </span>
+                            <span className="sr-only"> required</span>
                           </FieldLabel>
 
                           <Input
@@ -345,7 +355,11 @@ export function SignUp({
                       return (
                         <Field data-invalid={isInvalid}>
                           <FieldLabel htmlFor="password">
-                            {localization.auth.password}
+                            {localization.auth.password}{" "}
+                            <span className="text-red-500" aria-hidden="true">
+                              *
+                            </span>
+                            <span className="sr-only"> required</span>
                           </FieldLabel>
 
                           <InputGroup>
@@ -441,7 +455,11 @@ export function SignUp({
                         return (
                           <Field data-invalid={isInvalid}>
                             <FieldLabel htmlFor="confirmPassword">
-                              {localization.auth.confirmPassword}
+                              {localization.auth.confirmPassword}{" "}
+                              <span className="text-red-500" aria-hidden="true">
+                                *
+                              </span>
+                              <span className="sr-only"> required</span>
                             </FieldLabel>
 
                             <InputGroup>

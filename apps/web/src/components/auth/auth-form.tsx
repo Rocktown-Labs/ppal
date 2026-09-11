@@ -337,9 +337,26 @@ export function getAuthAdditionalFieldValidators(
   field: AdditionalFieldConfig,
   requiredMessage: string
 ) {
+  const isPhoneField = /(?:phone|mobile|telephone)/iu.test(field.name);
+
   return {
-    onChange: ({ value }: { value: AdditionalFieldFormValue }) =>
-      validateAdditionalFieldRequired(field, value, requiredMessage),
+    onChange: ({ value }: { value: AdditionalFieldFormValue }) => {
+      const requiredError = validateAdditionalFieldRequired(
+        field,
+        value,
+        requiredMessage
+      );
+      if (requiredError || !isPhoneField || value == null || value === "") {
+        return requiredError;
+      }
+      if (
+        typeof value !== "string" ||
+        value.replace(/\D/gu, "").length !== 10
+      ) {
+        return "Enter a valid 10-digit phone number";
+      }
+      return undefined;
+    },
     onChangeAsync: field.validate
       ? ({ value }: { value: AdditionalFieldFormValue }) =>
           validateAdditionalFieldValue(field, value)

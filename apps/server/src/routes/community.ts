@@ -118,93 +118,107 @@ const uploadAvatar = async (c: Context, auth: Auth): Promise<Response> => {
   return c.json({ avatarObjectKey: objectKey, url: avatarUrl });
 };
 
+type UpdateProfileInput = z.infer<typeof updateProfileRequestSchema>;
+
+export const getCurrentUserProfile = async (
+  c: Context,
+  auth: Auth
+): Promise<Response> => {
+  const user = await getAuthUser(auth, c.req.raw);
+  if (!user) {
+    return c.json({ code: "UNAUTHORIZED", error: "Unauthorized" }, 401);
+  }
+  const profile = await env.DB.prepare(
+    `SELECT bio, is_public, username FROM profiles WHERE user_id = ?`
+  )
+    .bind(user.id)
+    .first<{ bio: string | null; is_public: number; username: string }>();
+  return c.json({
+    user: {
+      ...user,
+      profile: profile
+        ? {
+            bio: profile.bio,
+            isPublic: profile.is_public === 1,
+            username: profile.username,
+          }
+        : null,
+    },
+  });
+};
+
+export const updateCurrentUserProfile = async (
+  c: Context,
+  auth: Auth,
+  input: UpdateProfileInput
+): Promise<Response> => {
+  const user = await getAuthUser(auth, c.req.raw);
+  if (!user) {
+    return c.json({ code: "UNAUTHORIZED", error: "Unauthorized" }, 401);
+  }
+  const current = await env.DB.prepare(
+    "SELECT bio, is_public, username FROM profiles WHERE user_id = ?"
+  )
+    .bind(user.id)
+    .first<{ bio: string | null; is_public: number; username: string }>();
+  const username = input.username ?? current?.username;
+  if (!username) {
+    return c.json(
+      {
+        code: "USERNAME_REQUIRED",
+        error: "A username is required to create a profile",
+      },
+      400
+    );
+  }
+  const now = Date.now();
+  try {
+    await env.DB.batch([
+      env.DB.prepare(
+        "UPDATE user SET name = COALESCE(?, name), updated_at = ? WHERE id = ?"
+      ).bind(input.name ?? null, now, user.id),
+      env.DB.prepare(
+        `INSERT INTO profiles (bio, is_public, updated_at, user_id, username)
+         VALUES (?, ?, ?, ?, ?)
+         ON CONFLICT(user_id) DO UPDATE SET bio = excluded.bio,
+           is_public = excluded.is_public, updated_at = excluded.updated_at,
+           username = excluded.username`
+      ).bind(
+        input.bio === undefined ? (current?.bio ?? null) : input.bio,
+        input.isPublic === undefined
+          ? (current?.is_public ?? 1)
+          : Number(input.isPublic),
+        now,
+        user.id,
+        username
+      ),
+    ]);
+  } catch (error) {
+    if (error instanceof Error && error.message.includes("UNIQUE")) {
+      return c.json(
+        { code: "USERNAME_TAKEN", error: "Username is already taken" },
+        409
+      );
+    }
+    throw error;
+  }
+  await writeAuditEvent({
+    action: "profile.update",
+    actorUserId: user.id,
+    outcome: "success",
+    request: c.req.raw,
+    targetId: user.id,
+    targetType: "profile",
+  });
+  return c.json({ updated: true });
+};
+
 export const createCommunityRoutes = (auth: Auth) =>
   new Hono()
-    .get("/me", async (c) => {
-      const user = await getAuthUser(auth, c.req.raw);
-      if (!user) {
-        return c.json({ code: "UNAUTHORIZED", error: "Unauthorized" }, 401);
-      }
-      const profile = await env.DB.prepare(
-        `SELECT bio, is_public, username FROM profiles WHERE user_id = ?`
-      )
-        .bind(user.id)
-        .first<{ bio: string | null; is_public: number; username: string }>();
-      return c.json({
-        user: {
-          ...user,
-          profile: profile
-            ? {
-                bio: profile.bio,
-                isPublic: profile.is_public === 1,
-                username: profile.username,
-              }
-            : null,
-        },
-      });
-    })
-    .patch("/me", zValidator("json", updateProfileRequestSchema), async (c) => {
-      const user = await getAuthUser(auth, c.req.raw);
-      if (!user) {
-        return c.json({ code: "UNAUTHORIZED", error: "Unauthorized" }, 401);
-      }
-      const input = c.req.valid("json");
-      const current = await env.DB.prepare(
-        "SELECT bio, is_public, username FROM profiles WHERE user_id = ?"
-      )
-        .bind(user.id)
-        .first<{ bio: string | null; is_public: number; username: string }>();
-      const username = input.username ?? current?.username;
-      if (!username) {
-        return c.json(
-          {
-            code: "USERNAME_REQUIRED",
-            error: "A username is required to create a profile",
-          },
-          400
-        );
-      }
-      const now = Date.now();
-      try {
-        await env.DB.batch([
-          env.DB.prepare(
-            "UPDATE user SET name = COALESCE(?, name), updated_at = ? WHERE id = ?"
-          ).bind(input.name ?? null, now, user.id),
-          env.DB.prepare(
-            `INSERT INTO profiles (bio, is_public, updated_at, user_id, username)
-             VALUES (?, ?, ?, ?, ?)
-             ON CONFLICT(user_id) DO UPDATE SET bio = excluded.bio,
-               is_public = excluded.is_public, updated_at = excluded.updated_at,
-               username = excluded.username`
-          ).bind(
-            input.bio === undefined ? (current?.bio ?? null) : input.bio,
-            input.isPublic === undefined
-              ? (current?.is_public ?? 1)
-              : Number(input.isPublic),
-            now,
-            user.id,
-            username
-          ),
-        ]);
-      } catch (error) {
-        if (error instanceof Error && error.message.includes("UNIQUE")) {
-          return c.json(
-            { code: "USERNAME_TAKEN", error: "Username is already taken" },
-            409
-          );
-        }
-        throw error;
-      }
-      await writeAuditEvent({
-        action: "profile.update",
-        actorUserId: user.id,
-        outcome: "success",
-        request: c.req.raw,
-        targetId: user.id,
-        targetType: "profile",
-      });
-      return c.json({ updated: true });
-    })
+    .get("/me", (c) => getCurrentUserProfile(c, auth))
+    .patch("/me", zValidator("json", updateProfileRequestSchema), (c) =>
+      updateCurrentUserProfile(c, auth, c.req.valid("json"))
+    )
     .post(
       "/me/device-tokens",
       zValidator("json", deviceTokenSchema),
