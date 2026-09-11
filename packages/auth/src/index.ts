@@ -249,13 +249,16 @@ export const createAuth = () => {
       max: 100,
       window: 60,
     },
-    // uncomment cookieCache setting when ready to deploy to Cloudflare using *.workers.dev domains
-    // session: {
-    //   cookieCache: {
-    //     enabled: true,
-    //     maxAge: 60,
-    //   },
-    // },
+    // Keep a short-lived signed session snapshot in the cookie so server-side
+    // auth.api.getSession calls work reliably on Cloudflare Workers without a
+    // second request hop. Sensitive operations still bypass this cache when
+    // Better Auth requests an authoritative session.
+    session: {
+      cookieCache: {
+        enabled: true,
+        maxAge: 60,
+      },
+    },
     secret: env.BETTER_AUTH_SECRET,
     baseURL: env.BETTER_AUTH_URL,
     advanced: {
