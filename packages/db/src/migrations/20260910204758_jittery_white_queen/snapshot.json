@@ -1,0 +1,5179 @@
+{
+  "dialect": "sqlite",
+  "id": "b16e2f81-84f5-4e4f-8ffc-5b0250f12759",
+  "prevIds": [
+    "6c6d75b4-42e1-4eca-a6f9-ba3ab5d83ce6"
+  ],
+  "version": "7",
+  "ddl": [
+    {
+      "name": "account",
+      "entityType": "tables"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "access_token",
+      "table": "account",
+      "entityType": "columns"
+    },
+    {
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "access_token_expires_at",
+      "table": "account",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "account_id",
+      "table": "account",
+      "entityType": "columns"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "(cast(unixepoch('subsecond') * 1000 as integer))",
+      "generated": null,
+      "name": "created_at",
+      "table": "account",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "table": "account",
+      "entityType": "columns"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "account_pk",
+      "table": "account",
+      "entityType": "pks"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "id_token",
+      "table": "account",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "issuer",
+      "table": "account",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "password",
+      "table": "account",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "provider_id",
+      "table": "account",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "refresh_token",
+      "table": "account",
+      "entityType": "columns"
+    },
+    {
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "refresh_token_expires_at",
+      "table": "account",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "scope",
+      "table": "account",
+      "entityType": "columns"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "updated_at",
+      "table": "account",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "user_id",
+      "table": "account",
+      "entityType": "columns"
+    },
+    {
+      "columns": [
+        {
+          "value": "issuer",
+          "isExpression": false
+        },
+        {
+          "value": "account_id",
+          "isExpression": false
+        }
+      ],
+      "isUnique": true,
+      "where": null,
+      "origin": "manual",
+      "name": "account_issuer_accountId_uidx",
+      "table": "account",
+      "entityType": "indexes"
+    },
+    {
+      "columns": [
+        {
+          "value": "user_id",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "account_userId_idx",
+      "table": "account",
+      "entityType": "indexes"
+    },
+    {
+      "columns": [
+        "user_id"
+      ],
+      "tableTo": "user",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "nameExplicit": false,
+      "name": "account_user_id_user_id_fk",
+      "table": "account",
+      "entityType": "fks"
+    },
+    {
+      "name": "session",
+      "entityType": "tables"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "(cast(unixepoch('subsecond') * 1000 as integer))",
+      "generated": null,
+      "name": "created_at",
+      "table": "session",
+      "entityType": "columns"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "expires_at",
+      "table": "session",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "table": "session",
+      "entityType": "columns"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "session_pk",
+      "table": "session",
+      "entityType": "pks"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "ip_address",
+      "table": "session",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "token",
+      "table": "session",
+      "entityType": "columns"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "updated_at",
+      "table": "session",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "user_agent",
+      "table": "session",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "user_id",
+      "table": "session",
+      "entityType": "columns"
+    },
+    {
+      "columns": [
+        {
+          "value": "token",
+          "isExpression": false
+        }
+      ],
+      "isUnique": true,
+      "where": null,
+      "origin": "manual",
+      "name": "session_token_unique",
+      "table": "session",
+      "entityType": "indexes"
+    },
+    {
+      "columns": [
+        {
+          "value": "user_id",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "session_userId_idx",
+      "table": "session",
+      "entityType": "indexes"
+    },
+    {
+      "columns": [
+        "user_id"
+      ],
+      "tableTo": "user",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "nameExplicit": false,
+      "name": "session_user_id_user_id_fk",
+      "table": "session",
+      "entityType": "fks"
+    },
+    {
+      "name": "subscription",
+      "entityType": "tables"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "billing_interval",
+      "table": "subscription",
+      "entityType": "columns"
+    },
+    {
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "cancel_at",
+      "table": "subscription",
+      "entityType": "columns"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "false",
+      "generated": null,
+      "name": "cancel_at_period_end",
+      "table": "subscription",
+      "entityType": "columns"
+    },
+    {
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "canceled_at",
+      "table": "subscription",
+      "entityType": "columns"
+    },
+    {
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "ended_at",
+      "table": "subscription",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "table": "subscription",
+      "entityType": "columns"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "subscription_pk",
+      "table": "subscription",
+      "entityType": "pks"
+    },
+    {
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "period_end",
+      "table": "subscription",
+      "entityType": "columns"
+    },
+    {
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "period_start",
+      "table": "subscription",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "plan",
+      "table": "subscription",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "reference_id",
+      "table": "subscription",
+      "entityType": "columns"
+    },
+    {
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "seats",
+      "table": "subscription",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "'incomplete'",
+      "generated": null,
+      "name": "status",
+      "table": "subscription",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "stripe_customer_id",
+      "table": "subscription",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "stripe_schedule_id",
+      "table": "subscription",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "stripe_subscription_id",
+      "table": "subscription",
+      "entityType": "columns"
+    },
+    {
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "trial_end",
+      "table": "subscription",
+      "entityType": "columns"
+    },
+    {
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "trial_start",
+      "table": "subscription",
+      "entityType": "columns"
+    },
+    {
+      "columns": [
+        {
+          "value": "stripe_subscription_id",
+          "isExpression": false
+        }
+      ],
+      "isUnique": true,
+      "where": null,
+      "origin": "manual",
+      "name": "subscription_stripe_subscription_id_unique",
+      "table": "subscription",
+      "entityType": "indexes"
+    },
+    {
+      "columns": [
+        {
+          "value": "reference_id",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "subscription_reference_id_idx",
+      "table": "subscription",
+      "entityType": "indexes"
+    },
+    {
+      "columns": [
+        {
+          "value": "status",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "subscription_status_idx",
+      "table": "subscription",
+      "entityType": "indexes"
+    },
+    {
+      "name": "user",
+      "entityType": "tables"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "(cast(unixepoch('subsecond') * 1000 as integer))",
+      "generated": null,
+      "name": "created_at",
+      "table": "user",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "email",
+      "table": "user",
+      "entityType": "columns"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "false",
+      "generated": null,
+      "name": "email_verified",
+      "table": "user",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "table": "user",
+      "entityType": "columns"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "user_pk",
+      "table": "user",
+      "entityType": "pks"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "image",
+      "table": "user",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "name",
+      "table": "user",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "stripe_customer_id",
+      "table": "user",
+      "entityType": "columns"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "(cast(unixepoch('subsecond') * 1000 as integer))",
+      "generated": null,
+      "name": "updated_at",
+      "table": "user",
+      "entityType": "columns"
+    },
+    {
+      "columns": [
+        {
+          "value": "email",
+          "isExpression": false
+        }
+      ],
+      "isUnique": true,
+      "where": null,
+      "origin": "manual",
+      "name": "user_email_unique",
+      "table": "user",
+      "entityType": "indexes"
+    },
+    {
+      "columns": [
+        {
+          "value": "stripe_customer_id",
+          "isExpression": false
+        }
+      ],
+      "isUnique": true,
+      "where": null,
+      "origin": "manual",
+      "name": "user_stripe_customer_id_unique",
+      "table": "user",
+      "entityType": "indexes"
+    },
+    {
+      "name": "verification",
+      "entityType": "tables"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "(cast(unixepoch('subsecond') * 1000 as integer))",
+      "generated": null,
+      "name": "created_at",
+      "table": "verification",
+      "entityType": "columns"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "expires_at",
+      "table": "verification",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "table": "verification",
+      "entityType": "columns"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "verification_pk",
+      "table": "verification",
+      "entityType": "pks"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "identifier",
+      "table": "verification",
+      "entityType": "columns"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "(cast(unixepoch('subsecond') * 1000 as integer))",
+      "generated": null,
+      "name": "updated_at",
+      "table": "verification",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "value",
+      "table": "verification",
+      "entityType": "columns"
+    },
+    {
+      "columns": [
+        {
+          "value": "identifier",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "verification_identifier_idx",
+      "table": "verification",
+      "entityType": "indexes"
+    },
+    {
+      "name": "billing_entitlements",
+      "entityType": "tables"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "(cast(unixepoch('subsecond') * 1000 as integer))",
+      "generated": null,
+      "name": "created_at",
+      "table": "billing_entitlements",
+      "entityType": "columns"
+    },
+    {
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "current_period_end",
+      "table": "billing_entitlements",
+      "entityType": "columns"
+    },
+    {
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "current_period_start",
+      "table": "billing_entitlements",
+      "entityType": "columns"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "effective_at",
+      "table": "billing_entitlements",
+      "entityType": "columns"
+    },
+    {
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "expires_at",
+      "table": "billing_entitlements",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "table": "billing_entitlements",
+      "entityType": "columns"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "billing_entitlements_pk",
+      "table": "billing_entitlements",
+      "entityType": "pks"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "plan",
+      "table": "billing_entitlements",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "provider_reference",
+      "table": "billing_entitlements",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "source",
+      "table": "billing_entitlements",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "status",
+      "table": "billing_entitlements",
+      "entityType": "columns"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "(cast(unixepoch('subsecond') * 1000 as integer))",
+      "generated": null,
+      "name": "updated_at",
+      "table": "billing_entitlements",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "user_id",
+      "table": "billing_entitlements",
+      "entityType": "columns"
+    },
+    {
+      "columns": [
+        {
+          "value": "user_id",
+          "isExpression": false
+        },
+        {
+          "value": "status",
+          "isExpression": false
+        },
+        {
+          "value": "expires_at",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "billing_entitlements_user_status_idx",
+      "table": "billing_entitlements",
+      "entityType": "indexes"
+    },
+    {
+      "columns": [
+        {
+          "value": "source",
+          "isExpression": false
+        },
+        {
+          "value": "provider_reference",
+          "isExpression": false
+        }
+      ],
+      "isUnique": true,
+      "where": null,
+      "origin": "manual",
+      "name": "billing_entitlements_source_reference_uidx",
+      "table": "billing_entitlements",
+      "entityType": "indexes"
+    },
+    {
+      "value": "\"billing_entitlements\".\"plan\" in ('pro', 'creator')",
+      "name": "billing_entitlements_plan_check",
+      "table": "billing_entitlements",
+      "entityType": "checks"
+    },
+    {
+      "value": "\"billing_entitlements\".\"source\" in ('stripe', 'revenuecat', 'manual')",
+      "name": "billing_entitlements_source_check",
+      "table": "billing_entitlements",
+      "entityType": "checks"
+    },
+    {
+      "value": "\"billing_entitlements\".\"status\" in ('trialing', 'active', 'grace_period', 'past_due', 'paused', 'cancelled', 'expired')",
+      "name": "billing_entitlements_status_check",
+      "table": "billing_entitlements",
+      "entityType": "checks"
+    },
+    {
+      "columns": [
+        "user_id"
+      ],
+      "tableTo": "user",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "nameExplicit": false,
+      "name": "billing_entitlements_user_id_user_id_fk",
+      "table": "billing_entitlements",
+      "entityType": "fks"
+    },
+    {
+      "name": "usage_events",
+      "entityType": "tables"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "(cast(unixepoch('subsecond') * 1000 as integer))",
+      "generated": null,
+      "name": "created_at",
+      "table": "usage_events",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "table": "usage_events",
+      "entityType": "columns"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "usage_events_pk",
+      "table": "usage_events",
+      "entityType": "pks"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "idempotency_key",
+      "table": "usage_events",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "metadata",
+      "table": "usage_events",
+      "entityType": "columns"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "occurred_at",
+      "table": "usage_events",
+      "entityType": "columns"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "period_end",
+      "table": "usage_events",
+      "entityType": "columns"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "period_start",
+      "table": "usage_events",
+      "entityType": "columns"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "1",
+      "generated": null,
+      "name": "quantity",
+      "table": "usage_events",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "resource_id",
+      "table": "usage_events",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "resource_type",
+      "table": "usage_events",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "'reserved'",
+      "generated": null,
+      "name": "status",
+      "table": "usage_events",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "type",
+      "table": "usage_events",
+      "entityType": "columns"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "(cast(unixepoch('subsecond') * 1000 as integer))",
+      "generated": null,
+      "name": "updated_at",
+      "table": "usage_events",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "user_id",
+      "table": "usage_events",
+      "entityType": "columns"
+    },
+    {
+      "columns": [
+        {
+          "value": "idempotency_key",
+          "isExpression": false
+        }
+      ],
+      "isUnique": true,
+      "where": null,
+      "origin": "manual",
+      "name": "usage_events_idempotency_key_unique",
+      "table": "usage_events",
+      "entityType": "indexes"
+    },
+    {
+      "columns": [
+        {
+          "value": "user_id",
+          "isExpression": false
+        },
+        {
+          "value": "type",
+          "isExpression": false
+        },
+        {
+          "value": "status",
+          "isExpression": false
+        },
+        {
+          "value": "period_start",
+          "isExpression": false
+        },
+        {
+          "value": "period_end",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "usage_events_user_period_idx",
+      "table": "usage_events",
+      "entityType": "indexes"
+    },
+    {
+      "value": "\"usage_events\".\"quantity\" > 0",
+      "name": "usage_events_quantity_check",
+      "table": "usage_events",
+      "entityType": "checks"
+    },
+    {
+      "value": "\"usage_events\".\"status\" in ('reserved', 'finalized', 'released')",
+      "name": "usage_events_status_check",
+      "table": "usage_events",
+      "entityType": "checks"
+    },
+    {
+      "columns": [
+        "user_id"
+      ],
+      "tableTo": "user",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "nameExplicit": false,
+      "name": "usage_events_user_id_user_id_fk",
+      "table": "usage_events",
+      "entityType": "fks"
+    },
+    {
+      "name": "webhook_receipts",
+      "entityType": "tables"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "(cast(unixepoch('subsecond') * 1000 as integer))",
+      "generated": null,
+      "name": "created_at",
+      "table": "webhook_receipts",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "error_message",
+      "table": "webhook_receipts",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "table": "webhook_receipts",
+      "entityType": "columns"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "webhook_receipts_pk",
+      "table": "webhook_receipts",
+      "entityType": "pks"
+    },
+    {
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "processed_at",
+      "table": "webhook_receipts",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "provider",
+      "table": "webhook_receipts",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "provider_event_id",
+      "table": "webhook_receipts",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "'processing'",
+      "generated": null,
+      "name": "status",
+      "table": "webhook_receipts",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "type",
+      "table": "webhook_receipts",
+      "entityType": "columns"
+    },
+    {
+      "columns": [
+        {
+          "value": "provider",
+          "isExpression": false
+        },
+        {
+          "value": "provider_event_id",
+          "isExpression": false
+        }
+      ],
+      "isUnique": true,
+      "where": null,
+      "origin": "manual",
+      "name": "webhook_receipts_provider_event_uidx",
+      "table": "webhook_receipts",
+      "entityType": "indexes"
+    },
+    {
+      "value": "\"webhook_receipts\".\"status\" in ('processing', 'processed', 'failed')",
+      "name": "webhook_receipts_status_check",
+      "table": "webhook_receipts",
+      "entityType": "checks"
+    },
+    {
+      "name": "leagues",
+      "entityType": "tables"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "(cast(unixepoch('subsecond') * 1000 as integer))",
+      "generated": null,
+      "name": "created_at",
+      "table": "leagues",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "table": "leagues",
+      "entityType": "columns"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "leagues_pk",
+      "table": "leagues",
+      "entityType": "pks"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "name",
+      "table": "leagues",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "provider",
+      "table": "leagues",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "provider_key",
+      "table": "leagues",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "slug",
+      "table": "leagues",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "sport_id",
+      "table": "leagues",
+      "entityType": "columns"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "(cast(unixepoch('subsecond') * 1000 as integer))",
+      "generated": null,
+      "name": "updated_at",
+      "table": "leagues",
+      "entityType": "columns"
+    },
+    {
+      "columns": [
+        {
+          "value": "slug",
+          "isExpression": false
+        }
+      ],
+      "isUnique": true,
+      "where": null,
+      "origin": "manual",
+      "name": "leagues_slug_unique",
+      "table": "leagues",
+      "entityType": "indexes"
+    },
+    {
+      "columns": [
+        {
+          "value": "sport_id",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "leagues_sport_id_idx",
+      "table": "leagues",
+      "entityType": "indexes"
+    },
+    {
+      "columns": [
+        {
+          "value": "provider",
+          "isExpression": false
+        },
+        {
+          "value": "provider_key",
+          "isExpression": false
+        }
+      ],
+      "isUnique": true,
+      "where": null,
+      "origin": "manual",
+      "name": "leagues_provider_key_uidx",
+      "table": "leagues",
+      "entityType": "indexes"
+    },
+    {
+      "columns": [
+        "sport_id"
+      ],
+      "tableTo": "sports",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "nameExplicit": false,
+      "name": "leagues_sport_id_sports_id_fk",
+      "table": "leagues",
+      "entityType": "fks"
+    },
+    {
+      "name": "markets",
+      "entityType": "tables"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "(cast(unixepoch('subsecond') * 1000 as integer))",
+      "generated": null,
+      "name": "created_at",
+      "table": "markets",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "table": "markets",
+      "entityType": "columns"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "markets_pk",
+      "table": "markets",
+      "entityType": "pks"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "metadata",
+      "table": "markets",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "name",
+      "table": "markets",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "slug",
+      "table": "markets",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "sport_id",
+      "table": "markets",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "subject_type",
+      "table": "markets",
+      "entityType": "columns"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "(cast(unixepoch('subsecond') * 1000 as integer))",
+      "generated": null,
+      "name": "updated_at",
+      "table": "markets",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "value_type",
+      "table": "markets",
+      "entityType": "columns"
+    },
+    {
+      "columns": [
+        {
+          "value": "slug",
+          "isExpression": false
+        }
+      ],
+      "isUnique": true,
+      "where": null,
+      "origin": "manual",
+      "name": "markets_slug_unique",
+      "table": "markets",
+      "entityType": "indexes"
+    },
+    {
+      "columns": [
+        {
+          "value": "sport_id",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "markets_sport_id_idx",
+      "table": "markets",
+      "entityType": "indexes"
+    },
+    {
+      "value": "\"markets\".\"subject_type\" in ('player', 'team', 'game')",
+      "name": "markets_subject_type_check",
+      "table": "markets",
+      "entityType": "checks"
+    },
+    {
+      "value": "\"markets\".\"value_type\" in ('numeric', 'binary', 'moneyline', 'spread')",
+      "name": "markets_value_type_check",
+      "table": "markets",
+      "entityType": "checks"
+    },
+    {
+      "columns": [
+        "sport_id"
+      ],
+      "tableTo": "sports",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "SET NULL",
+      "nameExplicit": false,
+      "name": "markets_sport_id_sports_id_fk",
+      "table": "markets",
+      "entityType": "fks"
+    },
+    {
+      "name": "participants",
+      "entityType": "tables"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "(cast(unixepoch('subsecond') * 1000 as integer))",
+      "generated": null,
+      "name": "created_at",
+      "table": "participants",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "table": "participants",
+      "entityType": "columns"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "participants_pk",
+      "table": "participants",
+      "entityType": "pks"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "league_id",
+      "table": "participants",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "metadata",
+      "table": "participants",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "name",
+      "table": "participants",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "provider",
+      "table": "participants",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "provider_participant_id",
+      "table": "participants",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "short_name",
+      "table": "participants",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "sport_id",
+      "table": "participants",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "type",
+      "table": "participants",
+      "entityType": "columns"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "(cast(unixepoch('subsecond') * 1000 as integer))",
+      "generated": null,
+      "name": "updated_at",
+      "table": "participants",
+      "entityType": "columns"
+    },
+    {
+      "columns": [
+        {
+          "value": "league_id",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "participants_league_id_idx",
+      "table": "participants",
+      "entityType": "indexes"
+    },
+    {
+      "columns": [
+        {
+          "value": "name",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "participants_name_idx",
+      "table": "participants",
+      "entityType": "indexes"
+    },
+    {
+      "columns": [
+        {
+          "value": "sport_id",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "participants_sport_id_idx",
+      "table": "participants",
+      "entityType": "indexes"
+    },
+    {
+      "columns": [
+        {
+          "value": "provider",
+          "isExpression": false
+        },
+        {
+          "value": "provider_participant_id",
+          "isExpression": false
+        }
+      ],
+      "isUnique": true,
+      "where": null,
+      "origin": "manual",
+      "name": "participants_provider_id_uidx",
+      "table": "participants",
+      "entityType": "indexes"
+    },
+    {
+      "value": "\"participants\".\"type\" in ('player', 'team')",
+      "name": "participants_type_check",
+      "table": "participants",
+      "entityType": "checks"
+    },
+    {
+      "columns": [
+        "league_id"
+      ],
+      "tableTo": "leagues",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "SET NULL",
+      "nameExplicit": false,
+      "name": "participants_league_id_leagues_id_fk",
+      "table": "participants",
+      "entityType": "fks"
+    },
+    {
+      "columns": [
+        "sport_id"
+      ],
+      "tableTo": "sports",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "nameExplicit": false,
+      "name": "participants_sport_id_sports_id_fk",
+      "table": "participants",
+      "entityType": "fks"
+    },
+    {
+      "name": "sports",
+      "entityType": "tables"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "(cast(unixepoch('subsecond') * 1000 as integer))",
+      "generated": null,
+      "name": "created_at",
+      "table": "sports",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "icon",
+      "table": "sports",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "table": "sports",
+      "entityType": "columns"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "sports_pk",
+      "table": "sports",
+      "entityType": "pks"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "name",
+      "table": "sports",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "slug",
+      "table": "sports",
+      "entityType": "columns"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "(cast(unixepoch('subsecond') * 1000 as integer))",
+      "generated": null,
+      "name": "updated_at",
+      "table": "sports",
+      "entityType": "columns"
+    },
+    {
+      "columns": [
+        {
+          "value": "slug",
+          "isExpression": false
+        }
+      ],
+      "isUnique": true,
+      "where": null,
+      "origin": "manual",
+      "name": "sports_slug_unique",
+      "table": "sports",
+      "entityType": "indexes"
+    },
+    {
+      "name": "sports_events",
+      "entityType": "tables"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "away_participant_id",
+      "table": "sports_events",
+      "entityType": "columns"
+    },
+    {
+      "type": "real",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "away_score",
+      "table": "sports_events",
+      "entityType": "columns"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "(cast(unixepoch('subsecond') * 1000 as integer))",
+      "generated": null,
+      "name": "created_at",
+      "table": "sports_events",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "home_participant_id",
+      "table": "sports_events",
+      "entityType": "columns"
+    },
+    {
+      "type": "real",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "home_score",
+      "table": "sports_events",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "table": "sports_events",
+      "entityType": "columns"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "sports_events_pk",
+      "table": "sports_events",
+      "entityType": "pks"
+    },
+    {
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "last_synced_at",
+      "table": "sports_events",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "league_id",
+      "table": "sports_events",
+      "entityType": "columns"
+    },
+    {
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "next_poll_at",
+      "table": "sports_events",
+      "entityType": "columns"
+    },
+    {
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "poll_lease_until",
+      "table": "sports_events",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "provider",
+      "table": "sports_events",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "provider_event_id",
+      "table": "sports_events",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "provider_payload",
+      "table": "sports_events",
+      "entityType": "columns"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "starts_at",
+      "table": "sports_events",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "'scheduled'",
+      "generated": null,
+      "name": "status",
+      "table": "sports_events",
+      "entityType": "columns"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "(cast(unixepoch('subsecond') * 1000 as integer))",
+      "generated": null,
+      "name": "updated_at",
+      "table": "sports_events",
+      "entityType": "columns"
+    },
+    {
+      "columns": [
+        {
+          "value": "status",
+          "isExpression": false
+        },
+        {
+          "value": "next_poll_at",
+          "isExpression": false
+        },
+        {
+          "value": "poll_lease_until",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "sports_events_due_poll_idx",
+      "table": "sports_events",
+      "entityType": "indexes"
+    },
+    {
+      "columns": [
+        {
+          "value": "league_id",
+          "isExpression": false
+        },
+        {
+          "value": "starts_at",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "sports_events_league_starts_at_idx",
+      "table": "sports_events",
+      "entityType": "indexes"
+    },
+    {
+      "columns": [
+        {
+          "value": "provider",
+          "isExpression": false
+        },
+        {
+          "value": "provider_event_id",
+          "isExpression": false
+        }
+      ],
+      "isUnique": true,
+      "where": null,
+      "origin": "manual",
+      "name": "sports_events_provider_id_uidx",
+      "table": "sports_events",
+      "entityType": "indexes"
+    },
+    {
+      "value": "\"sports_events\".\"status\" in ('scheduled', 'live', 'final', 'postponed', 'cancelled')",
+      "name": "sports_events_status_check",
+      "table": "sports_events",
+      "entityType": "checks"
+    },
+    {
+      "columns": [
+        "away_participant_id"
+      ],
+      "tableTo": "participants",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "SET NULL",
+      "nameExplicit": false,
+      "name": "sports_events_away_participant_id_participants_id_fk",
+      "table": "sports_events",
+      "entityType": "fks"
+    },
+    {
+      "columns": [
+        "home_participant_id"
+      ],
+      "tableTo": "participants",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "SET NULL",
+      "nameExplicit": false,
+      "name": "sports_events_home_participant_id_participants_id_fk",
+      "table": "sports_events",
+      "entityType": "fks"
+    },
+    {
+      "columns": [
+        "league_id"
+      ],
+      "tableTo": "leagues",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "nameExplicit": false,
+      "name": "sports_events_league_id_leagues_id_fk",
+      "table": "sports_events",
+      "entityType": "fks"
+    },
+    {
+      "name": "follows",
+      "entityType": "tables"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "(cast(unixepoch('subsecond') * 1000 as integer))",
+      "generated": null,
+      "name": "created_at",
+      "table": "follows",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "followed_user_id",
+      "table": "follows",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "follower_user_id",
+      "table": "follows",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "table": "follows",
+      "entityType": "columns"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "follows_pk",
+      "table": "follows",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        {
+          "value": "follower_user_id",
+          "isExpression": false
+        },
+        {
+          "value": "followed_user_id",
+          "isExpression": false
+        }
+      ],
+      "isUnique": true,
+      "where": null,
+      "origin": "manual",
+      "name": "follows_pair_uidx",
+      "table": "follows",
+      "entityType": "indexes"
+    },
+    {
+      "columns": [
+        {
+          "value": "followed_user_id",
+          "isExpression": false
+        },
+        {
+          "value": "created_at",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "follows_followed_idx",
+      "table": "follows",
+      "entityType": "indexes"
+    },
+    {
+      "value": "\"follows\".\"follower_user_id\" != \"follows\".\"followed_user_id\"",
+      "name": "follows_not_self_check",
+      "table": "follows",
+      "entityType": "checks"
+    },
+    {
+      "columns": [
+        "followed_user_id"
+      ],
+      "tableTo": "user",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "nameExplicit": false,
+      "name": "follows_followed_user_id_user_id_fk",
+      "table": "follows",
+      "entityType": "fks"
+    },
+    {
+      "columns": [
+        "follower_user_id"
+      ],
+      "tableTo": "user",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "nameExplicit": false,
+      "name": "follows_follower_user_id_user_id_fk",
+      "table": "follows",
+      "entityType": "fks"
+    },
+    {
+      "name": "profiles",
+      "entityType": "tables"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "avatar_object_key",
+      "table": "profiles",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "bio",
+      "table": "profiles",
+      "entityType": "columns"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "(cast(unixepoch('subsecond') * 1000 as integer))",
+      "generated": null,
+      "name": "created_at",
+      "table": "profiles",
+      "entityType": "columns"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "true",
+      "generated": null,
+      "name": "is_public",
+      "table": "profiles",
+      "entityType": "columns"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "(cast(unixepoch('subsecond') * 1000 as integer))",
+      "generated": null,
+      "name": "updated_at",
+      "table": "profiles",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "user_id",
+      "table": "profiles",
+      "entityType": "columns"
+    },
+    {
+      "columns": [
+        "user_id"
+      ],
+      "nameExplicit": false,
+      "name": "profiles_pk",
+      "table": "profiles",
+      "entityType": "pks"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "username",
+      "table": "profiles",
+      "entityType": "columns"
+    },
+    {
+      "columns": [
+        {
+          "value": "username",
+          "isExpression": false
+        }
+      ],
+      "isUnique": true,
+      "where": null,
+      "origin": "manual",
+      "name": "profiles_username_unique",
+      "table": "profiles",
+      "entityType": "indexes"
+    },
+    {
+      "columns": [
+        {
+          "value": "is_public",
+          "isExpression": false
+        },
+        {
+          "value": "username",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "profiles_public_username_idx",
+      "table": "profiles",
+      "entityType": "indexes"
+    },
+    {
+      "columns": [
+        "user_id"
+      ],
+      "tableTo": "user",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "nameExplicit": false,
+      "name": "profiles_user_id_user_id_fk",
+      "table": "profiles",
+      "entityType": "fks"
+    },
+    {
+      "name": "referrals",
+      "entityType": "tables"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "code",
+      "table": "referrals",
+      "entityType": "columns"
+    },
+    {
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "completed_at",
+      "table": "referrals",
+      "entityType": "columns"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "(cast(unixepoch('subsecond') * 1000 as integer))",
+      "generated": null,
+      "name": "created_at",
+      "table": "referrals",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "table": "referrals",
+      "entityType": "columns"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "referrals_pk",
+      "table": "referrals",
+      "entityType": "pks"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "referred_user_id",
+      "table": "referrals",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "referrer_user_id",
+      "table": "referrals",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "'pending'",
+      "generated": null,
+      "name": "status",
+      "table": "referrals",
+      "entityType": "columns"
+    },
+    {
+      "columns": [
+        {
+          "value": "code",
+          "isExpression": false
+        }
+      ],
+      "isUnique": true,
+      "where": null,
+      "origin": "manual",
+      "name": "referrals_code_unique",
+      "table": "referrals",
+      "entityType": "indexes"
+    },
+    {
+      "columns": [
+        {
+          "value": "referrer_user_id",
+          "isExpression": false
+        },
+        {
+          "value": "created_at",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "referrals_referrer_created_idx",
+      "table": "referrals",
+      "entityType": "indexes"
+    },
+    {
+      "value": "\"referrals\".\"status\" in ('pending', 'completed', 'expired', 'cancelled')",
+      "name": "referrals_status_check",
+      "table": "referrals",
+      "entityType": "checks"
+    },
+    {
+      "columns": [
+        "referred_user_id"
+      ],
+      "tableTo": "user",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "SET NULL",
+      "nameExplicit": false,
+      "name": "referrals_referred_user_id_user_id_fk",
+      "table": "referrals",
+      "entityType": "fks"
+    },
+    {
+      "columns": [
+        "referrer_user_id"
+      ],
+      "tableTo": "user",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "nameExplicit": false,
+      "name": "referrals_referrer_user_id_user_id_fk",
+      "table": "referrals",
+      "entityType": "fks"
+    },
+    {
+      "name": "extractions",
+      "entityType": "tables"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "(cast(unixepoch('subsecond') * 1000 as integer))",
+      "generated": null,
+      "name": "created_at",
+      "table": "extractions",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "error_message",
+      "table": "extractions",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "table": "extractions",
+      "entityType": "columns"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "extractions_pk",
+      "table": "extractions",
+      "entityType": "pks"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "model",
+      "table": "extractions",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "normalized_response",
+      "table": "extractions",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "provider",
+      "table": "extractions",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "raw_response",
+      "table": "extractions",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "schema_version",
+      "table": "extractions",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "'pending'",
+      "generated": null,
+      "name": "status",
+      "table": "extractions",
+      "entityType": "columns"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "(cast(unixepoch('subsecond') * 1000 as integer))",
+      "generated": null,
+      "name": "updated_at",
+      "table": "extractions",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "upload_id",
+      "table": "extractions",
+      "entityType": "columns"
+    },
+    {
+      "columns": [
+        {
+          "value": "upload_id",
+          "isExpression": false
+        },
+        {
+          "value": "created_at",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "extractions_upload_created_at_idx",
+      "table": "extractions",
+      "entityType": "indexes"
+    },
+    {
+      "value": "\"extractions\".\"status\" in ('pending', 'completed', 'failed')",
+      "name": "extractions_status_check",
+      "table": "extractions",
+      "entityType": "checks"
+    },
+    {
+      "columns": [
+        "upload_id"
+      ],
+      "tableTo": "uploads",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "nameExplicit": false,
+      "name": "extractions_upload_id_uploads_id_fk",
+      "table": "extractions",
+      "entityType": "fks"
+    },
+    {
+      "name": "historical_import_batches",
+      "entityType": "tables"
+    },
+    {
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "completed_at",
+      "table": "historical_import_batches",
+      "entityType": "columns"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "(cast(unixepoch('subsecond') * 1000 as integer))",
+      "generated": null,
+      "name": "created_at",
+      "table": "historical_import_batches",
+      "entityType": "columns"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "0",
+      "generated": null,
+      "name": "duplicate_count",
+      "table": "historical_import_batches",
+      "entityType": "columns"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "0",
+      "generated": null,
+      "name": "failed_count",
+      "table": "historical_import_batches",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "table": "historical_import_batches",
+      "entityType": "columns"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "historical_import_batches_pk",
+      "table": "historical_import_batches",
+      "entityType": "pks"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "0",
+      "generated": null,
+      "name": "needs_review_count",
+      "table": "historical_import_batches",
+      "entityType": "columns"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "0",
+      "generated": null,
+      "name": "processed_files",
+      "table": "historical_import_batches",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "'pending'",
+      "generated": null,
+      "name": "status",
+      "table": "historical_import_batches",
+      "entityType": "columns"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "total_files",
+      "table": "historical_import_batches",
+      "entityType": "columns"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "(cast(unixepoch('subsecond') * 1000 as integer))",
+      "generated": null,
+      "name": "updated_at",
+      "table": "historical_import_batches",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "user_id",
+      "table": "historical_import_batches",
+      "entityType": "columns"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "0",
+      "generated": null,
+      "name": "verified_count",
+      "table": "historical_import_batches",
+      "entityType": "columns"
+    },
+    {
+      "columns": [
+        {
+          "value": "user_id",
+          "isExpression": false
+        },
+        {
+          "value": "created_at",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "historical_import_batches_user_created_at_idx",
+      "table": "historical_import_batches",
+      "entityType": "indexes"
+    },
+    {
+      "value": "\"historical_import_batches\".\"status\" in ('pending', 'processing', 'completed', 'failed', 'cancelled')",
+      "name": "historical_import_batches_status_check",
+      "table": "historical_import_batches",
+      "entityType": "checks"
+    },
+    {
+      "columns": [
+        "user_id"
+      ],
+      "tableTo": "user",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "nameExplicit": false,
+      "name": "historical_import_batches_user_id_user_id_fk",
+      "table": "historical_import_batches",
+      "entityType": "fks"
+    },
+    {
+      "name": "uploads",
+      "entityType": "tables"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "ai_model",
+      "table": "uploads",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "ai_response_version",
+      "table": "uploads",
+      "entityType": "columns"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "(cast(unixepoch('subsecond') * 1000 as integer))",
+      "generated": null,
+      "name": "created_at",
+      "table": "uploads",
+      "entityType": "columns"
+    },
+    {
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "deleted_at",
+      "table": "uploads",
+      "entityType": "columns"
+    },
+    {
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "file_size",
+      "table": "uploads",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "table": "uploads",
+      "entityType": "columns"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "uploads_pk",
+      "table": "uploads",
+      "entityType": "pks"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "'live'",
+      "generated": null,
+      "name": "ingestion_mode",
+      "table": "uploads",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "mime_type",
+      "table": "uploads",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "object_key",
+      "table": "uploads",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "original_filename",
+      "table": "uploads",
+      "entityType": "columns"
+    },
+    {
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "ready_at",
+      "table": "uploads",
+      "entityType": "columns"
+    },
+    {
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "retention_expires_at",
+      "table": "uploads",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "sha256",
+      "table": "uploads",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "'pending'",
+      "generated": null,
+      "name": "status",
+      "table": "uploads",
+      "entityType": "columns"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "(cast(unixepoch('subsecond') * 1000 as integer))",
+      "generated": null,
+      "name": "updated_at",
+      "table": "uploads",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "usage_reservation_key",
+      "table": "uploads",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "user_id",
+      "table": "uploads",
+      "entityType": "columns"
+    },
+    {
+      "columns": [
+        {
+          "value": "object_key",
+          "isExpression": false
+        }
+      ],
+      "isUnique": true,
+      "where": null,
+      "origin": "manual",
+      "name": "uploads_object_key_unique",
+      "table": "uploads",
+      "entityType": "indexes"
+    },
+    {
+      "columns": [
+        {
+          "value": "usage_reservation_key",
+          "isExpression": false
+        }
+      ],
+      "isUnique": true,
+      "where": null,
+      "origin": "manual",
+      "name": "uploads_usage_reservation_key_unique",
+      "table": "uploads",
+      "entityType": "indexes"
+    },
+    {
+      "columns": [
+        {
+          "value": "status",
+          "isExpression": false
+        },
+        {
+          "value": "created_at",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "uploads_status_created_at_idx",
+      "table": "uploads",
+      "entityType": "indexes"
+    },
+    {
+      "columns": [
+        {
+          "value": "user_id",
+          "isExpression": false
+        },
+        {
+          "value": "sha256",
+          "isExpression": false
+        }
+      ],
+      "isUnique": true,
+      "where": null,
+      "origin": "manual",
+      "name": "uploads_user_sha256_uidx",
+      "table": "uploads",
+      "entityType": "indexes"
+    },
+    {
+      "value": "\"uploads\".\"ingestion_mode\" in ('live', 'historical')",
+      "name": "uploads_ingestion_mode_check",
+      "table": "uploads",
+      "entityType": "checks"
+    },
+    {
+      "value": "\"uploads\".\"status\" in ('pending', 'uploading', 'ready', 'processing', 'extracted', 'failed')",
+      "name": "uploads_status_check",
+      "table": "uploads",
+      "entityType": "checks"
+    },
+    {
+      "columns": [
+        "user_id"
+      ],
+      "tableTo": "user",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "nameExplicit": false,
+      "name": "uploads_user_id_user_id_fk",
+      "table": "uploads",
+      "entityType": "fks"
+    },
+    {
+      "name": "device_tokens",
+      "entityType": "tables"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "(cast(unixepoch('subsecond') * 1000 as integer))",
+      "generated": null,
+      "name": "created_at",
+      "table": "device_tokens",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "table": "device_tokens",
+      "entityType": "columns"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "device_tokens_pk",
+      "table": "device_tokens",
+      "entityType": "pks"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "last_seen_at",
+      "table": "device_tokens",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "platform",
+      "table": "device_tokens",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "token",
+      "table": "device_tokens",
+      "entityType": "columns"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "(cast(unixepoch('subsecond') * 1000 as integer))",
+      "generated": null,
+      "name": "updated_at",
+      "table": "device_tokens",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "user_id",
+      "table": "device_tokens",
+      "entityType": "columns"
+    },
+    {
+      "columns": [
+        {
+          "value": "token",
+          "isExpression": false
+        }
+      ],
+      "isUnique": true,
+      "where": null,
+      "origin": "manual",
+      "name": "device_tokens_token_unique",
+      "table": "device_tokens",
+      "entityType": "indexes"
+    },
+    {
+      "columns": [
+        {
+          "value": "user_id",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "device_tokens_user_idx",
+      "table": "device_tokens",
+      "entityType": "indexes"
+    },
+    {
+      "value": "\"device_tokens\".\"platform\" in ('ios', 'android')",
+      "name": "device_tokens_platform_check",
+      "table": "device_tokens",
+      "entityType": "checks"
+    },
+    {
+      "columns": [
+        "user_id"
+      ],
+      "tableTo": "user",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "nameExplicit": false,
+      "name": "device_tokens_user_id_user_id_fk",
+      "table": "device_tokens",
+      "entityType": "fks"
+    },
+    {
+      "name": "notification_deliveries",
+      "entityType": "tables"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "0",
+      "generated": null,
+      "name": "attempts",
+      "table": "notification_deliveries",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "channel",
+      "table": "notification_deliveries",
+      "entityType": "columns"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "(cast(unixepoch('subsecond') * 1000 as integer))",
+      "generated": null,
+      "name": "created_at",
+      "table": "notification_deliveries",
+      "entityType": "columns"
+    },
+    {
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "delivered_at",
+      "table": "notification_deliveries",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "delivery_key",
+      "table": "notification_deliveries",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "error_message",
+      "table": "notification_deliveries",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "table": "notification_deliveries",
+      "entityType": "columns"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "notification_deliveries_pk",
+      "table": "notification_deliveries",
+      "entityType": "pks"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "notification_id",
+      "table": "notification_deliveries",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "'pending'",
+      "generated": null,
+      "name": "status",
+      "table": "notification_deliveries",
+      "entityType": "columns"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "(cast(unixepoch('subsecond') * 1000 as integer))",
+      "generated": null,
+      "name": "updated_at",
+      "table": "notification_deliveries",
+      "entityType": "columns"
+    },
+    {
+      "columns": [
+        {
+          "value": "delivery_key",
+          "isExpression": false
+        }
+      ],
+      "isUnique": true,
+      "where": null,
+      "origin": "manual",
+      "name": "notification_deliveries_delivery_key_unique",
+      "table": "notification_deliveries",
+      "entityType": "indexes"
+    },
+    {
+      "columns": [
+        {
+          "value": "status",
+          "isExpression": false
+        },
+        {
+          "value": "updated_at",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "notification_deliveries_status_idx",
+      "table": "notification_deliveries",
+      "entityType": "indexes"
+    },
+    {
+      "value": "\"notification_deliveries\".\"channel\" in ('push', 'email')",
+      "name": "notification_deliveries_channel_check",
+      "table": "notification_deliveries",
+      "entityType": "checks"
+    },
+    {
+      "value": "\"notification_deliveries\".\"status\" in ('pending', 'processing', 'delivered', 'failed')",
+      "name": "notification_deliveries_status_check",
+      "table": "notification_deliveries",
+      "entityType": "checks"
+    },
+    {
+      "columns": [
+        "notification_id"
+      ],
+      "tableTo": "notifications",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "nameExplicit": false,
+      "name": "notification_deliveries_notification_id_notifications_id_fk",
+      "table": "notification_deliveries",
+      "entityType": "fks"
+    },
+    {
+      "name": "notification_preferences",
+      "entityType": "tables"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "true",
+      "generated": null,
+      "name": "email_enabled",
+      "table": "notification_preferences",
+      "entityType": "columns"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "true",
+      "generated": null,
+      "name": "in_app_enabled",
+      "table": "notification_preferences",
+      "entityType": "columns"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "true",
+      "generated": null,
+      "name": "leg_lost",
+      "table": "notification_preferences",
+      "entityType": "columns"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "true",
+      "generated": null,
+      "name": "leg_won",
+      "table": "notification_preferences",
+      "entityType": "columns"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "true",
+      "generated": null,
+      "name": "push_enabled",
+      "table": "notification_preferences",
+      "entityType": "columns"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "true",
+      "generated": null,
+      "name": "ticket_lost",
+      "table": "notification_preferences",
+      "entityType": "columns"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "true",
+      "generated": null,
+      "name": "ticket_won",
+      "table": "notification_preferences",
+      "entityType": "columns"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "(cast(unixepoch('subsecond') * 1000 as integer))",
+      "generated": null,
+      "name": "updated_at",
+      "table": "notification_preferences",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "user_id",
+      "table": "notification_preferences",
+      "entityType": "columns"
+    },
+    {
+      "columns": [
+        "user_id"
+      ],
+      "nameExplicit": false,
+      "name": "notification_preferences_pk",
+      "table": "notification_preferences",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "user_id"
+      ],
+      "tableTo": "user",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "nameExplicit": false,
+      "name": "notification_preferences_user_id_user_id_fk",
+      "table": "notification_preferences",
+      "entityType": "fks"
+    },
+    {
+      "name": "notifications",
+      "entityType": "tables"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "body",
+      "table": "notifications",
+      "entityType": "columns"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "(cast(unixepoch('subsecond') * 1000 as integer))",
+      "generated": null,
+      "name": "created_at",
+      "table": "notifications",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "data",
+      "table": "notifications",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "table": "notifications",
+      "entityType": "columns"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "notifications_pk",
+      "table": "notifications",
+      "entityType": "pks"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "milestone_key",
+      "table": "notifications",
+      "entityType": "columns"
+    },
+    {
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "read_at",
+      "table": "notifications",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "ticket_id",
+      "table": "notifications",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "title",
+      "table": "notifications",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "type",
+      "table": "notifications",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "user_id",
+      "table": "notifications",
+      "entityType": "columns"
+    },
+    {
+      "columns": [
+        {
+          "value": "milestone_key",
+          "isExpression": false
+        }
+      ],
+      "isUnique": true,
+      "where": null,
+      "origin": "manual",
+      "name": "notifications_milestone_key_unique",
+      "table": "notifications",
+      "entityType": "indexes"
+    },
+    {
+      "columns": [
+        {
+          "value": "user_id",
+          "isExpression": false
+        },
+        {
+          "value": "read_at",
+          "isExpression": false
+        },
+        {
+          "value": "created_at",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "notifications_user_read_created_idx",
+      "table": "notifications",
+      "entityType": "indexes"
+    },
+    {
+      "columns": [
+        "ticket_id"
+      ],
+      "tableTo": "tickets",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "nameExplicit": false,
+      "name": "notifications_ticket_id_tickets_id_fk",
+      "table": "notifications",
+      "entityType": "fks"
+    },
+    {
+      "columns": [
+        "user_id"
+      ],
+      "tableTo": "user",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "nameExplicit": false,
+      "name": "notifications_user_id_user_id_fk",
+      "table": "notifications",
+      "entityType": "fks"
+    },
+    {
+      "name": "ticket_legs",
+      "entityType": "tables"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "(cast(unixepoch('subsecond') * 1000 as integer))",
+      "generated": null,
+      "name": "created_at",
+      "table": "ticket_legs",
+      "entityType": "columns"
+    },
+    {
+      "type": "real",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "current_value",
+      "table": "ticket_legs",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "display_description",
+      "table": "ticket_legs",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "event_hint",
+      "table": "ticket_legs",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "table": "ticket_legs",
+      "entityType": "columns"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "ticket_legs_pk",
+      "table": "ticket_legs",
+      "entityType": "pks"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "league_id",
+      "table": "ticket_legs",
+      "entityType": "columns"
+    },
+    {
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "lost_at",
+      "table": "ticket_legs",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "market_id",
+      "table": "ticket_legs",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "'over'",
+      "generated": null,
+      "name": "operator",
+      "table": "ticket_legs",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "participant_id",
+      "table": "ticket_legs",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "raw_description",
+      "table": "ticket_legs",
+      "entityType": "columns"
+    },
+    {
+      "type": "real",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "resolver_confidence",
+      "table": "ticket_legs",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "'ambiguous'",
+      "generated": null,
+      "name": "resolver_status",
+      "table": "ticket_legs",
+      "entityType": "columns"
+    },
+    {
+      "type": "real",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "secondary_target_value",
+      "table": "ticket_legs",
+      "entityType": "columns"
+    },
+    {
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "settled_at",
+      "table": "ticket_legs",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "sport_id",
+      "table": "ticket_legs",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "sports_event_id",
+      "table": "ticket_legs",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "'pending'",
+      "generated": null,
+      "name": "status",
+      "table": "ticket_legs",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "subject_name",
+      "table": "ticket_legs",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "'player'",
+      "generated": null,
+      "name": "subject_type",
+      "table": "ticket_legs",
+      "entityType": "columns"
+    },
+    {
+      "type": "real",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "target_value",
+      "table": "ticket_legs",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "ticket_id",
+      "table": "ticket_legs",
+      "entityType": "columns"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "(cast(unixepoch('subsecond') * 1000 as integer))",
+      "generated": null,
+      "name": "updated_at",
+      "table": "ticket_legs",
+      "entityType": "columns"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "1",
+      "generated": null,
+      "name": "version",
+      "table": "ticket_legs",
+      "entityType": "columns"
+    },
+    {
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "won_at",
+      "table": "ticket_legs",
+      "entityType": "columns"
+    },
+    {
+      "columns": [
+        {
+          "value": "sports_event_id",
+          "isExpression": false
+        },
+        {
+          "value": "status",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "ticket_legs_event_status_idx",
+      "table": "ticket_legs",
+      "entityType": "indexes"
+    },
+    {
+      "columns": [
+        {
+          "value": "ticket_id",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "ticket_legs_ticket_id_idx",
+      "table": "ticket_legs",
+      "entityType": "indexes"
+    },
+    {
+      "value": "\"ticket_legs\".\"operator\" in ('over', 'under', 'gte', 'lte', 'equals', 'moneyline', 'spread', 'yes', 'no', 'custom')",
+      "name": "ticket_legs_operator_check",
+      "table": "ticket_legs",
+      "entityType": "checks"
+    },
+    {
+      "value": "\"ticket_legs\".\"resolver_status\" in ('resolved', 'ambiguous', 'not_found', 'unsupported')",
+      "name": "ticket_legs_resolver_status_check",
+      "table": "ticket_legs",
+      "entityType": "checks"
+    },
+    {
+      "value": "\"ticket_legs\".\"status\" in ('pending', 'live', 'won', 'lost', 'push', 'void', 'cancelled', 'unresolved')",
+      "name": "ticket_legs_status_check",
+      "table": "ticket_legs",
+      "entityType": "checks"
+    },
+    {
+      "value": "\"ticket_legs\".\"subject_type\" in ('player', 'team', 'game')",
+      "name": "ticket_legs_subject_type_check",
+      "table": "ticket_legs",
+      "entityType": "checks"
+    },
+    {
+      "columns": [
+        "league_id"
+      ],
+      "tableTo": "leagues",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "SET NULL",
+      "nameExplicit": false,
+      "name": "ticket_legs_league_id_leagues_id_fk",
+      "table": "ticket_legs",
+      "entityType": "fks"
+    },
+    {
+      "columns": [
+        "market_id"
+      ],
+      "tableTo": "markets",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "SET NULL",
+      "nameExplicit": false,
+      "name": "ticket_legs_market_id_markets_id_fk",
+      "table": "ticket_legs",
+      "entityType": "fks"
+    },
+    {
+      "columns": [
+        "participant_id"
+      ],
+      "tableTo": "participants",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "SET NULL",
+      "nameExplicit": false,
+      "name": "ticket_legs_participant_id_participants_id_fk",
+      "table": "ticket_legs",
+      "entityType": "fks"
+    },
+    {
+      "columns": [
+        "sport_id"
+      ],
+      "tableTo": "sports",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "SET NULL",
+      "nameExplicit": false,
+      "name": "ticket_legs_sport_id_sports_id_fk",
+      "table": "ticket_legs",
+      "entityType": "fks"
+    },
+    {
+      "columns": [
+        "sports_event_id"
+      ],
+      "tableTo": "sports_events",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "SET NULL",
+      "nameExplicit": false,
+      "name": "ticket_legs_sports_event_id_sports_events_id_fk",
+      "table": "ticket_legs",
+      "entityType": "fks"
+    },
+    {
+      "columns": [
+        "ticket_id"
+      ],
+      "tableTo": "tickets",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "nameExplicit": false,
+      "name": "ticket_legs_ticket_id_tickets_id_fk",
+      "table": "ticket_legs",
+      "entityType": "fks"
+    },
+    {
+      "name": "ticket_timeline_events",
+      "entityType": "tables"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "(cast(unixepoch('subsecond') * 1000 as integer))",
+      "generated": null,
+      "name": "created_at",
+      "table": "ticket_timeline_events",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "table": "ticket_timeline_events",
+      "entityType": "columns"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "ticket_timeline_events_pk",
+      "table": "ticket_timeline_events",
+      "entityType": "pks"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "message",
+      "table": "ticket_timeline_events",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "metadata",
+      "table": "ticket_timeline_events",
+      "entityType": "columns"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "occurred_at",
+      "table": "ticket_timeline_events",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "ticket_id",
+      "table": "ticket_timeline_events",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "ticket_leg_id",
+      "table": "ticket_timeline_events",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "title",
+      "table": "ticket_timeline_events",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "transition_key",
+      "table": "ticket_timeline_events",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "type",
+      "table": "ticket_timeline_events",
+      "entityType": "columns"
+    },
+    {
+      "columns": [
+        {
+          "value": "transition_key",
+          "isExpression": false
+        }
+      ],
+      "isUnique": true,
+      "where": null,
+      "origin": "manual",
+      "name": "ticket_timeline_events_transition_key_unique",
+      "table": "ticket_timeline_events",
+      "entityType": "indexes"
+    },
+    {
+      "columns": [
+        {
+          "value": "ticket_id",
+          "isExpression": false
+        },
+        {
+          "value": "occurred_at",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "ticket_timeline_events_ticket_occurred_at_idx",
+      "table": "ticket_timeline_events",
+      "entityType": "indexes"
+    },
+    {
+      "columns": [
+        "ticket_id"
+      ],
+      "tableTo": "tickets",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "nameExplicit": false,
+      "name": "ticket_timeline_events_ticket_id_tickets_id_fk",
+      "table": "ticket_timeline_events",
+      "entityType": "fks"
+    },
+    {
+      "columns": [
+        "ticket_leg_id"
+      ],
+      "tableTo": "ticket_legs",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "SET NULL",
+      "nameExplicit": false,
+      "name": "ticket_timeline_events_ticket_leg_id_ticket_legs_id_fk",
+      "table": "ticket_timeline_events",
+      "entityType": "fks"
+    },
+    {
+      "name": "tickets",
+      "entityType": "tables"
+    },
+    {
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "confirmed_at",
+      "table": "tickets",
+      "entityType": "columns"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "(cast(unixepoch('subsecond') * 1000 as integer))",
+      "generated": null,
+      "name": "created_at",
+      "table": "tickets",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "historical_import_batch_id",
+      "table": "tickets",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "table": "tickets",
+      "entityType": "columns"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "tickets_pk",
+      "table": "tickets",
+      "entityType": "pks"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "'live'",
+      "generated": null,
+      "name": "ingestion_mode",
+      "table": "tickets",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "result_source",
+      "table": "tickets",
+      "entityType": "columns"
+    },
+    {
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "settled_at",
+      "table": "tickets",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "source_name",
+      "table": "tickets",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "source_upload_id",
+      "table": "tickets",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "'needs_review'",
+      "generated": null,
+      "name": "status",
+      "table": "tickets",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "'parlay'",
+      "generated": null,
+      "name": "ticket_type",
+      "table": "tickets",
+      "entityType": "columns"
+    },
+    {
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "tracking_started_at",
+      "table": "tickets",
+      "entityType": "columns"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "(cast(unixepoch('subsecond') * 1000 as integer))",
+      "generated": null,
+      "name": "updated_at",
+      "table": "tickets",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "user_id",
+      "table": "tickets",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "'unverified'",
+      "generated": null,
+      "name": "verification_status",
+      "table": "tickets",
+      "entityType": "columns"
+    },
+    {
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "verified_at",
+      "table": "tickets",
+      "entityType": "columns"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "1",
+      "generated": null,
+      "name": "version",
+      "table": "tickets",
+      "entityType": "columns"
+    },
+    {
+      "columns": [
+        {
+          "value": "user_id",
+          "isExpression": false
+        },
+        {
+          "value": "status",
+          "isExpression": false
+        },
+        {
+          "value": "created_at",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "tickets_user_status_created_at_idx",
+      "table": "tickets",
+      "entityType": "indexes"
+    },
+    {
+      "value": "\"tickets\".\"ingestion_mode\" in ('live', 'historical')",
+      "name": "tickets_ingestion_mode_check",
+      "table": "tickets",
+      "entityType": "checks"
+    },
+    {
+      "value": "\"tickets\".\"result_source\" is null or \"tickets\".\"result_source\" in ('live_provider', 'historical_provider', 'settled_slip', 'manual')",
+      "name": "tickets_result_source_check",
+      "table": "tickets",
+      "entityType": "checks"
+    },
+    {
+      "value": "\"tickets\".\"status\" in ('draft', 'needs_review', 'scheduled', 'live', 'won', 'lost', 'push', 'void', 'partially_void', 'settled')",
+      "name": "tickets_status_check",
+      "table": "tickets",
+      "entityType": "checks"
+    },
+    {
+      "value": "\"tickets\".\"ticket_type\" in ('parlay', 'single', 'sgp', 'teaser', 'round_robin')",
+      "name": "tickets_ticket_type_check",
+      "table": "tickets",
+      "entityType": "checks"
+    },
+    {
+      "value": "\"tickets\".\"verification_status\" in ('unverified', 'partially_verified', 'verified')",
+      "name": "tickets_verification_status_check",
+      "table": "tickets",
+      "entityType": "checks"
+    },
+    {
+      "columns": [
+        "historical_import_batch_id"
+      ],
+      "tableTo": "historical_import_batches",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "SET NULL",
+      "nameExplicit": false,
+      "name": "tickets_historical_import_batch_id_historical_import_batches_id_fk",
+      "table": "tickets",
+      "entityType": "fks"
+    },
+    {
+      "columns": [
+        "source_upload_id"
+      ],
+      "tableTo": "uploads",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "SET NULL",
+      "nameExplicit": false,
+      "name": "tickets_source_upload_id_uploads_id_fk",
+      "table": "tickets",
+      "entityType": "fks"
+    },
+    {
+      "columns": [
+        "user_id"
+      ],
+      "tableTo": "user",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "nameExplicit": false,
+      "name": "tickets_user_id_user_id_fk",
+      "table": "tickets",
+      "entityType": "fks"
+    },
+    {
+      "name": "stat_observations",
+      "entityType": "tables"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "(cast(unixepoch('subsecond') * 1000 as integer))",
+      "generated": null,
+      "name": "created_at",
+      "table": "stat_observations",
+      "entityType": "columns"
+    },
+    {
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": true,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "table": "stat_observations",
+      "entityType": "columns"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "stat_observations_pk",
+      "table": "stat_observations",
+      "entityType": "pks"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "idempotency_key",
+      "table": "stat_observations",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "market_id",
+      "table": "stat_observations",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "metadata",
+      "table": "stat_observations",
+      "entityType": "columns"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "observed_at",
+      "table": "stat_observations",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "participant_id",
+      "table": "stat_observations",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "provider",
+      "table": "stat_observations",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "provider_sequence",
+      "table": "stat_observations",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "sports_event_id",
+      "table": "stat_observations",
+      "entityType": "columns"
+    },
+    {
+      "type": "real",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "value",
+      "table": "stat_observations",
+      "entityType": "columns"
+    },
+    {
+      "columns": [
+        {
+          "value": "idempotency_key",
+          "isExpression": false
+        }
+      ],
+      "isUnique": true,
+      "where": null,
+      "origin": "manual",
+      "name": "stat_observations_idempotency_key_unique",
+      "table": "stat_observations",
+      "entityType": "indexes"
+    },
+    {
+      "columns": [
+        {
+          "value": "sports_event_id",
+          "isExpression": false
+        },
+        {
+          "value": "participant_id",
+          "isExpression": false
+        },
+        {
+          "value": "market_id",
+          "isExpression": false
+        },
+        {
+          "value": "observed_at",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "stat_observations_lookup_idx",
+      "table": "stat_observations",
+      "entityType": "indexes"
+    },
+    {
+      "columns": [
+        {
+          "value": "provider",
+          "isExpression": false
+        },
+        {
+          "value": "sports_event_id",
+          "isExpression": false
+        },
+        {
+          "value": "participant_id",
+          "isExpression": false
+        },
+        {
+          "value": "market_id",
+          "isExpression": false
+        },
+        {
+          "value": "provider_sequence",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "stat_observations_provider_sequence_idx",
+      "table": "stat_observations",
+      "entityType": "indexes"
+    },
+    {
+      "columns": [
+        "market_id"
+      ],
+      "tableTo": "markets",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "nameExplicit": false,
+      "name": "stat_observations_market_id_markets_id_fk",
+      "table": "stat_observations",
+      "entityType": "fks"
+    },
+    {
+      "columns": [
+        "participant_id"
+      ],
+      "tableTo": "participants",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "SET NULL",
+      "nameExplicit": false,
+      "name": "stat_observations_participant_id_participants_id_fk",
+      "table": "stat_observations",
+      "entityType": "fks"
+    },
+    {
+      "columns": [
+        "sports_event_id"
+      ],
+      "tableTo": "sports_events",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "nameExplicit": false,
+      "name": "stat_observations_sports_event_id_sports_events_id_fk",
+      "table": "stat_observations",
+      "entityType": "fks"
+    },
+    {
+      "name": "tracking_subscriptions",
+      "entityType": "tables"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "(cast(unixepoch('subsecond') * 1000 as integer))",
+      "generated": null,
+      "name": "created_at",
+      "table": "tracking_subscriptions",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "table": "tracking_subscriptions",
+      "entityType": "columns"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "tracking_subscriptions_pk",
+      "table": "tracking_subscriptions",
+      "entityType": "pks"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "market_id",
+      "table": "tracking_subscriptions",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "participant_id",
+      "table": "tracking_subscriptions",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "sports_event_id",
+      "table": "tracking_subscriptions",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "'active'",
+      "generated": null,
+      "name": "status",
+      "table": "tracking_subscriptions",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "subscription_key",
+      "table": "tracking_subscriptions",
+      "entityType": "columns"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "ticket_leg_id",
+      "table": "tracking_subscriptions",
+      "entityType": "columns"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "(cast(unixepoch('subsecond') * 1000 as integer))",
+      "generated": null,
+      "name": "updated_at",
+      "table": "tracking_subscriptions",
+      "entityType": "columns"
+    },
+    {
+      "columns": [
+        {
+          "value": "subscription_key",
+          "isExpression": false
+        }
+      ],
+      "isUnique": true,
+      "where": null,
+      "origin": "manual",
+      "name": "tracking_subscriptions_subscription_key_unique",
+      "table": "tracking_subscriptions",
+      "entityType": "indexes"
+    },
+    {
+      "columns": [
+        {
+          "value": "sports_event_id",
+          "isExpression": false
+        },
+        {
+          "value": "participant_id",
+          "isExpression": false
+        },
+        {
+          "value": "market_id",
+          "isExpression": false
+        },
+        {
+          "value": "status",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "tracking_subscriptions_lookup_idx",
+      "table": "tracking_subscriptions",
+      "entityType": "indexes"
+    },
+    {
+      "columns": [
+        {
+          "value": "ticket_leg_id",
+          "isExpression": false
+        },
+        {
+          "value": "sports_event_id",
+          "isExpression": false
+        },
+        {
+          "value": "participant_id",
+          "isExpression": false
+        },
+        {
+          "value": "market_id",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "tracking_subscriptions_leg_event_market_idx",
+      "table": "tracking_subscriptions",
+      "entityType": "indexes"
+    },
+    {
+      "value": "\"tracking_subscriptions\".\"status\" in ('active', 'paused', 'completed', 'cancelled')",
+      "name": "tracking_subscriptions_status_check",
+      "table": "tracking_subscriptions",
+      "entityType": "checks"
+    },
+    {
+      "columns": [
+        "market_id"
+      ],
+      "tableTo": "markets",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "nameExplicit": false,
+      "name": "tracking_subscriptions_market_id_markets_id_fk",
+      "table": "tracking_subscriptions",
+      "entityType": "fks"
+    },
+    {
+      "columns": [
+        "participant_id"
+      ],
+      "tableTo": "participants",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "SET NULL",
+      "nameExplicit": false,
+      "name": "tracking_subscriptions_participant_id_participants_id_fk",
+      "table": "tracking_subscriptions",
+      "entityType": "fks"
+    },
+    {
+      "columns": [
+        "sports_event_id"
+      ],
+      "tableTo": "sports_events",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "nameExplicit": false,
+      "name": "tracking_subscriptions_sports_event_id_sports_events_id_fk",
+      "table": "tracking_subscriptions",
+      "entityType": "fks"
+    },
+    {
+      "columns": [
+        "ticket_leg_id"
+      ],
+      "tableTo": "ticket_legs",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "nameExplicit": false,
+      "name": "tracking_subscriptions_ticket_leg_id_ticket_legs_id_fk",
+      "table": "tracking_subscriptions",
+      "entityType": "fks"
+    }
+  ],
+  "renames": []
+}
