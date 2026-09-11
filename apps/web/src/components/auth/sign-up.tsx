@@ -242,7 +242,7 @@ export function SignUp({
                               type="text"
                               autoComplete="name"
                               placeholder={localization.auth.namePlaceholder}
-                              required
+                              aria-required="true"
                               disabled={isPending}
                               value={field.state.value}
                               onBlur={field.handleBlur}
@@ -290,7 +290,7 @@ export function SignUp({
                             type="email"
                             autoComplete="email"
                             placeholder={localization.auth.emailPlaceholder}
-                            required
+                            aria-required="true"
                             disabled={isPending}
                             value={field.state.value}
                             onBlur={field.handleBlur}
@@ -377,7 +377,7 @@ export function SignUp({
                               placeholder={
                                 localization.auth.passwordPlaceholder
                               }
-                              required
+                              aria-required="true"
                               minLength={emailAndPassword?.minPasswordLength}
                               maxLength={emailAndPassword?.maxPasswordLength}
                               disabled={isPending}
@@ -478,7 +478,7 @@ export function SignUp({
                                 placeholder={
                                   localization.auth.confirmPasswordPlaceholder
                                 }
-                                required
+                                aria-required="true"
                                 minLength={emailAndPassword?.minPasswordLength}
                                 maxLength={emailAndPassword?.maxPasswordLength}
                                 disabled={isPending}

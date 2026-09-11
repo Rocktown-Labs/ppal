@@ -240,7 +240,7 @@ export function AdditionalField({
           onBlur={onBlur}
           onChange={(event) => onChange(event.target.value || null)}
           placeholder={field.placeholder}
-          required={field.required}
+          aria-required={field.required}
           readOnly={field.readOnly}
           disabled={isPending}
           aria-invalid={isInvalid}
@@ -279,7 +279,7 @@ export function AdditionalField({
             )
           }
           placeholder={field.placeholder}
-          required={field.required}
+          aria-required={field.required}
           readOnly={field.readOnly}
           disabled={isPending}
           aria-invalid={isInvalid}
@@ -337,7 +337,7 @@ export function AdditionalField({
           checked={value === true}
           onBlur={onBlur}
           onCheckedChange={(checked) => onChange(checked === true)}
-          required={field.required}
+          aria-required={field.required}
           disabled={isPending || field.readOnly}
           aria-invalid={isInvalid}
         />
@@ -364,7 +364,7 @@ export function AdditionalField({
           name={name}
           value={valueToString(value) || undefined}
           onValueChange={(nextValue) => onChange(nextValue)}
-          required={field.required}
+          aria-required={field.required}
           disabled={isPending || field.readOnly}
         >
           <SelectTrigger
@@ -408,7 +408,7 @@ export function AdditionalField({
           name={name}
           value={selectedOption ?? null}
           onValueChange={(option) => onChange(option?.value ?? null)}
-          required={field.required}
+          aria-required={field.required}
           disabled={isPending || field.readOnly}
         >
           <ComboboxInput
@@ -527,7 +527,7 @@ function InputField({
             onBlur={onBlur}
             onChange={(event) => handleInputChange(event.target.value)}
             placeholder={field.placeholder}
-            required={field.required}
+            aria-required={field.required}
             autoComplete={isPhoneField ? "tel" : undefined}
             maxLength={isPhoneField ? 14 : undefined}
             readOnly={field.readOnly}
@@ -572,7 +572,7 @@ function InputField({
         onBlur={onBlur}
         onChange={(event) => handleInputChange(event.target.value)}
         placeholder={field.placeholder}
-        required={field.required}
+        aria-required={field.required}
         autoComplete={isPhoneField ? "tel" : undefined}
         maxLength={isPhoneField ? 14 : undefined}
         readOnly={field.readOnly}

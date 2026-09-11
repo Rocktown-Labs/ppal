@@ -194,7 +194,7 @@ export function SignIn({
                               passkeyAutoFill
                             )}
                             placeholder={localization.auth.emailPlaceholder}
-                            required
+                            aria-required="true"
                             disabled={isPending}
                             value={field.state.value}
                             onBlur={field.handleBlur}
@@ -259,7 +259,7 @@ export function SignIn({
                               placeholder={
                                 localization.auth.passwordPlaceholder
                               }
-                              required
+                              aria-required="true"
                               minLength={emailAndPassword?.minPasswordLength}
                               maxLength={emailAndPassword?.maxPasswordLength}
                               disabled={isPending}
