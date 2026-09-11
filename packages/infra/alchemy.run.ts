@@ -14,6 +14,9 @@ config({ path: "../../apps/server/.env" });
 const pullRequestNumber = process.env.PR_NUMBER?.trim();
 const isPullRequest = /^\d+$/u.test(pullRequestNumber ?? "");
 const deploymentSuffix = isPullRequest ? `-pr-${pullRequestNumber}` : "";
+const rateLimitNamespaceOffset = isPullRequest
+  ? 10_000 + Number(pullRequestNumber) * 10
+  : 0;
 const apiDomain = isPullRequest
   ? `api-pr-${pullRequestNumber}.myparlaypal.com`
   : "api.myparlaypal.com";
@@ -34,6 +37,10 @@ export const uploads = Cloudflare.R2.Bucket("uploads", {
       id: "expire-uploaded-slips",
     },
   ],
+  publicAccess: false,
+});
+
+export const avatars = Cloudflare.R2.Bucket("avatars", {
   publicAccess: false,
 });
 
@@ -66,8 +73,12 @@ export const server = Cloudflare.Worker("server", {
   env: {
     ANALYTICS: analytics,
     API_RATE_LIMIT: Cloudflare.RateLimit("api-rate-limit", {
-      namespaceId: 1001,
+      namespaceId: rateLimitNamespaceOffset + 1001,
       simple: { limit: 120, period: 60 },
+    }),
+    AUTH_RATE_LIMIT: Cloudflare.RateLimit("auth-rate-limit", {
+      namespaceId: rateLimitNamespaceOffset + 1003,
+      simple: { limit: 30, period: 60 },
     }),
     APPLE_CLIENT_ID: Config.string("APPLE_CLIENT_ID").pipe(
       Config.withDefault("")
@@ -92,6 +103,12 @@ export const server = Cloudflare.Worker("server", {
       Config.withDefault(Redacted.make(""))
     ),
     NOTIFICATION_QUEUE: notificationQueue,
+    OPERATIONS_API_TOKEN: Config.redacted("OPERATIONS_API_TOKEN"),
+    OPERATIONS_RATE_LIMIT: Cloudflare.RateLimit("operations-rate-limit", {
+      namespaceId: rateLimitNamespaceOffset + 1005,
+      simple: { limit: 20, period: 60 },
+    }),
+    R2_AVATARS: avatars,
     R2_UPLOADS: uploads,
     RESEND_API_KEY: Config.redacted("RESEND_API_KEY").pipe(
       Config.withDefault(Redacted.make(""))
@@ -103,8 +120,12 @@ export const server = Cloudflare.Worker("server", {
     SPORTRADAR_API_KEY: Config.redacted("SPORTRADAR_API_KEY"),
     SPORTS_QUEUE: sportsQueue,
     UPLOAD_RATE_LIMIT: Cloudflare.RateLimit("upload-rate-limit", {
-      namespaceId: 1002,
+      namespaceId: rateLimitNamespaceOffset + 1002,
       simple: { limit: 20, period: 60 },
+    }),
+    WEBHOOK_RATE_LIMIT: Cloudflare.RateLimit("webhook-rate-limit", {
+      namespaceId: rateLimitNamespaceOffset + 1004,
+      simple: { limit: 300, period: 60 },
     }),
     STRIPE_CREATOR_ANNUAL_PRICE_ID: Config.string(
       "STRIPE_PRICE_CREATOR_YEARLY"

@@ -10,6 +10,7 @@
     "./catalog": "./src/catalog.ts",
     "./community": "./src/community.ts",
     "./imports": "./src/imports.ts",
+    "./markets": "./src/markets.ts",
     "./notifications": "./src/notifications.ts",
     "./operations": "./src/operations.ts",
     "./queues": "./src/queues.ts",

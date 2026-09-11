@@ -54,7 +54,11 @@ export function ProviderButton({
     socialSignInMode,
   } = useAuth();
 
-  const callbackURL = `${baseURL}${redirectTo}`;
+  const safeRedirectTo =
+    redirectTo.startsWith("/") && !redirectTo.startsWith("//")
+      ? redirectTo
+      : "/";
+  const callbackURL = new URL(safeRedirectTo, baseURL).toString();
   const { fetchOptions, resetFetchOptions } = useFetchOptions();
 
   const { mutate: signInSocial, isPending: signInSocialPending } =
@@ -83,7 +87,7 @@ export function ProviderButton({
           provider: providerId,
           requestSignUp: view === "signUp",
         },
-        { onSuccess: () => navigate({ to: redirectTo }) }
+        { onSuccess: () => navigate({ to: safeRedirectTo }) }
       );
       return;
     }

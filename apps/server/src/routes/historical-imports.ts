@@ -8,6 +8,7 @@ import { env } from "@ppal/env/server";
 import { Hono } from "hono";
 
 import { getAuthUser } from "../lib/auth";
+import { scopeIdempotencyKey } from "../lib/database";
 import { refreshHistoricalBatch } from "../services/historical-imports";
 import { releaseUploadUsage, reserveUploadUsage } from "../services/usage";
 
@@ -81,10 +82,14 @@ export const createHistoricalImportRoutes = (auth: Auth) =>
           );
         }
         const input = c.req.valid("json");
+        const batchIdempotencyKey = scopeIdempotencyKey(
+          user.id,
+          input.idempotencyKey
+        );
         const existing = await env.DB.prepare(
           "SELECT id FROM historical_import_batches WHERE user_id = ? AND idempotency_key = ?"
         )
-          .bind(user.id, input.idempotencyKey)
+          .bind(user.id, batchIdempotencyKey)
           .first<{ id: string }>();
         if (existing) {
           const batch = await loadBatch(existing.id, user.id);
@@ -99,7 +104,7 @@ export const createHistoricalImportRoutes = (auth: Auth) =>
           `INSERT INTO historical_import_batches (id, idempotency_key, status, total_files, updated_at, user_id)
          VALUES (?, ?, 'processing', ?, ?, ?)`
         )
-          .bind(batchId, input.idempotencyKey, input.files.length, now, user.id)
+          .bind(batchId, batchIdempotencyKey, input.files.length, now, user.id)
           .run();
         const uploads: { id: string; uploadUrl: string }[] = [];
         let duplicates = 0;
@@ -114,9 +119,13 @@ export const createHistoricalImportRoutes = (auth: Auth) =>
             continue;
           }
           const uploadId = crypto.randomUUID();
+          const scopedFileKey = scopeIdempotencyKey(
+            user.id,
+            file.idempotencyKey
+          );
           const reservation = await reserveUploadUsage({
             db: env.DB,
-            idempotencyKey: file.idempotencyKey,
+            idempotencyKey: scopedFileKey,
             uploadId,
             userId: user.id,
           });
@@ -145,7 +154,7 @@ export const createHistoricalImportRoutes = (auth: Auth) =>
                 now + 90 * 24 * 60 * 60 * 1000,
                 file.sha256.toLowerCase(),
                 now,
-                file.idempotencyKey,
+                scopedFileKey,
                 user.id
               )
               .run();
@@ -154,7 +163,7 @@ export const createHistoricalImportRoutes = (auth: Auth) =>
               uploadUrl: `/api/v1/uploads/${uploadId}/content`,
             });
           } catch (error) {
-            await releaseUploadUsage(env.DB, file.idempotencyKey);
+            await releaseUploadUsage(env.DB, scopedFileKey);
             throw error;
           }
         }
@@ -214,25 +223,44 @@ export const createHistoricalImportRoutes = (auth: Auth) =>
           409
         );
       }
+      const cancelledAt = Date.now();
+      const cancelled = await env.DB.prepare(
+        `UPDATE historical_import_batches
+         SET status = 'cancelled', completed_at = ?, updated_at = ?
+         WHERE id = ? AND user_id = ? AND status IN ('pending', 'processing')`
+      )
+        .bind(cancelledAt, cancelledAt, batch.id, user.id)
+        .run();
+      if (cancelled.meta.changes === 0) {
+        return c.json(
+          { code: "CONFLICT", error: "Import batch changed while cancelling" },
+          409
+        );
+      }
       const pending = await env.DB.prepare(
         `SELECT object_key, usage_reservation_key FROM uploads
-         WHERE historical_import_batch_id = ? AND user_id = ? AND status IN ('uploading', 'ready')`
+         WHERE historical_import_batch_id = ? AND user_id = ?
+           AND status IN ('uploading', 'ready', 'processing')`
       )
         .bind(batch.id, user.id)
         .all<{ object_key: string; usage_reservation_key: string }>();
+      await env.DB.batch([
+        env.DB.prepare(
+          `UPDATE uploads SET status = 'failed', updated_at = ?
+           WHERE historical_import_batch_id = ?
+             AND status IN ('uploading', 'ready', 'processing')`
+        ).bind(cancelledAt, batch.id),
+        env.DB.prepare(
+          `DELETE FROM tickets WHERE historical_import_batch_id = ?
+           AND status IN ('draft', 'needs_review')`
+        ).bind(batch.id),
+      ]);
       for (const upload of pending.results) {
         await env.R2_UPLOADS.delete(upload.object_key);
         await releaseUploadUsage(env.DB, upload.usage_reservation_key);
       }
-      await env.DB.batch([
-        env.DB.prepare(
-          `UPDATE uploads SET status = 'failed', updated_at = ?
-           WHERE historical_import_batch_id = ? AND status IN ('uploading', 'ready')`
-        ).bind(Date.now(), batch.id),
-        env.DB.prepare(
-          "UPDATE historical_import_batches SET status = 'cancelled', completed_at = ?, updated_at = ? WHERE id = ?"
-        ).bind(Date.now(), Date.now(), batch.id),
-      ]);
-      const cancelled = await loadBatch(batch.id, user.id);
-      return c.json({ batch: cancelled ? mapBatch(cancelled) : null });
+      const cancelledBatch = await loadBatch(batch.id, user.id);
+      return c.json({
+        batch: cancelledBatch ? mapBatch(cancelledBatch) : null,
+      });
     });

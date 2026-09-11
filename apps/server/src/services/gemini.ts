@@ -1,3 +1,4 @@
+import { supportedMarketSlugs } from "@ppal/contracts/markets";
 import { extractionResultSchema } from "@ppal/contracts/uploads";
 import type { ExtractionResult } from "@ppal/contracts/uploads";
 
@@ -105,7 +106,7 @@ Rules:
 1. Extract every independent selection exactly once. Do not treat stake, payout, odds boosts, or promotional text as legs.
 2. Preserve all visible selection wording in description. Never invent names, lines, dates, leagues, or results. Use null for unavailable nullable fields and lower confidence when uncertain.
 3. A straight wager has one leg. Parlays, same-game parlays, teasers, round robins, PrizePicks/Underdog entries, and bet-builder screenshots can contain many heterogeneous legs.
-4. Normalize market to a lowercase snake_case canonical slug. Common examples: team_moneyline, team_spread, game_total, player_points, player_rebounds, player_assists, player_three_pointers_made, player_passing_yards, player_receiving_yards, player_rushing_yards, player_hits, player_home_runs, player_goals, player_shots_on_target, first_touchdown_scorer, anytime_touchdown_scorer, race_winner, finish_position, tournament_winner, leaderboard_position.
+4. Normalize market to one of these supported lowercase snake_case slugs: ${supportedMarketSlugs.join(", ")}. If a visible market is not represented, preserve its wording in description, choose the closest semantically correct supported slug only when unambiguous, and lower confidence; never invent support.
 5. Compound player props must remain ONE leg. Use an additive canonical slug and list each canonical component in marketComponents. Examples: Points + Rebounds + Assists => player_points_rebounds_assists with [player_points, player_rebounds, player_assists]; Points + Rebounds => player_points_rebounds; Passing + Rushing Yards => player_passing_rushing_yards. Do not split one compound line into multiple legs.
 6. marketComponents is [] for a simple market. For a compound market it contains only components that must be summed. Never include the aggregate slug itself.
 7. moneyline has targetValue null. Spreads keep the signed visible line. For range/band markets use targetValue as the lower bound and secondaryTargetValue as the upper bound. Preserve half points.

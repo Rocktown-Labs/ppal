@@ -13,6 +13,8 @@ import type { User } from "better-auth";
 import { User2 } from "lucide-react";
 import type { ReactNode } from "react";
 
+import { resolveAvatarSource } from "@/lib/api";
+
 export interface UserAvatarProps {
   className?: string;
   fallback?: ReactNode;
@@ -48,6 +50,7 @@ export function UserAvatar({
   }
 
   const resolvedUser = user ?? session?.user;
+  const avatarSource = resolveAvatarSource(resolvedUser?.image);
 
   const initials = (
     resolvedUser?.username ||
@@ -65,7 +68,7 @@ export function UserAvatar({
       )}
     >
       <AvatarImage
-        src={resolvedUser?.image ?? undefined}
+        src={avatarSource}
         alt={
           resolvedUser?.displayUsername ||
           resolvedUser?.name ||

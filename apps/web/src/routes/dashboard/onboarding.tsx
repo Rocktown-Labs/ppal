@@ -11,6 +11,8 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
 import { api } from "@/lib/api";
+import { authClient } from "@/lib/auth-client";
+import { consumeReferralIntent } from "@/lib/referral-intent";
 
 const SPORTS_LIST = [
   {
@@ -52,7 +54,6 @@ const OnboardingWizardComponent = () => {
   const navigate = useNavigate();
   const [step, setStep] = useState(1);
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
-  const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [usernameError, setUsernameError] = useState<string | null>(null);
 
@@ -106,8 +107,12 @@ const OnboardingWizardComponent = () => {
     if (!file) {
       return;
     }
-    const previewUrl = URL.createObjectURL(file);
-    setAvatarPreview(previewUrl);
+    const allowedTypes = new Set(["image/jpeg", "image/png", "image/webp"]);
+    if (!allowedTypes.has(file.type) || file.size > 5 * 1024 * 1024) {
+      toast.error("Choose a JPG, PNG, or WebP image no larger than 5MB");
+      e.target.value = "";
+      return;
+    }
     setIsUploadingAvatar(true);
     try {
       const { url } = await api.community.uploadAvatar(file);
@@ -150,14 +155,12 @@ const OnboardingWizardComponent = () => {
         username: usernameVal.toLowerCase(),
       });
 
-      // Claim pending referral code if present in localStorage
-      const pendingReferral = localStorage.getItem("ppal_referral_code");
+      const pendingReferral = consumeReferralIntent();
       if (pendingReferral) {
         try {
           await api.referrals.claim(pendingReferral);
-          localStorage.removeItem("ppal_referral_code");
         } catch {
-          // Ignore if self-referral or already claimed
+          // The explicit referral intent is single-use even when unclaimable.
         }
       }
 
@@ -193,9 +196,31 @@ const OnboardingWizardComponent = () => {
     }
   };
 
-  const handleSelectPlan = (plan: "creator" | "free" | "pro") => {
+  const handleSelectPlan = async (plan: "creator" | "free" | "pro") => {
     form.setFieldValue("selectedPlan", plan);
-    setStep(4);
+    if (plan === "free") {
+      setStep(4);
+      return;
+    }
+    setIsSubmitting(true);
+    try {
+      const { origin } = window.location;
+      const checkout = await authClient.subscription.upgrade({
+        annual: form.getFieldValue("billingPeriod") === "yearly",
+        cancelUrl: `${origin}/dashboard/onboarding`,
+        plan,
+        successUrl: `${origin}/dashboard/tickets/upload`,
+      });
+      if (checkout.error) {
+        toast.error(checkout.error.message ?? "Checkout could not be started");
+        setIsSubmitting(false);
+      }
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Checkout could not be started"
+      );
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -402,17 +427,9 @@ const OnboardingWizardComponent = () => {
                   <div className="rounded-3xl border border-white/10 bg-white/[0.03] p-6 sm:p-7">
                     <div className="flex h-full flex-col items-center justify-center text-center">
                       <div className="relative">
-                        {avatarPreview ? (
-                          <img
-                            src={avatarPreview}
-                            alt="Profile preview"
-                            className="size-28 rounded-full border-4 border-emerald-400/20 object-cover shadow-2xl shadow-emerald-500/10"
-                          />
-                        ) : (
-                          <div className="flex size-28 items-center justify-center rounded-full border border-white/10 bg-white/5 text-zinc-500">
-                            <Camera className="size-10 stroke-[1.5]" />
-                          </div>
-                        )}
+                        <div className="flex size-28 items-center justify-center rounded-full border border-white/10 bg-white/5 text-zinc-500">
+                          <Camera className="size-10 stroke-[1.5]" />
+                        </div>
                         {isUploadingAvatar && (
                           <div className="absolute inset-0 flex items-center justify-center rounded-full bg-black/60">
                             <Loader2 className="size-6 animate-spin text-emerald-400" />

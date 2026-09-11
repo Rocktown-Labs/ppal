@@ -121,6 +121,25 @@ describe("evaluateLeg", () => {
     expect(final.status).toBe("won");
   });
 
+  test("settles no selections only when the event is final", () => {
+    const live = evaluateLeg(
+      createLeg({ operator: "no", targetValue: 1 }),
+      0,
+      NOW
+    );
+    expect(live.status).toBe("live");
+    const final = evaluateLeg(
+      createLeg({
+        event: { ...liveEvent, status: "final" },
+        operator: "no",
+        targetValue: 1,
+      }),
+      0,
+      NOW
+    );
+    expect(final.status).toBe("won");
+  });
+
   test("keeps a scheduled leg pending without an observation", () => {
     const result = evaluateLeg(
       createLeg({

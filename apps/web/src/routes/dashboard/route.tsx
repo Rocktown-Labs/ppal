@@ -308,12 +308,7 @@ export const Route = createFileRoute("/dashboard")({
       if (isRedirect(error)) {
         throw error;
       }
-      if (!isOnboardingPath) {
-        throw redirect({
-          to: "/dashboard/onboarding",
-        });
-      }
-      return { profile: null, session };
+      throw error;
     }
   },
   component: DashboardLayout,

@@ -5,6 +5,16 @@ import { extractTicketWithGemini } from "./gemini";
 import { refreshHistoricalBatch } from "./historical-imports";
 import { publishNotification } from "./notifications";
 
+const hashAnalyticsIdentifier = async (value: string): Promise<string> => {
+  const digest = await crypto.subtle.digest(
+    "SHA-256",
+    new TextEncoder().encode(value)
+  );
+  return Array.from(new Uint8Array(digest).slice(0, 16), (byte) =>
+    byte.toString(16).padStart(2, "0")
+  ).join("");
+};
+
 interface UploadRow {
   id: string;
   ingestion_mode: "historical" | "live";
@@ -172,6 +182,30 @@ export const processExtractionMessage = async (
       bytes: await object.arrayBuffer(),
       mimeType: upload.mime_type,
     });
+    if (upload.historical_import_batch_id) {
+      const activeBatch = await workerEnv.DB.prepare(
+        `SELECT id FROM historical_import_batches
+         WHERE id = ? AND status IN ('pending', 'processing')`
+      )
+        .bind(upload.historical_import_batch_id)
+        .first<{ id: string }>();
+      if (!activeBatch) {
+        await workerEnv.DB.batch([
+          workerEnv.DB.prepare(
+            "UPDATE uploads SET status = 'failed', updated_at = ? WHERE id = ?"
+          ).bind(Date.now(), upload.id),
+          workerEnv.DB.prepare(
+            `UPDATE extractions SET status = 'failed', error_message = 'Import cancelled', updated_at = ?
+             WHERE id = ?`
+          ).bind(Date.now(), extractionId),
+          workerEnv.DB.prepare(
+            `UPDATE usage_events SET status = 'released', updated_at = ?
+             WHERE idempotency_key = ? AND status = 'reserved'`
+          ).bind(Date.now(), upload.usage_reservation_key),
+        ]);
+        return;
+      }
+    }
     const ticketId = crypto.randomUUID();
     const statements = createTicketStatements({
       db: workerEnv.DB,
@@ -192,6 +226,26 @@ export const processExtractionMessage = async (
     );
     await workerEnv.DB.batch(statements);
     if (upload.historical_import_batch_id) {
+      const batch = await workerEnv.DB.prepare(
+        "SELECT status FROM historical_import_batches WHERE id = ?"
+      )
+        .bind(upload.historical_import_batch_id)
+        .first<{ status: string }>();
+      if (batch?.status === "cancelled") {
+        await workerEnv.DB.batch([
+          workerEnv.DB.prepare("DELETE FROM tickets WHERE id = ?").bind(
+            ticketId
+          ),
+          workerEnv.DB.prepare(
+            "UPDATE uploads SET status = 'failed', updated_at = ? WHERE id = ?"
+          ).bind(Date.now(), upload.id),
+          workerEnv.DB.prepare(
+            `UPDATE usage_events SET status = 'released', updated_at = ?
+             WHERE idempotency_key = ? AND status = 'reserved'`
+          ).bind(Date.now(), upload.usage_reservation_key),
+        ]);
+        return;
+      }
       await refreshHistoricalBatch(
         workerEnv.DB,
         upload.historical_import_batch_id
@@ -206,8 +260,9 @@ export const processExtractionMessage = async (
       userId: upload.user_id,
       workerEnv,
     });
+    const analyticsUserId = await hashAnalyticsIdentifier(upload.user_id);
     workerEnv.ANALYTICS.writeDataPoint({
-      blobs: ["extraction.completed", upload.user_id, extracted.model],
+      blobs: ["extraction.completed", analyticsUserId, extracted.model],
       doubles: [extracted.result.legs.length],
       indexes: [upload.id],
     });
@@ -219,7 +274,12 @@ export const processExtractionMessage = async (
         "UPDATE extractions SET status = 'failed', error_message = ?, updated_at = ? WHERE id = ?"
       ).bind(messageText.slice(0, 1000), Date.now(), extractionId),
       workerEnv.DB.prepare(
-        "UPDATE uploads SET status = 'ready', updated_at = ? WHERE id = ?"
+        `UPDATE uploads SET status = CASE
+           WHEN historical_import_batch_id IS NOT NULL AND EXISTS (
+             SELECT 1 FROM historical_import_batches b
+             WHERE b.id = uploads.historical_import_batch_id AND b.status = 'cancelled'
+           ) THEN 'failed' ELSE 'ready' END,
+         updated_at = ? WHERE id = ?`
       ).bind(Date.now(), upload.id),
     ]);
     throw error;

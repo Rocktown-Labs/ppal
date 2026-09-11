@@ -14,11 +14,12 @@ const constantTimeEqual = (left: string, right: string): boolean => {
 
 export const hasOperationsAccess = (
   request: Request,
-  expectedToken: string
+  expectedToken: string | undefined
 ): boolean => {
   const supplied =
     request.headers.get("authorization")?.replace(/^Bearer\s+/iu, "") ?? "";
   return (
-    expectedToken.length >= 32 && constantTimeEqual(supplied, expectedToken)
+    Boolean(expectedToken && expectedToken.length >= 32) &&
+    constantTimeEqual(supplied, expectedToken ?? "")
   );
 };

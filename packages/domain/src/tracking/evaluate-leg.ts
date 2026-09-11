@@ -82,16 +82,23 @@ const evaluateDecreasingOutcome = (input: LegEvaluationInput): LegOutcome => {
   return unsettledNumericOutcome(input);
 };
 
-const evaluateBooleanOutcome = (input: LegEvaluationInput): LegOutcome => {
+const evaluateBooleanOutcome = (
+  input: LegEvaluationInput,
+  expectsMatch: boolean
+): LegOutcome => {
   const { currentValue, targetValue } = input;
   if (currentValue === null || targetValue === null) {
     return unsettledNumericOutcome(input);
   }
-  if (currentValue === targetValue) {
+  const matches = currentValue === targetValue;
+  if (expectsMatch && matches) {
     return { currentValue, status: "won" };
   }
   if (input.event?.status === "final") {
-    return { currentValue, status: "lost" };
+    return {
+      currentValue,
+      status: matches === expectsMatch ? "won" : "lost",
+    };
   }
   return unsettledNumericOutcome(input);
 };
@@ -119,7 +126,10 @@ const evaluateNumericOutcome = (input: LegEvaluationInput): LegOutcome => {
     return evaluateDecreasingOutcome(input);
   }
   if (input.operator === "yes") {
-    return evaluateBooleanOutcome(input);
+    return evaluateBooleanOutcome(input, true);
+  }
+  if (input.operator === "no") {
+    return evaluateBooleanOutcome(input, false);
   }
   if (input.operator === "equals") {
     return evaluateEqualsOutcome(input);

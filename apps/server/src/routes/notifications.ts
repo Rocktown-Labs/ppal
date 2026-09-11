@@ -8,6 +8,11 @@ import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
 
 import { getAuthUser } from "../lib/auth";
+import { safeJsonParse } from "../lib/database";
+
+const STREAM_DURATION_MS = 60_000;
+const STREAM_LEASE_MS = 75_000;
+const MAX_REPLAY_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 
 const preferenceSelect = `SELECT email_enabled, in_app_enabled, leg_lost,
   leg_won, push_enabled, ticket_lost, ticket_won
@@ -47,7 +52,7 @@ interface NotificationRow {
 const mapNotification = (row: NotificationRow) => ({
   body: row.body,
   createdAt: new Date(row.created_at).toISOString(),
-  data: row.data ? (JSON.parse(row.data) as Record<string, unknown>) : null,
+  data: safeJsonParse<Record<string, unknown> | null>(row.data, null),
   id: row.id,
   readAt: row.read_at ? new Date(row.read_at).toISOString() : null,
   ticketId: row.ticket_id,
@@ -64,7 +69,8 @@ export const createNotificationRoutes = (auth: Auth) =>
       }
       const rows = await env.DB.prepare(
         `SELECT body, created_at, data, id, read_at, ticket_id, title, type
-         FROM notifications WHERE user_id = ? ORDER BY created_at DESC LIMIT 100`
+         FROM notifications WHERE user_id = ? AND in_app_visible = 1
+         ORDER BY created_at DESC LIMIT 100`
       )
         .bind(user.id)
         .all<NotificationRow>();
@@ -75,34 +81,84 @@ export const createNotificationRoutes = (auth: Auth) =>
       if (!user) {
         return c.json({ code: "UNAUTHORIZED", error: "Unauthorized" }, 401);
       }
-      const requestedAfter = Number(c.req.query("after") ?? 0);
-      const initialAfter = Number.isFinite(requestedAfter) ? requestedAfter : 0;
+      const now = Date.now();
+      const requestedAfterValue = c.req.query("after");
+      const requestedAfter = Number(requestedAfterValue ?? now);
+      if (requestedAfterValue && !Number.isSafeInteger(requestedAfter)) {
+        return c.json(
+          { code: "INVALID_CURSOR", error: "after must be a timestamp" },
+          400
+        );
+      }
+      const lastEventId = c.req.header("last-event-id");
+      const resumed = lastEventId
+        ? await env.DB.prepare(
+            "SELECT created_at FROM notifications WHERE id = ? AND user_id = ?"
+          )
+            .bind(lastEventId, user.id)
+            .first<{ created_at: number }>()
+        : null;
+      const initialAfter = Math.min(
+        now,
+        Math.max(now - MAX_REPLAY_AGE_MS, resumed?.created_at ?? requestedAfter)
+      );
+      const connectionId = crypto.randomUUID();
+      const lease = await env.DB.prepare(
+        `INSERT INTO notification_stream_leases (connection_id, expires_at, user_id)
+         VALUES (?, ?, ?)
+         ON CONFLICT(user_id) DO UPDATE SET
+           connection_id = excluded.connection_id,
+           expires_at = excluded.expires_at
+         WHERE notification_stream_leases.expires_at <= ?
+         RETURNING connection_id`
+      )
+        .bind(connectionId, now + STREAM_LEASE_MS, user.id, now)
+        .first<{ connection_id: string }>();
+      if (!lease) {
+        return c.json(
+          {
+            code: "STREAM_ALREADY_OPEN",
+            error: "Only one notification stream may be open per account",
+          },
+          409
+        );
+      }
       return streamSSE(c, async (stream) => {
         let after = initialAfter;
-        for (
-          let heartbeat = 0;
-          heartbeat < 12 && !stream.aborted;
-          heartbeat += 1
-        ) {
-          const rows = await env.DB.prepare(
-            `SELECT body, created_at, data, id, read_at, ticket_id, title, type
-             FROM notifications WHERE user_id = ? AND created_at > ? ORDER BY created_at LIMIT 100`
-          )
-            .bind(user.id, after)
-            .all<NotificationRow>();
-          for (const row of rows.results) {
-            after = Math.max(after, row.created_at);
+        try {
+          const streamStartedAt = Date.now();
+          while (
+            Date.now() - streamStartedAt < STREAM_DURATION_MS &&
+            !stream.aborted
+          ) {
+            const rows = await env.DB.prepare(
+              `SELECT body, created_at, data, id, read_at, ticket_id, title, type
+               FROM notifications WHERE user_id = ? AND in_app_visible = 1
+                 AND created_at > ?
+               ORDER BY created_at, id LIMIT 100`
+            )
+              .bind(user.id, after)
+              .all<NotificationRow>();
+            for (const row of rows.results) {
+              after = Math.max(after, row.created_at);
+              await stream.writeSSE({
+                data: JSON.stringify(mapNotification(row)),
+                event: "notification",
+                id: row.id,
+              });
+            }
             await stream.writeSSE({
-              data: JSON.stringify(mapNotification(row)),
-              event: "notification",
-              id: row.id,
+              data: JSON.stringify({ at: Date.now() }),
+              event: "heartbeat",
             });
+            await stream.sleep(5000);
           }
-          await stream.writeSSE({
-            data: JSON.stringify({ at: Date.now() }),
-            event: "heartbeat",
-          });
-          await stream.sleep(5000);
+        } finally {
+          await env.DB.prepare(
+            "DELETE FROM notification_stream_leases WHERE user_id = ? AND connection_id = ?"
+          )
+            .bind(user.id, connectionId)
+            .run();
         }
       });
     })
@@ -177,17 +233,11 @@ export const createNotificationRoutes = (auth: Auth) =>
       if (!user) {
         return c.json({ code: "UNAUTHORIZED", error: "Unauthorized" }, 401);
       }
-      let token = c.req.query("token");
-      if (!token) {
-        try {
-          const { token: bodyToken } = (await c.req.json()) as {
-            token?: string;
-          };
-          token = bodyToken;
-        } catch {
-          // Non-JSON or empty body
-        }
-      }
+      const body = (await c.req.json().catch(() => null)) as {
+        token?: unknown;
+      } | null;
+      const token =
+        typeof body?.token === "string" ? body.token.trim() : undefined;
       if (!token) {
         return c.json(
           { code: "INVALID_TOKEN", error: "Token is required" },

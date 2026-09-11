@@ -116,13 +116,13 @@ export const createReferralRoutes = (auth: Auth) =>
     .get("/referrals/:code", async (c) => {
       const code = c.req.param("code").trim().toUpperCase();
       const owner = await env.DB.prepare(
-        "SELECT id, name FROM user WHERE referral_code = ?"
+        "SELECT id FROM user WHERE referral_code = ?"
       )
         .bind(code)
-        .first<{ id: string; name: string }>();
+        .first<{ id: string }>();
       return owner
         ? c.json({
-            referral: { available: true, code, referrerName: owner.name },
+            referral: { available: true, code },
           })
         : c.json({ code: "NOT_FOUND", error: "Referral not found" }, 404);
     })

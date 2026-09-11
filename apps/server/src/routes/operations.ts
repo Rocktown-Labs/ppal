@@ -10,6 +10,7 @@ import { env } from "@ppal/env/server";
 import { Hono } from "hono";
 import { z } from "zod";
 
+import { safeJsonParse } from "../lib/database";
 import { hasOperationsAccess } from "../lib/operations-auth";
 
 const legacyUserSchema = z.object({
@@ -35,7 +36,7 @@ const authGuard = async (
   c: Parameters<Parameters<Hono["use"]>[1]>[0],
   next: () => Promise<void>
 ) => {
-  if (!hasOperationsAccess(c.req.raw, env.BETTER_AUTH_SECRET)) {
+  if (!hasOperationsAccess(c.req.raw, env.OPERATIONS_API_TOKEN)) {
     return c.json({ code: "UNAUTHORIZED", error: "Unauthorized" }, 401);
   }
   return await next();
@@ -94,7 +95,7 @@ export const createOperationRoutes = () => {
           error: row.error_message,
           id: row.id,
           messageId: row.message_id,
-          payload: JSON.parse(row.payload) as unknown,
+          payload: safeJsonParse<unknown>(row.payload, null),
           queue: row.queue,
           replayedAt: row.replayed_at
             ? new Date(row.replayed_at).toISOString()
@@ -117,7 +118,7 @@ export const createOperationRoutes = () => {
           .all<{ id: string; payload: string; queue: string }>();
         const replayed: string[] = [];
         for (const row of rows.results) {
-          const payload = JSON.parse(row.payload) as unknown;
+          const payload = safeJsonParse<unknown>(row.payload, null);
           if (row.queue.includes("extraction")) {
             const extraction = extractionQueueMessageSchema.safeParse(payload);
             if (!extraction.success) {
@@ -152,7 +153,7 @@ export const createOperationRoutes = () => {
             const leaseToken = String(Date.now() + 60_000);
             const lease = await env.DB.prepare(
               `UPDATE sports_events SET poll_lease_until = ?, updated_at = ?
-               WHERE id = ? AND status IN ('scheduled', 'live')`
+               WHERE id = ? AND status IN ('scheduled', 'live', 'final', 'cancelled')`
             )
               .bind(Number(leaseToken), Date.now(), sports.data.eventId)
               .run();

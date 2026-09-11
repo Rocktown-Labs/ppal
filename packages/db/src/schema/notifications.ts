@@ -38,6 +38,9 @@ export const deviceTokens = sqliteTable(
   {
     createdAt: createdAtColumn(),
     id: text("id").primaryKey(),
+    inAppVisible: integer("in_app_visible", { mode: "boolean" })
+      .notNull()
+      .default(true),
     lastSeenAt: integer("last_seen_at", { mode: "timestamp_ms" }).notNull(),
     platform: text("platform").notNull(),
     token: text("token").notNull().unique(),
@@ -116,5 +119,19 @@ export const notificationDeliveries = sqliteTable(
       table.status,
       table.updatedAt
     ),
+  ]
+);
+
+export const notificationStreamLeases = sqliteTable(
+  "notification_stream_leases",
+  {
+    connectionId: text("connection_id").notNull(),
+    expiresAt: integer("expires_at", { mode: "timestamp_ms" }).notNull(),
+    userId: text("user_id")
+      .primaryKey()
+      .references(() => user.id, { onDelete: "cascade" }),
+  },
+  (table) => [
+    index("notification_stream_leases_expires_idx").on(table.expiresAt),
   ]
 );

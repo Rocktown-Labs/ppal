@@ -47,9 +47,10 @@ const verifyRevenueCatWebhook = async (
   rawBody: string
 ): Promise<boolean> => {
   const authorization = request.headers.get("authorization");
+  const bearerToken = authorization?.replace(/^Bearer\s+/iu, "");
   if (
-    authorization &&
-    constantTimeEqual(authorization, env.REVENUECAT_WEBHOOK_SECRET)
+    bearerToken &&
+    constantTimeEqual(bearerToken, env.REVENUECAT_WEBHOOK_SECRET)
   ) {
     return true;
   }

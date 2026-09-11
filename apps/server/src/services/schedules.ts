@@ -1,5 +1,7 @@
 /* oxlint-disable no-await-in-loop -- Sequential provider calls protect the upstream rate limit. */
 
+import { marketDefinitions } from "@ppal/contracts/markets";
+
 const leagues = [
   ["nba", "NBA", "basketball"],
   ["wnba", "WNBA", "basketball"],
@@ -21,42 +23,12 @@ const leagues = [
   ["pga", "PGA Tour", "golf"],
 ] as const;
 
-const marketNames: Record<string, string> = {
-  finish_position: "Finish Position",
-  game_total: "Game Total",
-  leaderboard_position: "Leaderboard Position",
-  player_aces: "Player Aces",
-  player_assists: "Player Assists",
-  player_breakpoints_won: "Player Break Points Won",
-  player_double_faults: "Player Double Faults",
-  player_goals: "Player Goals",
-  player_goals_scored: "Player Goals Scored",
-  player_hits: "Player Hits",
-  player_home_runs: "Player Home Runs",
-  player_knockdowns: "Player Knockdowns",
-  player_passing_rushing_yards: "Player Passing + Rushing Yards",
-  player_passing_touchdowns: "Player Passing Touchdowns",
-  player_points: "Player Points",
-  player_points_assists: "Player Points + Assists",
-  player_points_rebounds: "Player Points + Rebounds",
-  player_points_rebounds_assists: "Player Points + Rebounds + Assists",
-  player_rbi: "Player RBI",
-  player_rebounds: "Player Rebounds",
-  player_rebounds_assists: "Player Rebounds + Assists",
-  player_receiving_yards: "Player Receiving Yards",
-  player_runs: "Player Runs",
-  player_rushing_yards: "Player Rushing Yards",
-  player_shots: "Player Shots",
-  player_shots_on_target: "Player Shots on Target",
-  player_significant_strikes: "Player Significant Strikes",
-  player_takedowns: "Player Takedowns",
-  player_three_pointers_made: "Player Three-Pointers Made",
-  player_total_shots: "Player Total Shots",
-  race_winner: "Race Winner",
-  team_moneyline: "Team Moneyline",
-  team_spread: "Team Spread",
-  tournament_winner: "Tournament Winner",
-};
+const marketNames = Object.fromEntries(
+  Object.entries(marketDefinitions).map(([slug, definition]) => [
+    slug,
+    definition.name,
+  ])
+);
 
 interface SchedulePlaybook {
   followupPaths?: (payload: Record<string, unknown>, date: Date) => string[];

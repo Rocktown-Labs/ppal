@@ -14,6 +14,8 @@ export type ReviewTicketRequest = z.infer<typeof reviewTicketRequestSchema>;
 const BASE_URL = env.VITE_SERVER_URL.endsWith("/")
   ? env.VITE_SERVER_URL.slice(0, -1)
   : env.VITE_SERVER_URL;
+const pathSegment = (value: string): string => encodeURIComponent(value);
+const UPLOAD_URL_PATTERN = /^\/api\/v1\/uploads\/[a-z0-9-]+\/content$/iu;
 
 export interface TimelineEvent {
   id: string;
@@ -189,6 +191,45 @@ export const calculateSha256 = async (file: Blob): Promise<string> => {
   return hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
 };
 
+export const resolveApiAsset = (
+  path: string | null | undefined
+): string | null => {
+  if (!path) {
+    return null;
+  }
+  try {
+    const url = new URL(path, BASE_URL);
+    const base = new URL(BASE_URL);
+    const validPath = /^\/api\/v1\/avatar\/[a-z0-9_.-]+\/[a-z0-9_.-]+$/iu.test(
+      url.pathname
+    );
+    return url.origin === base.origin && validPath ? url.toString() : null;
+  } catch {
+    return null;
+  }
+};
+
+export const resolveAvatarSource = (
+  source: string | null | undefined
+): string | undefined => {
+  const apiAsset = resolveApiAsset(source);
+  if (apiAsset) {
+    return apiAsset;
+  }
+  if (!source) {
+    return undefined;
+  }
+  try {
+    const url = new URL(source);
+    const trustedGoogleImage = url.hostname === "lh3.googleusercontent.com";
+    return url.protocol === "https:" && trustedGoogleImage
+      ? url.toString()
+      : undefined;
+  } catch {
+    return undefined;
+  }
+};
+
 export const api = {
   analytics: {
     getOverview: () =>
@@ -215,19 +256,27 @@ export const api = {
 
   community: {
     follow: (username: string) =>
-      request<{ following: boolean }>(`/api/v1/profiles/${username}/follow`, {
-        method: "POST",
-      }),
+      request<{ following: boolean }>(
+        `/api/v1/profiles/${pathSegment(username)}/follow`,
+        {
+          method: "POST",
+        }
+      ),
 
     getMe: () => request<{ user: CurrentUserWithProfile }>("/api/v1/me"),
 
     getPublicProfile: (username: string) =>
-      request<{ profile: PublicProfile }>(`/api/v1/profiles/${username}`),
+      request<{ profile: PublicProfile }>(
+        `/api/v1/profiles/${pathSegment(username)}`
+      ),
 
     unfollow: (username: string) =>
-      request<{ following: boolean }>(`/api/v1/profiles/${username}/follow`, {
-        method: "DELETE",
-      }),
+      request<{ following: boolean }>(
+        `/api/v1/profiles/${pathSegment(username)}/follow`,
+        {
+          method: "DELETE",
+        }
+      ),
 
     updateMe: (payload: {
       bio?: string | null;
@@ -278,9 +327,12 @@ export const api = {
       request<{ notifications: NotificationItem[] }>("/api/v1/notifications"),
 
     markRead: (id: string) =>
-      request<{ read: boolean }>(`/api/v1/notifications/${id}/read`, {
-        method: "PATCH",
-      }),
+      request<{ read: boolean }>(
+        `/api/v1/notifications/${pathSegment(id)}/read`,
+        {
+          method: "PATCH",
+        }
+      ),
 
     updateSettings: (payload: NotificationPreferences) =>
       request<{ preferences: NotificationPreferences }>(
@@ -295,7 +347,7 @@ export const api = {
   referrals: {
     claim: (code: string) =>
       request<{ claimed: boolean; referralId: string }>(
-        `/api/v1/referrals/${code}/claim`,
+        `/api/v1/referrals/${pathSegment(code)}/claim`,
         {
           method: "POST",
         }
@@ -319,15 +371,14 @@ export const api = {
         referral: {
           available: boolean;
           code: string;
-          referrerName: string;
         };
-      }>(`/api/v1/referrals/${code}`),
+      }>(`/api/v1/referrals/${pathSegment(code)}`),
   },
 
   tickets: {
     cancel: (ticketId: string) =>
       request<{ ticket: TicketContract }>(
-        `/api/v1/tickets/${ticketId}/cancel`,
+        `/api/v1/tickets/${pathSegment(ticketId)}/cancel`,
         {
           method: "POST",
         }
@@ -335,19 +386,21 @@ export const api = {
 
     confirm: (ticketId: string) =>
       request<{ ticket: TicketContract }>(
-        `/api/v1/tickets/${ticketId}/confirm`,
+        `/api/v1/tickets/${pathSegment(ticketId)}/confirm`,
         {
           method: "POST",
         }
       ),
 
     delete: (ticketId: string) =>
-      request<null>(`/api/v1/tickets/${ticketId}`, {
+      request<null>(`/api/v1/tickets/${pathSegment(ticketId)}`, {
         method: "DELETE",
       }),
 
     get: (ticketId: string) =>
-      request<{ ticket: TicketContract }>(`/api/v1/tickets/${ticketId}`),
+      request<{ ticket: TicketContract }>(
+        `/api/v1/tickets/${pathSegment(ticketId)}`
+      ),
 
     list: (params?: { cursor?: string; limit?: number }) => {
       const search = new URLSearchParams();
@@ -365,7 +418,7 @@ export const api = {
 
     manualSettlement: (ticketId: string, payload: ManualVerificationRequest) =>
       request<{ ticket: TicketContract }>(
-        `/api/v1/tickets/${ticketId}/manual-settlement`,
+        `/api/v1/tickets/${pathSegment(ticketId)}/manual-settlement`,
         {
           body: JSON.stringify(payload),
           method: "POST",
@@ -374,7 +427,7 @@ export const api = {
 
     review: (ticketId: string, payload: ReviewTicketRequest) =>
       request<{ ticket: TicketContract }>(
-        `/api/v1/tickets/${ticketId}/review`,
+        `/api/v1/tickets/${pathSegment(ticketId)}/review`,
         {
           body: JSON.stringify(payload),
           method: "PATCH",
@@ -383,7 +436,7 @@ export const api = {
 
     timeline: (ticketId: string) =>
       request<{ events: TimelineEvent[] }>(
-        `/api/v1/tickets/${ticketId}/timeline`
+        `/api/v1/tickets/${pathSegment(ticketId)}/timeline`
       ),
   },
 
@@ -398,12 +451,15 @@ export const api = {
       ),
 
     get: (uploadId: string) =>
-      request<{ upload: UploadContract }>(`/api/v1/uploads/${uploadId}`),
+      request<{ upload: UploadContract }>(
+        `/api/v1/uploads/${pathSegment(uploadId)}`
+      ),
 
     uploadContent: async (uploadUrl: string, file: Blob) => {
-      const url = uploadUrl.startsWith("http")
-        ? uploadUrl
-        : `${BASE_URL}${uploadUrl}`;
+      if (!UPLOAD_URL_PATTERN.test(uploadUrl)) {
+        throw new Error("The API returned an invalid upload destination");
+      }
+      const url = `${BASE_URL}${uploadUrl}`;
       const response = await fetch(url, {
         body: file,
         credentials: "include",

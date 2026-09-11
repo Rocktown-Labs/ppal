@@ -7,7 +7,9 @@ import { env } from "@ppal/env/server";
 import { Hono } from "hono";
 
 import { getAuthUser } from "../lib/auth";
+import { scopeIdempotencyKey } from "../lib/database";
 import { toIsoString } from "../lib/time";
+import { inspectStreamSignature } from "../lib/upload-security";
 import { releaseUploadUsage, reserveUploadUsage } from "../services/usage";
 
 interface UploadRow {
@@ -78,11 +80,15 @@ export const createUploadRoutes = (auth: Auth) =>
           return c.json({ code: "UNAUTHORIZED", error: "Unauthorized" }, 401);
         }
         const input = c.req.valid("json");
+        const scopedIdempotencyKey = scopeIdempotencyKey(
+          user.id,
+          input.idempotencyKey
+        );
         const existing = await env.DB.prepare(
           `SELECT id FROM uploads
          WHERE usage_reservation_key = ? AND user_id = ?`
         )
-          .bind(input.idempotencyKey, user.id)
+          .bind(scopedIdempotencyKey, user.id)
           .first<{ id: string }>();
         if (existing) {
           const row = await selectUpload(env.DB, existing.id, user.id);
@@ -103,7 +109,7 @@ export const createUploadRoutes = (auth: Auth) =>
         const uploadId = crypto.randomUUID();
         const reservation = await reserveUploadUsage({
           db: env.DB,
-          idempotencyKey: input.idempotencyKey,
+          idempotencyKey: scopedIdempotencyKey,
           uploadId,
           userId: user.id,
         });
@@ -134,12 +140,12 @@ export const createUploadRoutes = (auth: Auth) =>
               now + 90 * 24 * 60 * 60 * 1000,
               input.sha256.toLowerCase(),
               now,
-              input.idempotencyKey,
+              scopedIdempotencyKey,
               user.id
             )
             .run();
         } catch (error) {
-          await releaseUploadUsage(env.DB, input.idempotencyKey);
+          await releaseUploadUsage(env.DB, scopedIdempotencyKey);
           throw error;
         }
         const row = await selectUpload(env.DB, uploadId, user.id);
@@ -219,7 +225,20 @@ export const createUploadRoutes = (auth: Auth) =>
           400
         );
       }
-      await env.R2_UPLOADS.put(upload.object_key, c.req.raw.body, {
+      const inspected = await inspectStreamSignature(
+        c.req.raw.body,
+        upload.mime_type
+      );
+      if (!inspected.accepted) {
+        return c.json(
+          {
+            code: "INVALID_FILE_SIGNATURE",
+            error: "File contents do not match the declared MIME type",
+          },
+          400
+        );
+      }
+      await env.R2_UPLOADS.put(upload.object_key, inspected.uploadBody, {
         customMetadata: { uploadId: upload.id, userId: user.id },
         httpMetadata: { contentType: upload.mime_type },
         sha256: hexToBuffer(upload.sha256),
@@ -266,6 +285,7 @@ export const createUploadRoutes = (auth: Auth) =>
         "cache-control": "private, no-store",
         "content-type": upload.mime_type,
         etag: object.httpEtag,
+        "x-content-type-options": "nosniff",
       });
       if (object.range) {
         const offset =

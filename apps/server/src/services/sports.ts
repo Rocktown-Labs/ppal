@@ -1,5 +1,6 @@
 /* oxlint-disable no-await-in-loop -- Leg updates are serialized per event for deterministic settlement. */
 
+import { marketDefinitions } from "@ppal/contracts/markets";
 import { sportsPollQueueMessageSchema } from "@ppal/contracts/queues";
 import type {
   SportsEventStatus,
@@ -78,31 +79,12 @@ const boxscoreLeagues = new Set([
   "wnba",
 ]);
 
-const marketStatKeys: Record<string, string[]> = {
-  leaderboard_position: ["position"],
-  player_aces: ["aces"],
-  player_assists: ["assists"],
-  player_breakpoints_won: ["break_points_won"],
-  player_double_faults: ["double_faults"],
-  player_goals: ["goals"],
-  player_goals_scored: ["goals_scored", "goals"],
-  player_hits: ["hits", "h"],
-  player_home_runs: ["home_runs", "hr"],
-  player_knockdowns: ["knockdowns"],
-  player_passing_touchdowns: ["passing_touchdowns"],
-  player_points: ["points"],
-  player_rbi: ["rbi"],
-  player_rebounds: ["rebounds"],
-  player_receiving_yards: ["receiving_yards"],
-  player_runs: ["runs", "total"],
-  player_rushing_yards: ["rushing_yards"],
-  player_shots: ["shots"],
-  player_shots_on_target: ["shots_on_target"],
-  player_significant_strikes: ["significant_strikes"],
-  player_takedowns: ["takedowns"],
-  player_three_pointers_made: ["three_points_made"],
-  player_total_shots: ["points_won"],
-};
+const marketStatKeys = Object.fromEntries(
+  Object.entries(marketDefinitions).map(([slug, definition]) => [
+    slug,
+    [...definition.statKeys],
+  ])
+) as Record<string, string[]>;
 
 const asRecord = (value: unknown): Record<string, unknown> | null =>
   typeof value === "object" && value !== null && !Array.isArray(value)
@@ -308,9 +290,9 @@ export const processSportsMessage = async (
       e.home_score, e.id, e.league_id, e.provider_event_id, e.starts_at, e.status,
       l.slug AS league_slug, l.sport_id FROM sports_events e
       JOIN leagues l ON l.id = e.league_id
-      WHERE e.id = ? AND e.poll_lease_until = ? AND e.poll_lease_until > ?`
+      WHERE e.id = ? AND e.poll_lease_until = ?`
   )
-    .bind(message.eventId, Number(message.leaseToken), Date.now())
+    .bind(message.eventId, Number(message.leaseToken))
     .first<EventRow>();
   if (!event) {
     return;
@@ -329,7 +311,7 @@ export const processSportsMessage = async (
   }
   await workerEnv.DB.prepare(
     `UPDATE sports_events SET away_score = ?, home_score = ?, last_synced_at = ?,
-      next_poll_at = ?, poll_lease_until = NULL, provider_payload = ?, status = ?, updated_at = ?
+      next_poll_at = ?, provider_payload = ?, status = ?, updated_at = ?
      WHERE id = ?`
   )
     .bind(
@@ -447,10 +429,15 @@ export const processSportsMessage = async (
       value = position === null ? null : Number(position === 1);
     }
     if (value === null) {
+      if (status === "final") {
+        throw new Error(
+          `Final provider payload is missing ${trackedLeg.market_slug} for leg ${trackedLeg.leg_id}`
+        );
+      }
       continue;
     }
     const observationKey = `sportradar:${event.id}:${trackedLeg.participant_id}:${trackedLeg.market_id}:${sequence}`;
-    const observation = await workerEnv.DB.prepare(
+    await workerEnv.DB.prepare(
       `INSERT INTO stat_observations (
         idempotency_key, market_id, observed_at, participant_id, provider,
         provider_sequence, sports_event_id, value
@@ -467,9 +454,8 @@ export const processSportsMessage = async (
         value
       )
       .run();
-    if (observation.meta.changes === 0) {
-      continue;
-    }
+    // Observations are shared and deduplicated, but every subscribed leg must
+    // still be evaluated against the resulting value.
     const evaluation = evaluateLeg(
       {
         currentValue: trackedLeg.current_value,
@@ -581,6 +567,11 @@ export const processSportsMessage = async (
       });
     }
   }
+  await workerEnv.DB.prepare(
+    "UPDATE sports_events SET poll_lease_until = NULL WHERE id = ? AND poll_lease_until = ?"
+  )
+    .bind(event.id, Number(message.leaseToken))
+    .run();
 };
 
 export const enqueueDueSportsEvents = async (workerEnv: Env): Promise<void> => {

@@ -3,6 +3,7 @@ import { env } from "@ppal/env/server";
 import { Hono } from "hono";
 
 import { getAuthUser } from "../lib/auth";
+import { escapeLikePattern } from "../lib/database";
 
 export const createCatalogRoutes = (auth: Auth) =>
   new Hono().get("/catalog/search", async (c) => {
@@ -10,7 +11,7 @@ export const createCatalogRoutes = (auth: Auth) =>
     if (!user) {
       return c.json({ code: "UNAUTHORIZED", error: "Unauthorized" }, 401);
     }
-    const query = (c.req.query("q") ?? "").trim();
+    const query = (c.req.query("q") ?? "").trim().toLowerCase();
     if (query.length < 2) {
       return c.json(
         {
@@ -20,14 +21,15 @@ export const createCatalogRoutes = (auth: Auth) =>
         400
       );
     }
-    const pattern = `%${query}%`;
+    const pattern = `%${escapeLikePattern(query)}%`;
     const [participants, markets, events] = await Promise.all([
       env.DB.prepare(
         `SELECT p.id, p.name, p.short_name, p.type, p.league_id, p.sport_id,
           l.name AS league_name, s.name AS sport_name
          FROM participants p JOIN sports s ON s.id = p.sport_id
          LEFT JOIN leagues l ON l.id = p.league_id
-         WHERE p.name LIKE ? OR p.short_name LIKE ? ORDER BY p.name LIMIT 30`
+         WHERE lower(p.name) LIKE ? ESCAPE '\\' OR lower(p.short_name) LIKE ? ESCAPE '\\'
+         ORDER BY p.name LIMIT 30`
       )
         .bind(pattern, pattern)
         .all<{
@@ -42,7 +44,8 @@ export const createCatalogRoutes = (auth: Auth) =>
         }>(),
       env.DB.prepare(
         `SELECT m.id, m.name, m.slug, m.subject_type, m.value_type, m.sport_id
-         FROM markets m WHERE m.name LIKE ? OR m.slug LIKE ? ORDER BY m.name LIMIT 30`
+         FROM markets m WHERE lower(m.name) LIKE ? ESCAPE '\\' OR lower(m.slug) LIKE ? ESCAPE '\\'
+         ORDER BY m.name LIMIT 30`
       )
         .bind(pattern, pattern)
         .all<{
@@ -59,7 +62,8 @@ export const createCatalogRoutes = (auth: Auth) =>
          FROM sports_events e JOIN leagues l ON l.id = e.league_id
          LEFT JOIN participants home ON home.id = e.home_participant_id
          LEFT JOIN participants away ON away.id = e.away_participant_id
-         WHERE home.name LIKE ? OR away.name LIKE ? OR l.name LIKE ?
+         WHERE lower(home.name) LIKE ? ESCAPE '\\' OR lower(away.name) LIKE ? ESCAPE '\\'
+           OR lower(l.name) LIKE ? ESCAPE '\\'
          ORDER BY e.starts_at DESC LIMIT 30`
       )
         .bind(pattern, pattern, pattern)

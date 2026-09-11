@@ -10,6 +10,7 @@ import { env } from "@ppal/env/server";
 import { Hono } from "hono";
 
 import { getAuthUser } from "../lib/auth";
+import { safeJsonParse } from "../lib/database";
 import { writeAuditEvent } from "../services/audit";
 import { refreshHistoricalBatch } from "../services/historical-imports";
 import { qualifyReferral } from "./referrals";
@@ -68,7 +69,7 @@ const mapLeg = (leg: TicketLegRow): TicketLegContract => ({
   lostAt: dateString(leg.lost_at),
   marketId: leg.market_id,
   marketComponents: leg.market_components
-    ? (JSON.parse(leg.market_components) as string[])
+    ? safeJsonParse<string[]>(leg.market_components, [])
     : [],
   operator: leg.operator,
   participantId: leg.participant_id,
@@ -137,6 +138,12 @@ export const createTicketRoutes = (auth: Auth) =>
         return c.json({ code: "UNAUTHORIZED", error: "Unauthorized" }, 401);
       }
       const cursor = c.req.query("cursor") ?? null;
+      if (cursor !== null && !/^\d+$/u.test(cursor)) {
+        return c.json(
+          { code: "INVALID_CURSOR", error: "Cursor must be a timestamp" },
+          400
+        );
+      }
       const limit = Math.min(
         Math.max(Number(c.req.query("limit") ?? 20), 1),
         100
@@ -209,8 +216,10 @@ export const createTicketRoutes = (auth: Auth) =>
           .bind(ticketId)
           .all<{ id: string }>();
         const existingIds = new Set(existingLegs.results.map(({ id }) => id));
+        const submittedIds = new Set(input.legs.map(({ id }) => id));
         if (
           input.legs.length !== existingIds.size ||
+          submittedIds.size !== input.legs.length ||
           input.legs.some((leg) => !existingIds.has(leg.id))
         ) {
           return c.json(
@@ -218,6 +227,36 @@ export const createTicketRoutes = (auth: Auth) =>
               code: "INVALID_LEGS",
               error:
                 "Review must include every existing ticket leg exactly once",
+            },
+            400
+          );
+        }
+        const catalogMatches = await Promise.all(
+          input.legs.map((leg) =>
+            env.DB.prepare(
+              `SELECT 1 AS valid FROM markets m
+               JOIN sports_events e ON e.id = ?
+               JOIN leagues event_league ON event_league.id = e.league_id
+               LEFT JOIN participants p ON p.id = ?
+               WHERE m.id = ?
+                 AND (m.sport_id IS NULL OR m.sport_id = event_league.sport_id)
+                 AND (? = 'game' OR (p.id IS NOT NULL AND p.sport_id = event_league.sport_id))`
+            )
+              .bind(
+                leg.sportsEventId,
+                leg.participantId,
+                leg.marketId,
+                leg.subjectType
+              )
+              .first<{ valid: number }>()
+          )
+        );
+        if (catalogMatches.some((match) => match?.valid !== 1)) {
+          return c.json(
+            {
+              code: "INVALID_CATALOG_MATCH",
+              error:
+                "Every leg must use a compatible supported market, subject, and event",
             },
             400
           );
@@ -310,11 +349,30 @@ export const createTicketRoutes = (auth: Auth) =>
         );
       }
       const now = Date.now();
+      const confirmation = await env.DB.prepare(
+        `UPDATE tickets SET confirmed_at = ?, status = 'scheduled',
+          tracking_started_at = ?, updated_at = ?, version = version + 1
+         WHERE id = ? AND user_id = ? AND status IN ('draft', 'needs_review')`
+      )
+        .bind(now, now, now, ticketId, user.id)
+        .run();
+      if (confirmation.meta.changes === 0) {
+        return c.json(
+          {
+            code: "INVALID_STATE",
+            error: "Ticket cannot be confirmed in its current state",
+          },
+          409
+        );
+      }
       const legs = await env.DB.prepare(
         `SELECT id, market_id, participant_id, sports_event_id
-         FROM ticket_legs WHERE ticket_id = ?`
+         FROM ticket_legs l
+         WHERE ticket_id = ? AND EXISTS (
+           SELECT 1 FROM tickets t WHERE t.id = l.ticket_id AND t.user_id = ?
+         )`
       )
-        .bind(ticketId)
+        .bind(ticketId, user.id)
         .all<{
           id: string;
           market_id: string;
@@ -338,11 +396,6 @@ export const createTicketRoutes = (auth: Auth) =>
           now
         )
       );
-      const confirmation = env.DB.prepare(
-        `UPDATE tickets SET confirmed_at = ?, status = 'scheduled',
-          tracking_started_at = ?, updated_at = ?, version = version + 1
-         WHERE id = ? AND user_id = ? AND status IN ('draft', 'needs_review')`
-      ).bind(now, now, now, ticketId, user.id);
       const eventStatements = [
         ...new Set(legs.results.map((leg) => leg.sports_event_id)),
       ].map((eventId) =>
@@ -350,20 +403,7 @@ export const createTicketRoutes = (auth: Auth) =>
           "UPDATE sports_events SET next_poll_at = MIN(COALESCE(next_poll_at, ?), ?), updated_at = ? WHERE id = ?"
         ).bind(now, now, now, eventId)
       );
-      const [result] = await env.DB.batch([
-        confirmation,
-        ...trackingStatements,
-        ...eventStatements,
-      ]);
-      if (!result || result.meta.changes === 0) {
-        return c.json(
-          {
-            code: "INVALID_STATE",
-            error: "Ticket cannot be confirmed in its current state",
-          },
-          409
-        );
-      }
+      await env.DB.batch([...trackingStatements, ...eventStatements]);
       await writeAuditEvent({
         action: "ticket.confirm",
         actorUserId: user.id,
@@ -427,12 +467,35 @@ export const createTicketRoutes = (auth: Auth) =>
         }
         const ticketId = c.req.param("ticketId");
         const ticket = await env.DB.prepare(
-          "SELECT historical_import_batch_id, id FROM tickets WHERE id = ? AND user_id = ?"
+          `SELECT historical_import_batch_id, id, ingestion_mode, status, verification_status, version
+           FROM tickets WHERE id = ? AND user_id = ?`
         )
           .bind(ticketId, user.id)
-          .first<{ historical_import_batch_id: string | null; id: string }>();
+          .first<{
+            historical_import_batch_id: string | null;
+            id: string;
+            ingestion_mode: string;
+            status: string;
+            verification_status: string;
+            version: number;
+          }>();
         if (!ticket) {
           return c.json({ code: "NOT_FOUND", error: "Ticket not found" }, 404);
+        }
+        const mutableStatuses = new Set(["draft", "needs_review"]);
+        if (
+          ticket.ingestion_mode !== "historical" ||
+          !mutableStatuses.has(ticket.status) ||
+          ticket.verification_status === "verified"
+        ) {
+          return c.json(
+            {
+              code: "INVALID_STATE",
+              error:
+                "Only an unsettled historical ticket can be manually settled",
+            },
+            409
+          );
         }
         const input = c.req.valid("json");
         const ownedLegs = await env.DB.prepare(
@@ -441,8 +504,10 @@ export const createTicketRoutes = (auth: Auth) =>
           .bind(ticketId)
           .all<{ id: string }>();
         const ownedIds = new Set(ownedLegs.results.map((leg) => leg.id));
+        const submittedIds = new Set(input.legs.map((leg) => leg.id));
         if (
           input.legs.length !== ownedIds.size ||
+          submittedIds.size !== input.legs.length ||
           input.legs.some((leg) => !ownedIds.has(leg.id))
         ) {
           return c.json(
@@ -465,11 +530,17 @@ export const createTicketRoutes = (auth: Auth) =>
         } else if (statuses.includes("void") || statuses.includes("push")) {
           ticketStatus = "partially_void";
         }
-        await env.DB.batch([
+        const settlementResults = await env.DB.batch([
           ...input.legs.map((leg) =>
             env.DB.prepare(
               `UPDATE ticket_legs SET current_value = ?, lost_at = ?, settled_at = ?, status = ?, updated_at = ?, won_at = ?
-           WHERE id = ? AND ticket_id = ?`
+               WHERE id = ? AND ticket_id = ? AND EXISTS (
+                 SELECT 1 FROM tickets t WHERE t.id = ? AND t.user_id = ?
+                   AND t.version = ?
+                   AND t.ingestion_mode = 'historical'
+                   AND t.status IN ('draft', 'needs_review')
+                   AND t.verification_status != 'verified'
+               )`
             ).bind(
               leg.value,
               leg.status === "lost" ? now : null,
@@ -478,12 +549,48 @@ export const createTicketRoutes = (auth: Auth) =>
               now,
               leg.status === "won" ? now : null,
               leg.id,
-              ticketId
+              ticketId,
+              ticketId,
+              user.id,
+              ticket.version
             )
           ),
           env.DB.prepare(
+            `UPDATE tracking_subscriptions SET status = 'completed', updated_at = ?
+             WHERE ticket_leg_id IN (SELECT id FROM ticket_legs WHERE ticket_id = ?)
+               AND EXISTS (
+                 SELECT 1 FROM tickets t WHERE t.id = ? AND t.user_id = ?
+                   AND t.version = ?
+                   AND t.ingestion_mode = 'historical'
+                   AND t.status IN ('draft', 'needs_review')
+                   AND t.verification_status != 'verified'
+               )`
+          ).bind(now, ticketId, ticketId, user.id, ticket.version),
+          env.DB.prepare(
+            `INSERT INTO ticket_timeline_events (id, message, occurred_at, ticket_id, title, transition_key, type)
+           SELECT ?, ?, ?, ?, 'Ticket manually settled', ?, 'ticket.manual_settlement'
+           FROM tickets t WHERE t.id = ? AND t.user_id = ? AND t.version = ?
+             AND t.ingestion_mode = 'historical'
+             AND t.status IN ('draft', 'needs_review')
+             AND t.verification_status != 'verified'
+           ON CONFLICT(transition_key) DO NOTHING`
+          ).bind(
+            crypto.randomUUID(),
+            `Recorded from ${input.source}`,
+            now,
+            ticketId,
+            `${ticketId}:manual-settlement:v${ticket.version + 1}`,
+            ticketId,
+            user.id,
+            ticket.version
+          ),
+          env.DB.prepare(
             `UPDATE tickets SET result_source = ?, settled_at = ?, status = ?, updated_at = ?,
-            verification_status = ?, verified_at = ?, version = version + 1 WHERE id = ? AND user_id = ?`
+             verification_status = ?, verified_at = ?, version = version + 1
+             WHERE id = ? AND user_id = ? AND version = ?
+               AND ingestion_mode = 'historical'
+               AND status IN ('draft', 'needs_review')
+               AND verification_status != 'verified'`
           ).bind(
             input.source,
             now,
@@ -494,23 +601,20 @@ export const createTicketRoutes = (auth: Auth) =>
               : "unverified",
             input.source === "settled_slip" ? now : null,
             ticketId,
-            user.id
-          ),
-          env.DB.prepare(
-            "UPDATE tracking_subscriptions SET status = 'completed', updated_at = ? WHERE ticket_leg_id IN (SELECT id FROM ticket_legs WHERE ticket_id = ?)"
-          ).bind(now, ticketId),
-          env.DB.prepare(
-            `INSERT INTO ticket_timeline_events (id, message, occurred_at, ticket_id, title, transition_key, type)
-           VALUES (?, ?, ?, ?, 'Ticket manually settled', ?, 'ticket.manual_settlement')
-           ON CONFLICT(transition_key) DO NOTHING`
-          ).bind(
-            crypto.randomUUID(),
-            `Recorded from ${input.source}`,
-            now,
-            ticketId,
-            `${ticketId}:manual-settlement:v1`
+            user.id,
+            ticket.version
           ),
         ]);
+        const settlement = settlementResults.at(-1);
+        if (!settlement || settlement.meta.changes === 0) {
+          return c.json(
+            {
+              code: "CONFLICT",
+              error: "Ticket changed while it was being settled",
+            },
+            409
+          );
+        }
         if (ticket.historical_import_batch_id) {
           await refreshHistoricalBatch(
             env.DB,
@@ -584,9 +688,10 @@ export const createTicketRoutes = (auth: Auth) =>
         events: rows.results.map((row) => ({
           id: row.id,
           message: row.message,
-          metadata: row.metadata
-            ? (JSON.parse(row.metadata) as Record<string, unknown>)
-            : null,
+          metadata: safeJsonParse<Record<string, unknown> | null>(
+            row.metadata,
+            null
+          ),
           occurredAt: new Date(row.occurred_at).toISOString(),
           ticketLegId: row.ticket_leg_id,
           title: row.title,

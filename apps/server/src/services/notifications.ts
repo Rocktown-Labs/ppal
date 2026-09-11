@@ -41,11 +41,27 @@ export const publishNotification = async ({
   workerEnv: Env;
 }): Promise<void> => {
   const notificationId = crypto.randomUUID();
-  const inserted = await workerEnv.DB.prepare(
-    `INSERT INTO notifications (body, id, milestone_key, ticket_id, title, type, user_id)
-     VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT(milestone_key) DO NOTHING`
+  const preferences = await workerEnv.DB.prepare(
+    "SELECT in_app_enabled FROM notification_preferences WHERE user_id = ?"
   )
-    .bind(body, notificationId, milestoneKey, ticketId, title, type, userId)
+    .bind(userId)
+    .first<{ in_app_enabled: number }>();
+  const inAppVisible = (preferences?.in_app_enabled ?? 1) === 1;
+  const inserted = await workerEnv.DB.prepare(
+    `INSERT INTO notifications
+     (body, id, in_app_visible, milestone_key, ticket_id, title, type, user_id)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(milestone_key) DO NOTHING`
+  )
+    .bind(
+      body,
+      notificationId,
+      Number(inAppVisible),
+      milestoneKey,
+      ticketId,
+      title,
+      type,
+      userId
+    )
     .run();
   if (inserted.meta.changes === 0) {
     return;

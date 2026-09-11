@@ -51,6 +51,22 @@ app.use(
   })
 );
 app.use("*", async (c, next) => {
+  const method = c.req.method.toUpperCase();
+  const isUnsafeMethod = !["GET", "HEAD", "OPTIONS"].includes(method);
+  if (!isUnsafeMethod) {
+    return await next();
+  }
+  const origin = c.req.header("origin");
+  const fetchSite = c.req.header("sec-fetch-site");
+  if (fetchSite === "cross-site" || (origin && origin !== env.CORS_ORIGIN)) {
+    return c.json(
+      { code: "INVALID_ORIGIN", error: "Request origin is not allowed" },
+      403
+    );
+  }
+  return await next();
+});
+app.use("*", async (c, next) => {
   const identifyUser = createAuthMiddleware(auth as BetterAuthInstance, {
     exclude: ["/api/auth/**", "/health"],
     maskEmail: true,
@@ -58,19 +74,62 @@ app.use("*", async (c, next) => {
   await identifyUser(c.get("log"), c.req.raw.headers, c.req.path);
   return next();
 });
-app.use("/api/v1/*", async (c, next) => {
-  if (c.req.path.startsWith("/api/v1/webhooks/")) {
-    return await next();
+const getRateLimitKey = async (request: Request): Promise<string> => {
+  const address = request.headers.get("cf-connecting-ip") ?? "local";
+  const sessionIdentity =
+    request.headers.get("cookie") ?? request.headers.get("authorization");
+  if (!sessionIdentity) {
+    return address;
   }
-  const clientKey = c.req.header("cf-connecting-ip") ?? "local";
+  const digest = await crypto.subtle.digest(
+    "SHA-256",
+    new TextEncoder().encode(sessionIdentity)
+  );
+  const fingerprint = Array.from(new Uint8Array(digest).slice(0, 8), (byte) =>
+    byte.toString(16).padStart(2, "0")
+  ).join("");
+  return `${address}:${fingerprint}`;
+};
+
+app.use("/api/auth/*", async (c, next) => {
+  const limiter = env.AUTH_RATE_LIMIT;
+  if (limiter?.limit) {
+    const { success } = await limiter.limit({
+      key: `${await getRateLimitKey(c.req.raw)}:auth`,
+    });
+    if (!success) {
+      return c.json({ code: "RATE_LIMITED", error: "Too many requests" }, 429, {
+        "retry-after": "60",
+      });
+    }
+  }
+  return await next();
+});
+
+app.use("/api/v1/*", async (c, next) => {
+  const clientKey = await getRateLimitKey(c.req.raw);
   const isUploadMutation =
     c.req.method !== "GET" &&
     (c.req.path.includes("/uploads") ||
-      c.req.path.includes("/historical-imports"));
-  const limiter = isUploadMutation ? env.UPLOAD_RATE_LIMIT : env.API_RATE_LIMIT;
+      c.req.path.includes("/historical-imports") ||
+      c.req.path.includes("/avatar"));
+  const isWebhook = c.req.path.startsWith("/api/v1/webhooks/");
+  const isOperations = c.req.path.startsWith("/api/v1/operations/");
+  let limiter = env.API_RATE_LIMIT;
+  let bucket = "api";
+  if (isWebhook) {
+    limiter = env.WEBHOOK_RATE_LIMIT;
+    bucket = "webhook";
+  } else if (isOperations) {
+    limiter = env.OPERATIONS_RATE_LIMIT;
+    bucket = "operations";
+  } else if (isUploadMutation) {
+    limiter = env.UPLOAD_RATE_LIMIT;
+    bucket = "upload";
+  }
   if (limiter?.limit) {
     const { success } = await limiter.limit({
-      key: `${clientKey}:${isUploadMutation ? "upload" : "api"}`,
+      key: `${clientKey}:${bucket}`,
     });
     if (!success) {
       return c.json({ code: "RATE_LIMITED", error: "Too many requests" }, 429, {

@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "build": "vite build",
-    "check-types": "tsc --noEmit",
+    "check-types": "vite build --mode route-generation && tsc --noEmit",
     "serve": "vite preview",
     "dev": "vite dev",
     "dev:bare": "vite dev"
@@ -13,6 +13,7 @@
     "@better-auth-ui/core": "^1.7.23",
     "@better-auth-ui/react": "^1.7.23",
     "@better-auth/passkey": "1.7.1",
+    "@better-auth/stripe": "1.7.1",
     "@ppal/contracts": "workspace:*",
     "@ppal/env": "workspace:*",
     "@ppal/ui": "workspace:*",

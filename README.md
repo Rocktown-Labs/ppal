@@ -91,7 +91,9 @@ If you want to add app-specific blocks instead of shared primitives, run the sha
 
 `alchemy login --configure` stores the selected Cloudflare, Neon, PlanetScale, and/or Prisma provider profiles under `~/.alchemy`; no provider-specific setup command is required by this scaffold.
 
-Copy `apps/server/.env.example` to `apps/server/.env` and provide real provider credentials before running Alchemy. Production uses `myparlaypal.com` for the TanStack app and `api.myparlaypal.com` for the Hono Worker.
+Copy `packages/infra/.env.example` to `packages/infra/.env` only for a local Alchemy deployment. Never commit that file. GitHub Actions uses separate `preview` and `production` Environment secrets; production deploys require a manual workflow dispatch and environment approval. Production uses `myparlaypal.com` for the TanStack app and `api.myparlaypal.com` for the Hono Worker. PR environments use `pr-<number>.myparlaypal.com` and `api-pr-<number>.myparlaypal.com`.
+
+The Cloudflare deployment token must be scoped to the target account and the `myparlaypal.com` zone. Grant only the edit/read permissions Alchemy needs for Workers Scripts, D1, R2, Queues, Analytics Engine, and Workers Routes/custom domains. A token copied from an R2 S3 access-key flow is not a Cloudflare API token and will fail authentication.
 
 Configure provider webhooks after the first production deployment:
 
@@ -108,7 +110,7 @@ cd packages/infra && bunx alchemy deploy --stage production
 
 ### Production origins
 
-- Required after the first deploy: set `CORS_ORIGIN` in `apps/server/.env` to the exact deployed web origin, such as `https://app.example.com`, then deploy the server again.
+Alchemy fixes production CORS to `https://myparlaypal.com` by default and derives the exact PR origin for every preview. Better Auth keeps secure, HTTP-only, `SameSite=Lax` cookies; the API also rejects cross-site unsafe requests using Origin and Fetch Metadata validation.
 
 ## Git Hooks and Formatting
 

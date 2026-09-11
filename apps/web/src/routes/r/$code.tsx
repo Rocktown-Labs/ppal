@@ -17,20 +17,28 @@ import { toast } from "sonner";
 
 import { api } from "@/lib/api";
 import { authClient } from "@/lib/auth-client";
+import { clearReferralIntent, saveReferralIntent } from "@/lib/referral-intent";
+
+const REFERRAL_CODE_PATTERN = /^[A-Z0-9]{4,16}$/u;
 
 const ReferralLandingComponent = () => {
   const { code } = useParams({ from: "/r/$code" });
   const navigate = useNavigate();
 
   const [isLoading, setIsLoading] = useState(true);
-  const [referrerName, setReferrerName] = useState<string | null>(null);
   const [isValid, setIsValid] = useState(false);
+  const [isApplying, setIsApplying] = useState(false);
   const normalizedCode = code.trim().toUpperCase();
 
   useEffect(() => {
     let active = true;
 
     const processReferral = async () => {
+      if (!REFERRAL_CODE_PATTERN.test(normalizedCode)) {
+        setIsValid(false);
+        setIsLoading(false);
+        return;
+      }
       try {
         const res = await api.referrals.getByCode(normalizedCode);
         if (!active) {
@@ -39,23 +47,6 @@ const ReferralLandingComponent = () => {
 
         if (res.referral.available) {
           setIsValid(true);
-          setReferrerName(res.referral.referrerName);
-          localStorage.setItem("ppal_referral_code", normalizedCode);
-
-          // Check if user is already signed in
-          try {
-            const session = await authClient.getSession();
-            if (session.data?.user) {
-              await api.referrals.claim(normalizedCode);
-              localStorage.removeItem("ppal_referral_code");
-              toast.success(
-                `Referral connected with ${res.referral.referrerName}!`
-              );
-              void navigate({ to: "/dashboard" });
-            }
-          } catch {
-            // Not signed in, continue to landing
-          }
         }
         if (active) {
           setIsLoading(false);
@@ -73,7 +64,37 @@ const ReferralLandingComponent = () => {
     return () => {
       active = false;
     };
-  }, [normalizedCode, navigate]);
+  }, [normalizedCode]);
+
+  const handleApply = async () => {
+    setIsApplying(true);
+    if (!saveReferralIntent(normalizedCode)) {
+      setIsApplying(false);
+      return;
+    }
+    try {
+      const session = await authClient.getSession();
+      if (session.data?.user) {
+        await api.referrals.claim(normalizedCode);
+        clearReferralIntent();
+        toast.success("Referral connected");
+        await navigate({ to: "/dashboard" });
+        return;
+      }
+      await navigate({ to: "/login" });
+    } catch (error) {
+      clearReferralIntent();
+      toast.error(
+        error instanceof Error ? error.message : "Referral could not be applied"
+      );
+      setIsApplying(false);
+    }
+  };
+
+  const handleDismiss = async () => {
+    clearReferralIntent();
+    await navigate({ to: "/" });
+  };
 
   if (isLoading) {
     return (
@@ -116,12 +137,11 @@ const ReferralLandingComponent = () => {
             <div className="space-y-3">
               <span className="inline-flex items-center gap-1.5 rounded-full border border-purple-500/30 bg-purple-500/10 px-3 py-1 font-mono text-xs font-bold text-purple-300">
                 <CheckCircle2 className="size-3.5" />
-                Referral Code {normalizedCode} Applied
+                Referral Code {normalizedCode} Available
               </span>
 
               <h1 className="text-3xl font-black tracking-tight text-white sm:text-5xl">
-                You&apos;re invited to ParlayPal
-                {referrerName ? ` by ${referrerName}` : ""}.
+                You&apos;re invited to ParlayPal.
               </h1>
 
               <p className="mx-auto max-w-md text-sm text-zinc-400 sm:text-base">
@@ -159,13 +179,26 @@ const ReferralLandingComponent = () => {
             </div>
 
             <div className="space-y-3 pt-4">
-              <Link
-                to="/login"
+              <button
+                type="button"
+                disabled={isApplying}
+                onClick={handleApply}
                 className="inline-flex h-12 cursor-pointer items-center justify-center gap-2 rounded-xl bg-emerald-500 px-8 text-sm font-bold text-black shadow-xl shadow-emerald-500/25 transition hover:bg-emerald-400"
               >
-                <span>Claim Invite & Get Started</span>
-                <ArrowRight className="size-4" />
-              </Link>
+                {isApplying ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : (
+                  <ArrowRight className="size-4" />
+                )}
+                <span>Apply Referral & Continue</span>
+              </button>
+              <button
+                type="button"
+                onClick={handleDismiss}
+                className="block w-full text-xs font-semibold text-zinc-400 underline-offset-4 hover:text-white hover:underline"
+              >
+                Continue without referral
+              </button>
               <p className="text-[11px] text-zinc-500">
                 Free account · No credit card required to start tracking slips
               </p>

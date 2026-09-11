@@ -121,34 +121,7 @@ const getButtonLabel = (phase: UploadPhase) => {
   return "Extract Legs with AI";
 };
 
-const DropZoneContent = ({
-  previewUrl,
-  selectedFile,
-}: {
-  previewUrl: string | null;
-  selectedFile: File | null;
-}) => {
-  if (previewUrl) {
-    return (
-      <div className="flex flex-col items-center gap-3">
-        <div className="relative max-h-48 max-w-xs overflow-hidden rounded-xl border border-zinc-700 shadow-lg">
-          <img
-            src={previewUrl}
-            alt="Slip preview"
-            className="h-full w-full object-contain"
-          />
-        </div>
-        <div className="text-center">
-          <p className="text-xs font-bold text-white">{selectedFile?.name}</p>
-          <p className="text-[10px] text-zinc-500">
-            {((selectedFile?.size ?? 0) / 1024).toFixed(0)} KB · Click or drop
-            another image to replace
-          </p>
-        </div>
-      </div>
-    );
-  }
-
+const DropZoneContent = ({ selectedFile }: { selectedFile: File | null }) => {
   if (selectedFile) {
     return (
       <div className="flex flex-col items-center gap-2">
@@ -267,7 +240,6 @@ const TicketUploadComponent = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [ingestionMode, setIngestionMode] = useState<IngestionMode>("live");
   const [phase, setPhase] = useState<UploadPhase>("idle");
   const [statusMessage, setStatusMessage] = useState("");
@@ -294,13 +266,6 @@ const TicketUploadComponent = () => {
     setSelectedFile(file);
     setErrorMessage(null);
     setPhase("idle");
-
-    if (file.type.startsWith("image/")) {
-      const url = URL.createObjectURL(file);
-      setPreviewUrl(url);
-    } else {
-      setPreviewUrl(null);
-    }
   };
 
   const handleDrop = (e: React.DragEvent) => {
@@ -421,7 +386,7 @@ const TicketUploadComponent = () => {
           }}
         />
 
-        <DropZoneContent previewUrl={previewUrl} selectedFile={selectedFile} />
+        <DropZoneContent selectedFile={selectedFile} />
       </button>
 
       {/* Progress / Status Pipeline */}
@@ -460,7 +425,6 @@ const TicketUploadComponent = () => {
           type="button"
           onClick={() => {
             setSelectedFile(null);
-            setPreviewUrl(null);
             setPhase("idle");
             setErrorMessage(null);
           }}

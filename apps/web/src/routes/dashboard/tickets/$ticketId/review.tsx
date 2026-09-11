@@ -23,7 +23,12 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
 import { api } from "@/lib/api";
-import type { CatalogParticipant, ReviewTicketRequest } from "@/lib/api";
+import type {
+  CatalogMarket,
+  CatalogParticipant,
+  CatalogSportsEvent,
+  ReviewTicketRequest,
+} from "@/lib/api";
 
 type EditableLeg = ReviewTicketRequest["legs"][number];
 
@@ -69,9 +74,11 @@ const TicketReviewComponent = () => {
     null
   );
   const [catalogQuery, setCatalogQuery] = useState("");
-  const [catalogResults, setCatalogResults] = useState<CatalogParticipant[]>(
-    []
-  );
+  const [catalogResults, setCatalogResults] = useState<{
+    events: CatalogSportsEvent[];
+    markets: CatalogMarket[];
+    participants: CatalogParticipant[];
+  }>({ events: [], markets: [], participants: [] });
   const [isSearchingCatalog, setIsSearchingCatalog] = useState(false);
 
   useEffect(() => {
@@ -139,14 +146,14 @@ const TicketReviewComponent = () => {
 
   const handleSearchCatalog = async (query: string) => {
     setCatalogQuery(query);
-    if (!query.trim()) {
-      setCatalogResults([]);
+    if (query.trim().length < 2) {
+      setCatalogResults({ events: [], markets: [], participants: [] });
       return;
     }
     setIsSearchingCatalog(true);
     try {
       const res = await api.catalog.search(query);
-      setCatalogResults(res.participants);
+      setCatalogResults(res);
       setIsSearchingCatalog(false);
     } catch {
       setIsSearchingCatalog(false);
@@ -162,10 +169,28 @@ const TicketReviewComponent = () => {
     updateLeg(searchModalLegIndex, "participantId", participant.id);
     updateLeg(searchModalLegIndex, "sportId", participant.sportId);
     updateLeg(searchModalLegIndex, "leagueId", participant.leagueId);
-    setSearchModalLegIndex(null);
-    setCatalogQuery("");
-    setCatalogResults([]);
     toast.success(`Matched to ${participant.name} (${participant.sportName})`);
+  };
+
+  const selectCatalogMarket = (market: CatalogMarket) => {
+    if (searchModalLegIndex === null) {
+      return;
+    }
+    updateLeg(searchModalLegIndex, "marketId", market.id);
+    if (market.sportId) {
+      updateLeg(searchModalLegIndex, "sportId", market.sportId);
+    }
+    toast.success(`Matched market: ${market.name}`);
+  };
+
+  const selectCatalogEvent = (event: CatalogSportsEvent) => {
+    if (searchModalLegIndex === null) {
+      return;
+    }
+    updateLeg(searchModalLegIndex, "sportsEventId", event.id);
+    toast.success(
+      `Matched event: ${event.awayName ?? "TBD"} @ ${event.homeName ?? "TBD"}`
+    );
   };
 
   const handleSaveCorrections = async () => {
@@ -208,7 +233,11 @@ const TicketReviewComponent = () => {
         </p>
       );
     }
-    if (catalogResults.length === 0) {
+    const resultCount =
+      catalogResults.participants.length +
+      catalogResults.markets.length +
+      catalogResults.events.length;
+    if (resultCount === 0) {
       return (
         <p className="py-4 text-center text-xs text-zinc-500">
           {catalogQuery
@@ -217,24 +246,80 @@ const TicketReviewComponent = () => {
         </p>
       );
     }
-    return catalogResults.map((p) => (
-      <button
-        key={p.id}
-        type="button"
-        onClick={() => selectCatalogParticipant(p)}
-        className="flex w-full cursor-pointer items-center justify-between rounded-xl border border-zinc-800 bg-zinc-800/50 p-3 text-left transition hover:border-emerald-500/50 hover:bg-emerald-500/10"
-      >
-        <div>
-          <p className="text-xs font-bold text-white">{p.name}</p>
-          <p className="text-[10px] text-zinc-400">
-            {p.sportName} {p.leagueName ? `· ${p.leagueName}` : ""}
-          </p>
-        </div>
-        <span className="rounded bg-zinc-700 px-2 py-0.5 font-mono text-[10px] text-zinc-300 capitalize">
-          {p.type}
-        </span>
-      </button>
-    ));
+    return (
+      <div className="space-y-4">
+        {catalogResults.participants.length > 0 ? (
+          <section className="space-y-2">
+            <p className="text-[10px] font-bold tracking-wider text-zinc-500 uppercase">
+              Players & teams
+            </p>
+            {catalogResults.participants.map((participant) => (
+              <button
+                key={participant.id}
+                type="button"
+                onClick={() => selectCatalogParticipant(participant)}
+                className="flex w-full cursor-pointer items-center justify-between rounded-xl border border-zinc-800 bg-zinc-800/50 p-3 text-left transition hover:border-emerald-500/50 hover:bg-emerald-500/10"
+              >
+                <div>
+                  <p className="text-xs font-bold text-white">
+                    {participant.name}
+                  </p>
+                  <p className="text-[10px] text-zinc-400">
+                    {participant.sportName}
+                    {participant.leagueName
+                      ? ` · ${participant.leagueName}`
+                      : ""}
+                  </p>
+                </div>
+                <span className="rounded bg-zinc-700 px-2 py-0.5 font-mono text-[10px] text-zinc-300 capitalize">
+                  {participant.type}
+                </span>
+              </button>
+            ))}
+          </section>
+        ) : null}
+        {catalogResults.markets.length > 0 ? (
+          <section className="space-y-2">
+            <p className="text-[10px] font-bold tracking-wider text-zinc-500 uppercase">
+              Markets
+            </p>
+            {catalogResults.markets.map((market) => (
+              <button
+                key={market.id}
+                type="button"
+                onClick={() => selectCatalogMarket(market)}
+                className="w-full rounded-xl border border-zinc-800 bg-zinc-800/50 p-3 text-left text-xs font-bold text-white hover:border-emerald-500/50"
+              >
+                {market.name}
+              </button>
+            ))}
+          </section>
+        ) : null}
+        {catalogResults.events.length > 0 ? (
+          <section className="space-y-2">
+            <p className="text-[10px] font-bold tracking-wider text-zinc-500 uppercase">
+              Events
+            </p>
+            {catalogResults.events.map((event) => (
+              <button
+                key={event.id}
+                type="button"
+                onClick={() => selectCatalogEvent(event)}
+                className="w-full rounded-xl border border-zinc-800 bg-zinc-800/50 p-3 text-left hover:border-emerald-500/50"
+              >
+                <p className="text-xs font-bold text-white">
+                  {event.awayName ?? "TBD"} @ {event.homeName ?? "TBD"}
+                </p>
+                <p className="text-[10px] text-zinc-400">
+                  {event.leagueName ?? "League"} ·{" "}
+                  {new Date(event.startsAt).toLocaleString()}
+                </p>
+              </button>
+            ))}
+          </section>
+        ) : null}
+      </div>
+    );
   };
 
   if (isLoading) {
@@ -522,9 +607,20 @@ const TicketReviewComponent = () => {
               />
             </div>
 
-            <div className="max-h-60 space-y-2 overflow-y-auto">
+            <p className="text-[11px] text-zinc-400">
+              Match the subject, then search again for its market and event. All
+              required fields are saved to this leg.
+            </p>
+            <div className="max-h-72 space-y-2 overflow-y-auto">
               {renderCatalogList()}
             </div>
+            <button
+              type="button"
+              onClick={() => setSearchModalLegIndex(null)}
+              className="w-full rounded-xl bg-emerald-500 px-4 py-2 text-xs font-bold text-black"
+            >
+              Done matching leg
+            </button>
           </div>
         </div>
       )}

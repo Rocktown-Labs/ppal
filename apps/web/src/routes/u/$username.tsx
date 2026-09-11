@@ -14,7 +14,7 @@ import {
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
-import { api } from "@/lib/api";
+import { api, resolveApiAsset } from "@/lib/api";
 import type { PublicProfile } from "@/lib/api";
 import { authClient } from "@/lib/auth-client";
 
@@ -31,6 +31,7 @@ const PublicProfileComponent = () => {
   const [isFollowing, setIsFollowing] = useState(false);
   const [isFollowLoading, setIsFollowLoading] = useState(false);
   const [session, setSession] = useState<unknown>(null);
+  const avatarSource = resolveApiAsset(profile?.avatarUrl ?? profile?.image);
 
   useEffect(() => {
     let active = true;
@@ -184,9 +185,9 @@ const PublicProfileComponent = () => {
           <div className="flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-center gap-4">
               <div className="flex size-16 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-emerald-500/30 bg-emerald-500/20 text-2xl font-black text-emerald-400">
-                {(profile.avatarUrl ?? profile.image) ? (
+                {avatarSource ? (
                   <img
-                    src={(profile.avatarUrl ?? profile.image) as string}
+                    src={avatarSource}
                     alt={profile.name}
                     className="h-full w-full object-cover"
                   />
