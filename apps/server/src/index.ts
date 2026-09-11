@@ -42,7 +42,7 @@ import {
 
 initLogger({ env: { service: "ppal-api" } });
 
-const SERVER_BUILD = "d64d764";
+const SERVER_BUILD = "caa7548";
 const auth = createAuth();
 const app = new Hono<EvlogVariables>();
 
@@ -158,7 +158,7 @@ const routes = app
       timestamp: new Date().toISOString(),
     })
   )
-  .get("/api/v1/ping", (c) => c.json({ build: "86be0ff", ok: true }))
+  .get("/api/v1/ping", (c) => c.json({ build: SERVER_BUILD, ok: true }))
   .get("/api/v1/me", (c) => getCurrentUserProfile(c, auth))
   .patch("/api/v1/me", zValidator("json", updateProfileRequestSchema), (c) =>
     updateCurrentUserProfile(c, auth, c.req.valid("json"))
