@@ -18,16 +18,27 @@ const getSessionFromHandler = async (
   headers: Headers
 ): Promise<AuthSession | null> => {
   const host = headers.get("host");
-  if (!host || !headers.get("cookie")) {
+  if (!headers.get("cookie")) {
     return null;
   }
 
   const forwardedProtocol = headers.get("x-forwarded-proto");
   const protocol =
-    forwardedProtocol === "http" || /^(?:localhost|127\.)/iu.test(host)
+    forwardedProtocol === "http" ||
+    (host && /^(?:localhost|127\.)/iu.test(host))
       ? "http"
       : "https";
-  const request = new Request(`${protocol}://${host}/api/auth/get-session`, {
+  const configuredBaseUrl = auth.options.baseURL;
+  let origin: string | null = null;
+  if (host) {
+    origin = `${protocol}://${host}`;
+  } else if (typeof configuredBaseUrl === "string") {
+    origin = configuredBaseUrl.replace(/\/$/u, "");
+  }
+  if (!origin) {
+    return null;
+  }
+  const request = new Request(`${origin}/api/auth/get-session`, {
     headers: new Headers(headers),
     method: "GET",
   });
