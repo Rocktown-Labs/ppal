@@ -158,6 +158,14 @@ const routes = app
   .get("/api/v1/debug-auth", async (c) =>
     c.json(await getAuthDiagnostics(auth, c.req.raw))
   )
+  .get("/api/v1/debug-routes", (c) =>
+    c.json({
+      build: "86be0ff",
+      routes: app.routes
+        .filter(({ path }) => path.includes("/me"))
+        .map(({ method, path }) => ({ method, path })),
+    })
+  )
   .route("/api/v1/uploads", createUploadRoutes(auth))
   .route("/api/v1/tickets", createTicketRoutes(auth))
   .route("/api/v1", createHistoricalImportRoutes(auth))
