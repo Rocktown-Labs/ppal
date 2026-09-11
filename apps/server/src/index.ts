@@ -109,6 +109,13 @@ app.use("/api/auth/*", async (c, next) => {
 });
 
 app.use("/api/v1/*", async (c, next) => {
+  if (c.req.query("debug") === "headers") {
+    return c.json({
+      cookie: c.req.header("cookie") ?? null,
+      path: c.req.path,
+      url: c.req.url,
+    });
+  }
   const clientKey = await getRateLimitKey(c.req.raw);
   const isUploadMutation =
     c.req.method !== "GET" &&
