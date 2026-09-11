@@ -121,7 +121,10 @@ const uploadAvatar = async (c: Context, auth: Auth): Promise<Response> => {
 export const createCommunityRoutes = (auth: Auth) =>
   new Hono()
     .get("/me", async (c) => {
-      if (c.req.query("debug") === "auth") {
+      if (
+        c.req.query("debug") === "auth" ||
+        c.req.header("x-debug-auth") === "1"
+      ) {
         return c.json(await getAuthDiagnostics(auth, c.req.raw));
       }
       const user = await getAuthUser(auth, c.req.raw);
