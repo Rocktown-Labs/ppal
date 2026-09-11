@@ -9,7 +9,7 @@ import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { secureHeaders } from "hono/secure-headers";
 
-import { getAuthDiagnostics } from "./lib/auth";
+import { getAuthDiagnostics, getAuthUser } from "./lib/auth";
 import { createAnalyticsRoutes } from "./routes/analytics";
 import { createBillingRoutes } from "./routes/billing";
 import { createCatalogRoutes } from "./routes/catalog";
@@ -158,6 +158,14 @@ const routes = app
   .get("/api/v1/debug-auth", async (c) =>
     c.json(await getAuthDiagnostics(auth, c.req.raw))
   )
+  .get("/api/v1/debug-me-direct", async (c) => {
+    const user = await getAuthUser(auth, c.req.raw);
+    return c.json({
+      build: "48c7b8d",
+      hasUser: Boolean(user),
+      userId: user?.id ?? null,
+    });
+  })
   .get("/api/v1/debug-routes", (c) =>
     c.json({
       build: "86be0ff",
