@@ -13,9 +13,7 @@ const getServerUrl = (url: string) => {
     }
   ).process?.env;
   if (typeof window === "undefined" && processEnv?.SERVER_URL) {
-    return processEnv.SERVER_URL.endsWith("/")
-      ? processEnv.SERVER_URL.slice(0, -1)
-      : processEnv.SERVER_URL;
+    return normalizeServerUrl(processEnv.SERVER_URL);
   }
 
   const normalized = normalizeServerUrl(url);
