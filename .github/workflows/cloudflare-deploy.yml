@@ -30,7 +30,7 @@ jobs:
       - run: bun test packages/domain apps/server/tests
       - name: Deploy Cloudflare stack
         working-directory: packages/infra
-        run: bunx alchemy deploy --stage "$ALCHEMY_DEPLOY_STAGE" --yes
+        run: bun alchemy deploy --stage "$ALCHEMY_DEPLOY_STAGE" --yes
         env:
           ALCHEMY_DEPLOY_STAGE: ${{ github.event_name == 'workflow_dispatch' && 'production' || format('pr-{0}', github.event.pull_request.number) }}
           APPLE_CLIENT_ID: ${{ secrets.APPLE_CLIENT_ID }}
@@ -70,7 +70,7 @@ jobs:
       - run: bun install --frozen-lockfile
       - name: Destroy Cloudflare preview stack
         working-directory: packages/infra
-        run: bunx alchemy destroy --stage "$ALCHEMY_DEPLOY_STAGE" --yes
+        run: bun alchemy destroy --stage "$ALCHEMY_DEPLOY_STAGE" --yes
         env:
           ALCHEMY_DEPLOY_STAGE: pr-${{ github.event.pull_request.number }}
           APPLE_CLIENT_ID: ${{ secrets.APPLE_CLIENT_ID }}

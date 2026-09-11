@@ -84,12 +84,12 @@ If you want to add app-specific blocks instead of shared primitives, run the sha
 ### Alchemy
 
 - Target: web on Cloudflare + server on Cloudflare
-- Configure provider login: `cd packages/infra && bunx alchemy login --configure`
+- Configure Cloudflare provider login: `cd packages/infra && bun alchemy profile edit --add Cloudflare`
 - Dev: bun run dev
 - Deploy: bun run deploy
 - Destroy: bun run destroy
 
-`alchemy login --configure` stores the selected Cloudflare, Neon, PlanetScale, and/or Prisma provider profiles under `~/.alchemy`; no provider-specific setup command is required by this scaffold.
+`alchemy profile edit --add Cloudflare` stores the OAuth or API-token credential in the active Alchemy profile under `~/.alchemy`; no `CLOUDFLARE_ACCOUNT_ID` or `CLOUDFLARE_API_TOKEN` export is required for local deploys.
 
 Copy `packages/infra/.env.example` to `packages/infra/.env` only for a local Alchemy deployment. Never commit that file. GitHub Actions uses separate `preview` and `production` Environment secrets; production deploys require a manual workflow dispatch and environment approval. Production uses `myparlaypal.com` for the TanStack app and `api.myparlaypal.com` for the Hono Worker. PR environments use `pr-<number>.myparlaypal.com` and `api-pr-<number>.myparlaypal.com`.
 
@@ -105,7 +105,7 @@ Use the Better Auth subscription endpoints under `/api/auth/subscription/*` for 
 Deploys are staged and default to a personal `dev_<username>` stage. For production, run the deploy with an explicit stage from `packages/infra`:
 
 ```bash
-cd packages/infra && bunx alchemy deploy --stage production
+cd packages/infra && bun alchemy deploy --stage production
 ```
 
 ### Production origins
