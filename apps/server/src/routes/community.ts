@@ -121,7 +121,7 @@ const uploadAvatar = async (c: Context, auth: Auth): Promise<Response> => {
 export const createCommunityRoutes = (auth: Auth) =>
   new Hono()
     .get("/me", async (c) => {
-      const user = await getAuthUser(auth, c.req.raw.headers);
+      const user = await getAuthUser(auth, c.req.raw);
       if (!user) {
         return c.json({ code: "UNAUTHORIZED", error: "Unauthorized" }, 401);
       }
@@ -144,7 +144,7 @@ export const createCommunityRoutes = (auth: Auth) =>
       });
     })
     .patch("/me", zValidator("json", updateProfileRequestSchema), async (c) => {
-      const user = await getAuthUser(auth, c.req.raw.headers);
+      const user = await getAuthUser(auth, c.req.raw);
       if (!user) {
         return c.json({ code: "UNAUTHORIZED", error: "Unauthorized" }, 401);
       }

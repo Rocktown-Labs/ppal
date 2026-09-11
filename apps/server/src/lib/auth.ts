@@ -13,15 +13,22 @@ interface AuthSession {
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null;
 
-const getSessionFromHandler = async (
+const createSessionRequest = (
   auth: Auth,
-  headers: Headers
-): Promise<AuthSession | null> => {
-  const host = headers.get("host");
+  input: Headers | Request
+): Request | null => {
+  const headers = input instanceof Request ? input.headers : input;
   if (!headers.get("cookie")) {
     return null;
   }
+  if (input instanceof Request) {
+    const url = new URL(input.url);
+    url.pathname = "/api/auth/get-session";
+    url.search = "";
+    return new Request(url, input);
+  }
 
+  const host = headers.get("host");
   const forwardedProtocol = headers.get("x-forwarded-proto");
   const protocol =
     forwardedProtocol === "http" ||
@@ -38,10 +45,20 @@ const getSessionFromHandler = async (
   if (!origin) {
     return null;
   }
-  const request = new Request(`${origin}/api/auth/get-session`, {
+  return new Request(`${origin}/api/auth/get-session`, {
     headers: new Headers(headers),
     method: "GET",
   });
+};
+
+const getSessionFromHandler = async (
+  auth: Auth,
+  input: Headers | Request
+): Promise<AuthSession | null> => {
+  const request = createSessionRequest(auth, input);
+  if (!request) {
+    return null;
+  }
   const payload = (await auth.api.getSession({
     headers: request.headers,
     request,
@@ -81,10 +98,10 @@ const getSessionFromHandler = async (
 
 export const getAuthUser = async (
   auth: Auth,
-  headers: Headers
+  input: Headers | Request
 ): Promise<AuthUser | null> => {
   try {
-    const handlerSession = await getSessionFromHandler(auth, headers);
+    const handlerSession = await getSessionFromHandler(auth, input);
     if (handlerSession) {
       return handlerSession.user;
     }
@@ -93,7 +110,7 @@ export const getAuthUser = async (
   }
 
   const session = (await auth.api.getSession({
-    headers: new Headers(headers),
+    headers: new Headers(input instanceof Request ? input.headers : input),
   })) as AuthSession | null;
   return session?.user ?? null;
 };
