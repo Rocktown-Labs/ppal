@@ -77,7 +77,13 @@ const getSessionFromHandler = async (
   // Cloudflare's request adapter can lose the per-request auth context on a
   // direct API call. The same handler over the worker origin remains the
   // authoritative fallback and preserves Better Auth's cookie validation.
-  const response = await fetch(request.clone());
+  const response = await fetch(request.url, {
+    headers: {
+      cookie: request.headers.get("cookie") ?? "",
+      origin: request.headers.get("origin") ?? new URL(request.url).origin,
+    },
+    method: "GET",
+  });
   if (!response.ok) {
     return null;
   }
