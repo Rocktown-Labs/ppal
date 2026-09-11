@@ -36,6 +36,7 @@ import {
 
 initLogger({ env: { service: "ppal-api" } });
 
+const SERVER_BUILD = "d64d764";
 const auth = createAuth();
 const app = new Hono<EvlogVariables>();
 
@@ -145,6 +146,7 @@ app.on(["POST", "GET"], "/api/auth/*", (c) => auth.handler(c.req.raw));
 const routes = app
   .get("/health", (c) =>
     c.json({
+      build: SERVER_BUILD,
       service: "ppal-api",
       status: "ok",
       timestamp: new Date().toISOString(),
