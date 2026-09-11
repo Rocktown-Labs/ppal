@@ -72,7 +72,7 @@ const OnboardingWizardComponent = () => {
   const form = useForm({
     defaultValues: initialValues,
     onSubmit: () => {
-      void navigate({ to: "/dashboard/tickets/upload" });
+      void navigate({ to: "/dashboard" });
     },
   });
 
@@ -209,7 +209,7 @@ const OnboardingWizardComponent = () => {
         annual: form.getFieldValue("billingPeriod") === "yearly",
         cancelUrl: `${origin}/dashboard/onboarding`,
         plan,
-        successUrl: `${origin}/dashboard/tickets/upload`,
+        successUrl: `${origin}/dashboard`,
       });
       if (checkout.error) {
         toast.error(checkout.error.message ?? "Checkout could not be started");
@@ -1103,11 +1103,11 @@ const OnboardingWizardComponent = () => {
                   <button
                     type="button"
                     onClick={() => {
-                      void navigate({ to: "/dashboard/tickets/upload" });
+                      void navigate({ to: "/dashboard" });
                     }}
                     className="mt-9 inline-flex h-12 cursor-pointer items-center justify-center rounded-xl bg-emerald-400 px-7 text-sm font-bold text-black shadow-lg shadow-emerald-500/20 transition hover:bg-emerald-300"
                   >
-                    <span>Upload my first ticket</span>
+                    <span>Go to dashboard</span>
                     <ChevronRight className="ml-2 size-4 stroke-[2.5]" />
                   </button>
                 </div>

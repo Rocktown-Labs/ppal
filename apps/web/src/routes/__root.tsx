@@ -38,6 +38,7 @@ const RootDocument = () => {
         <AuthProvider
           Link={TanStackLinkAdapter}
           authClient={authClient}
+          redirectTo="/dashboard"
           navigate={({ to, replace }) => {
             void navigate({ replace, to });
           }}
