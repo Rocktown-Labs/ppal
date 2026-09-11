@@ -63,7 +63,9 @@ const mapNotification = (row: NotificationRow) => ({
 export const createNotificationRoutes = (auth: Auth) =>
   new Hono()
     .get("/notifications", async (c) => {
-      const user = await getAuthUser(auth, c.req.raw.headers);
+      const user = await getAuthUser(auth, c.req.raw.headers, {
+        authoritative: true,
+      });
       if (!user) {
         return c.json({ code: "UNAUTHORIZED", error: "Unauthorized" }, 401);
       }
@@ -77,7 +79,9 @@ export const createNotificationRoutes = (auth: Auth) =>
       return c.json({ notifications: rows.results.map(mapNotification) });
     })
     .get("/notifications/stream", async (c) => {
-      const user = await getAuthUser(auth, c.req.raw.headers);
+      const user = await getAuthUser(auth, c.req.raw.headers, {
+        authoritative: true,
+      });
       if (!user) {
         return c.json({ code: "UNAUTHORIZED", error: "Unauthorized" }, 401);
       }
@@ -163,7 +167,9 @@ export const createNotificationRoutes = (auth: Auth) =>
       });
     })
     .patch("/notifications/:notificationId/read", async (c) => {
-      const user = await getAuthUser(auth, c.req.raw.headers);
+      const user = await getAuthUser(auth, c.req.raw.headers, {
+        authoritative: true,
+      });
       if (!user) {
         return c.json({ code: "UNAUTHORIZED", error: "Unauthorized" }, 401);
       }
@@ -177,7 +183,9 @@ export const createNotificationRoutes = (auth: Auth) =>
         : c.json({ code: "NOT_FOUND", error: "Notification not found" }, 404);
     })
     .get("/settings/notifications", async (c) => {
-      const user = await getAuthUser(auth, c.req.raw.headers);
+      const user = await getAuthUser(auth, c.req.raw.headers, {
+        authoritative: true,
+      });
       if (!user) {
         return c.json({ code: "UNAUTHORIZED", error: "Unauthorized" }, 401);
       }
@@ -192,7 +200,9 @@ export const createNotificationRoutes = (auth: Auth) =>
       "/settings/notifications",
       zValidator("json", notificationPreferencesSchema),
       async (c) => {
-        const user = await getAuthUser(auth, c.req.raw.headers);
+        const user = await getAuthUser(auth, c.req.raw.headers, {
+          authoritative: true,
+        });
         if (!user) {
           return c.json({ code: "UNAUTHORIZED", error: "Unauthorized" }, 401);
         }
@@ -229,7 +239,9 @@ export const createNotificationRoutes = (auth: Auth) =>
       }
     )
     .delete("/notifications/devices", async (c) => {
-      const user = await getAuthUser(auth, c.req.raw.headers);
+      const user = await getAuthUser(auth, c.req.raw.headers, {
+        authoritative: true,
+      });
       if (!user) {
         return c.json({ code: "UNAUTHORIZED", error: "Unauthorized" }, 401);
       }

@@ -10,6 +10,7 @@
       "database_name": "ppal-db",
       "database_id": "ppal-local-db",
       "migrations_dir": "../../packages/db/src/migrations",
+      "migrations_pattern": "../../packages/db/src/migrations/*/migration.sql",
     },
   ],
   "r2_buckets": [

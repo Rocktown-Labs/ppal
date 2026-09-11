@@ -27,7 +27,9 @@ const deviceTokenSchema = z.object({
 });
 
 const uploadAvatar = async (c: Context, auth: Auth): Promise<Response> => {
-  const user = await getAuthUser(auth, c.req.raw.headers);
+  const user = await getAuthUser(auth, c.req.raw.headers, {
+    authoritative: true,
+  });
   if (!user) {
     return c.json({ code: "UNAUTHORIZED", error: "Unauthorized" }, 401);
   }
@@ -124,7 +126,9 @@ export const getCurrentUserProfile = async (
   c: Context,
   auth: Auth
 ): Promise<Response> => {
-  const user = await getAuthUser(auth, c.req.raw);
+  const user = await getAuthUser(auth, c.req.raw.headers, {
+    authoritative: true,
+  });
   if (!user) {
     return c.json({ code: "UNAUTHORIZED", error: "Unauthorized" }, 401);
   }
@@ -152,7 +156,9 @@ export const updateCurrentUserProfile = async (
   auth: Auth,
   input: UpdateProfileInput
 ): Promise<Response> => {
-  const user = await getAuthUser(auth, c.req.raw);
+  const user = await getAuthUser(auth, c.req.raw.headers, {
+    authoritative: true,
+  });
   if (!user) {
     return c.json({ code: "UNAUTHORIZED", error: "Unauthorized" }, 401);
   }
@@ -223,7 +229,9 @@ export const createCommunityRoutes = (auth: Auth) =>
       "/me/device-tokens",
       zValidator("json", deviceTokenSchema),
       async (c) => {
-        const user = await getAuthUser(auth, c.req.raw.headers);
+        const user = await getAuthUser(auth, c.req.raw.headers, {
+          authoritative: true,
+        });
         if (!user) {
           return c.json({ code: "UNAUTHORIZED", error: "Unauthorized" }, 401);
         }
@@ -274,7 +282,9 @@ export const createCommunityRoutes = (auth: Auth) =>
       }
     )
     .delete("/me/device-tokens", async (c) => {
-      const user = await getAuthUser(auth, c.req.raw.headers);
+      const user = await getAuthUser(auth, c.req.raw.headers, {
+        authoritative: true,
+      });
       if (!user) {
         return c.json({ code: "UNAUTHORIZED", error: "Unauthorized" }, 401);
       }
@@ -302,7 +312,9 @@ export const createCommunityRoutes = (auth: Auth) =>
       if (!(AVATAR_PATH_PART.test(userId) && AVATAR_PATH_PART.test(filename))) {
         return c.json({ code: "NOT_FOUND", error: "Avatar not found" }, 404);
       }
-      const viewer = await getAuthUser(auth, c.req.raw.headers);
+      const viewer = await getAuthUser(auth, c.req.raw.headers, {
+        authoritative: true,
+      });
       const owner = await env.DB.prepare(
         `SELECT avatar_object_key, is_public FROM profiles
          WHERE user_id = ? AND avatar_object_key IN (?, ?)`
@@ -397,7 +409,9 @@ export const createCommunityRoutes = (auth: Auth) =>
         : c.json({ code: "NOT_FOUND", error: "Profile not found" }, 404);
     })
     .post("/profiles/:username/follow", async (c) => {
-      const user = await getAuthUser(auth, c.req.raw.headers);
+      const user = await getAuthUser(auth, c.req.raw.headers, {
+        authoritative: true,
+      });
       if (!user) {
         return c.json({ code: "UNAUTHORIZED", error: "Unauthorized" }, 401);
       }
@@ -424,7 +438,9 @@ export const createCommunityRoutes = (auth: Auth) =>
       return c.json({ following: true });
     })
     .delete("/profiles/:username/follow", async (c) => {
-      const user = await getAuthUser(auth, c.req.raw.headers);
+      const user = await getAuthUser(auth, c.req.raw.headers, {
+        authoritative: true,
+      });
       if (!user) {
         return c.json({ code: "UNAUTHORIZED", error: "Unauthorized" }, 401);
       }

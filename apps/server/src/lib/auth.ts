@@ -10,8 +10,25 @@ interface AuthSession {
   user: AuthUser;
 }
 
+export interface AuthUserOptions {
+  /** Bypass Better Auth's short-lived signed cookie snapshot. */
+  authoritative?: boolean;
+}
+
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null;
+
+const getConfiguredOrigin = (auth: Auth): string | null => {
+  const configuredBaseUrl = auth.options.baseURL;
+  if (typeof configuredBaseUrl !== "string" || !configuredBaseUrl.trim()) {
+    return null;
+  }
+  try {
+    return new URL(configuredBaseUrl).origin;
+  } catch {
+    return null;
+  }
+};
 
 const createSessionRequest = (
   auth: Auth,
@@ -21,31 +38,29 @@ const createSessionRequest = (
   if (!headers.get("cookie")) {
     return null;
   }
-  if (input instanceof Request) {
-    const url = new URL(input.url);
-    url.pathname = "/api/auth/get-session";
-    url.search = "";
-    return new Request(url, input);
-  }
 
-  const host = headers.get("host");
-  const forwardedProtocol = headers.get("x-forwarded-proto");
-  const protocol =
-    forwardedProtocol === "http" ||
-    (host && /^(?:localhost|127\.)/iu.test(host))
-      ? "http"
-      : "https";
-  const configuredBaseUrl = auth.options.baseURL;
-  let origin: string | null = null;
-  if (host) {
-    origin = `${protocol}://${host}`;
-  } else if (typeof configuredBaseUrl === "string") {
-    origin = configuredBaseUrl.replace(/\/$/u, "");
+  // Prefer the configured Better Auth origin. Host is request input and must
+  // not be allowed to redirect a session-bearing fallback to an attacker.
+  let origin = getConfiguredOrigin(auth);
+  if (!origin) {
+    const host = headers.get("host");
+    const isLocalHost = Boolean(
+      host && /^(?:localhost|127\.0\.0\.1)(?::\d+)?$/iu.test(host)
+    );
+    if (isLocalHost) {
+      const protocol =
+        headers.get("x-forwarded-proto") === "https" ? "https" : "http";
+      origin = `${protocol}://${host}`;
+    }
   }
   if (!origin) {
     return null;
   }
-  return new Request(`${origin}/api/auth/get-session`, {
+
+  const url = new URL("/api/auth/get-session", origin);
+  // Session lookup is a GET and never needs the caller's body. Constructing a
+  // fresh request also keeps this safe after a validator has consumed it.
+  return new Request(url, {
     headers: new Headers(headers),
     method: "GET",
   });
@@ -53,14 +68,19 @@ const createSessionRequest = (
 
 const getSessionFromHandler = async (
   auth: Auth,
-  input: Headers | Request
+  input: Headers | Request,
+  options: AuthUserOptions
 ): Promise<AuthSession | null> => {
   const request = createSessionRequest(auth, input);
   if (!request) {
     return null;
   }
+  const query = options.authoritative
+    ? { disableCookieCache: true }
+    : undefined;
   const payload = (await auth.api.getSession({
     headers: request.headers,
+    ...(query ? { query } : {}),
     request,
   })) as AuthSession | null;
   if (payload && isRecord(payload.user)) {
@@ -75,15 +95,17 @@ const getSessionFromHandler = async (
   }
 
   // Cloudflare's request adapter can lose the per-request auth context on a
-  // direct API call. The same handler over the worker origin remains the
-  // authoritative fallback and preserves Better Auth's cookie validation.
-  const response = await fetch(request.url, {
-    headers: {
-      cookie: request.headers.get("cookie") ?? "",
-      origin: request.headers.get("origin") ?? new URL(request.url).origin,
-    },
+  // direct API call. Re-run Better Auth's handler in-process so the fallback
+  // preserves cookie validation without a billed self-subrequest.
+  const handlerUrl = new URL(request.url);
+  if (options.authoritative) {
+    handlerUrl.searchParams.set("disableCookieCache", "true");
+  }
+  const handlerRequest = new Request(handlerUrl, {
+    headers: new Headers(request.headers),
     method: "GET",
   });
+  const response = await auth.handler(handlerRequest);
   if (!response.ok) {
     return null;
   }
@@ -102,59 +124,19 @@ const getSessionFromHandler = async (
   return { user: { email, id, name } };
 };
 
-export const getAuthDiagnostics = async (
-  auth: Auth,
-  request: Request
-): Promise<Record<string, unknown>> => {
-  const sessionRequest = createSessionRequest(auth, request);
-  if (!sessionRequest) {
-    return {
-      cookie: false,
-      host: request.headers.get("host"),
-      requestUrl: request.url,
-    };
-  }
-  let direct = "null";
-  let directError: string | null = null;
-  try {
-    const result = await auth.api.getSession({
-      headers: sessionRequest.headers,
-      request: sessionRequest,
-    });
-    direct = result ? "session" : "null";
-  } catch (error) {
-    directError = error instanceof Error ? error.message : "unknown";
-  }
-  let handlerStatus: number | null = null;
-  let handlerBody = "unknown";
-  try {
-    const response = await auth.handler(sessionRequest.clone());
-    handlerStatus = response.status;
-    const payload: unknown = await response.json();
-    handlerBody =
-      isRecord(payload) && isRecord(payload.user) ? "session" : "null";
-  } catch (error) {
-    handlerBody = error instanceof Error ? error.message : "unknown";
-  }
-  return {
-    cookie: true,
-    direct,
-    directError,
-    handlerBody,
-    handlerStatus,
-    host: request.headers.get("host"),
-    requestUrl: sessionRequest.url,
-  };
-};
-
 export const getAuthUser = async (
   auth: Auth,
-  input: Headers | Request
+  input: Headers | Request,
+  options: AuthUserOptions = {}
 ): Promise<AuthUser | null> => {
   const headers = new Headers(input instanceof Request ? input.headers : input);
+  const query = options.authoritative
+    ? { disableCookieCache: true }
+    : undefined;
   try {
     const session = (await auth.api.getSession({
       headers,
+      ...(query ? { query } : {}),
     })) as AuthSession | null;
     if (session?.user && isRecord(session.user)) {
       const { email, id, name } = session.user;
@@ -171,7 +153,7 @@ export const getAuthUser = async (
   }
 
   try {
-    const handlerSession = await getSessionFromHandler(auth, input);
+    const handlerSession = await getSessionFromHandler(auth, input, options);
     return handlerSession?.user ?? null;
   } catch {
     return null;

@@ -7,7 +7,9 @@ import { escapeLikePattern } from "../lib/database";
 
 export const createCatalogRoutes = (auth: Auth) =>
   new Hono().get("/catalog/search", async (c) => {
-    const user = await getAuthUser(auth, c.req.raw.headers);
+    const user = await getAuthUser(auth, c.req.raw.headers, {
+      authoritative: true,
+    });
     if (!user) {
       return c.json({ code: "UNAUTHORIZED", error: "Unauthorized" }, 401);
     }

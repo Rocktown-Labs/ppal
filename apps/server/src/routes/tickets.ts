@@ -133,7 +133,9 @@ const getTicket = async (ticketId: string, userId: string) => {
 export const createTicketRoutes = (auth: Auth) =>
   new Hono()
     .get("/", async (c) => {
-      const user = await getAuthUser(auth, c.req.raw.headers);
+      const user = await getAuthUser(auth, c.req.raw.headers, {
+        authoritative: true,
+      });
       if (!user) {
         return c.json({ code: "UNAUTHORIZED", error: "Unauthorized" }, 401);
       }
@@ -170,7 +172,9 @@ export const createTicketRoutes = (auth: Auth) =>
       });
     })
     .get("/:ticketId", async (c) => {
-      const user = await getAuthUser(auth, c.req.raw.headers);
+      const user = await getAuthUser(auth, c.req.raw.headers, {
+        authoritative: true,
+      });
       if (!user) {
         return c.json({ code: "UNAUTHORIZED", error: "Unauthorized" }, 401);
       }
@@ -183,7 +187,9 @@ export const createTicketRoutes = (auth: Auth) =>
       "/:ticketId/review",
       zValidator("json", reviewTicketRequestSchema),
       async (c) => {
-        const user = await getAuthUser(auth, c.req.raw.headers);
+        const user = await getAuthUser(auth, c.req.raw.headers, {
+          authoritative: true,
+        });
         if (!user) {
           return c.json({ code: "UNAUTHORIZED", error: "Unauthorized" }, 401);
         }
@@ -315,7 +321,9 @@ export const createTicketRoutes = (auth: Auth) =>
       }
     )
     .post("/:ticketId/confirm", async (c) => {
-      const user = await getAuthUser(auth, c.req.raw.headers);
+      const user = await getAuthUser(auth, c.req.raw.headers, {
+        authoritative: true,
+      });
       if (!user) {
         return c.json({ code: "UNAUTHORIZED", error: "Unauthorized" }, 401);
       }
@@ -417,7 +425,9 @@ export const createTicketRoutes = (auth: Auth) =>
       return c.json({ ticket: confirmed }, 200);
     })
     .post("/:ticketId/cancel", async (c) => {
-      const user = await getAuthUser(auth, c.req.raw.headers);
+      const user = await getAuthUser(auth, c.req.raw.headers, {
+        authoritative: true,
+      });
       if (!user) {
         return c.json({ code: "UNAUTHORIZED", error: "Unauthorized" }, 401);
       }
@@ -461,7 +471,9 @@ export const createTicketRoutes = (auth: Auth) =>
       "/:ticketId/manual-settlement",
       zValidator("json", manualVerificationSchema),
       async (c) => {
-        const user = await getAuthUser(auth, c.req.raw.headers);
+        const user = await getAuthUser(auth, c.req.raw.headers, {
+          authoritative: true,
+        });
         if (!user) {
           return c.json({ code: "UNAUTHORIZED", error: "Unauthorized" }, 401);
         }
@@ -634,7 +646,9 @@ export const createTicketRoutes = (auth: Auth) =>
       }
     )
     .delete("/:ticketId", async (c) => {
-      const user = await getAuthUser(auth, c.req.raw.headers);
+      const user = await getAuthUser(auth, c.req.raw.headers, {
+        authoritative: true,
+      });
       if (!user) {
         return c.json({ code: "UNAUTHORIZED", error: "Unauthorized" }, 401);
       }
@@ -664,7 +678,9 @@ export const createTicketRoutes = (auth: Auth) =>
       return c.body(null, 204);
     })
     .get("/:ticketId/timeline", async (c) => {
-      const user = await getAuthUser(auth, c.req.raw.headers);
+      const user = await getAuthUser(auth, c.req.raw.headers, {
+        authoritative: true,
+      });
       if (!user) {
         return c.json({ code: "UNAUTHORIZED", error: "Unauthorized" }, 401);
       }

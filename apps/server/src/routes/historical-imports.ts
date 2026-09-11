@@ -68,7 +68,9 @@ export const createHistoricalImportRoutes = (auth: Auth) =>
       "/historical-imports",
       zValidator("json", createHistoricalImportSchema),
       async (c) => {
-        const user = await getAuthUser(auth, c.req.raw.headers);
+        const user = await getAuthUser(auth, c.req.raw.headers, {
+          authoritative: true,
+        });
         if (!user) {
           return c.json({ code: "UNAUTHORIZED", error: "Unauthorized" }, 401);
         }
@@ -178,7 +180,9 @@ export const createHistoricalImportRoutes = (auth: Auth) =>
       }
     )
     .get("/historical-imports/:batchId", async (c) => {
-      const user = await getAuthUser(auth, c.req.raw.headers);
+      const user = await getAuthUser(auth, c.req.raw.headers, {
+        authoritative: true,
+      });
       if (!user) {
         return c.json({ code: "UNAUTHORIZED", error: "Unauthorized" }, 401);
       }
@@ -206,7 +210,9 @@ export const createHistoricalImportRoutes = (auth: Auth) =>
       });
     })
     .post("/historical-imports/:batchId/cancel", async (c) => {
-      const user = await getAuthUser(auth, c.req.raw.headers);
+      const user = await getAuthUser(auth, c.req.raw.headers, {
+        authoritative: true,
+      });
       if (!user) {
         return c.json({ code: "UNAUTHORIZED", error: "Unauthorized" }, 401);
       }

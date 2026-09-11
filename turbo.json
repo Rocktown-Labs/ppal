@@ -17,9 +17,8 @@
       "cache": false,
       "persistent": true
     },
-    "db:generate": {
-      "cache": false,
-      "interactive": true
+    "db:migrate:local": {
+      "cache": false
     },
     "deploy": {
       "cache": false,

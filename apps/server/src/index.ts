@@ -36,7 +36,7 @@ import {
 
 initLogger({ env: { service: "ppal-api" } });
 
-const SERVER_BUILD = "caa7548";
+const SERVER_BUILD = env.SERVER_BUILD ?? "local";
 const auth = createAuth();
 const app = new Hono<EvlogVariables>();
 

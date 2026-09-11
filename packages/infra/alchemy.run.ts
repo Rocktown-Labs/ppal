@@ -117,6 +117,7 @@ export const server = Cloudflare.Worker("server", {
       Config.withDefault("support@myparlaypal.com")
     ),
     REVENUECAT_WEBHOOK_SECRET: Config.redacted("REVENUECAT_WEBHOOK_SECRET"),
+    SERVER_BUILD: Config.string("GITHUB_SHA").pipe(Config.withDefault("local")),
     SPORTRADAR_API_KEY: Config.redacted("SPORTRADAR_API_KEY"),
     SPORTS_QUEUE: sportsQueue,
     UPLOAD_RATE_LIMIT: Cloudflare.RateLimit("upload-rate-limit", {

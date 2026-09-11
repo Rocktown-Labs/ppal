@@ -171,7 +171,9 @@ const processRevenueCatEvent = async (
 export const createBillingRoutes = (auth: Auth) =>
   new Hono()
     .get("/billing/entitlements", async (c) => {
-      const user = await getAuthUser(auth, c.req.raw.headers);
+      const user = await getAuthUser(auth, c.req.raw.headers, {
+        authoritative: true,
+      });
       if (!user) {
         return c.json({ code: "UNAUTHORIZED", error: "Unauthorized" }, 401);
       }

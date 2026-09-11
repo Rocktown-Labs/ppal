@@ -38,9 +38,6 @@ export const deviceTokens = sqliteTable(
   {
     createdAt: createdAtColumn(),
     id: text("id").primaryKey(),
-    inAppVisible: integer("in_app_visible", { mode: "boolean" })
-      .notNull()
-      .default(true),
     lastSeenAt: integer("last_seen_at", { mode: "timestamp_ms" }).notNull(),
     platform: text("platform").notNull(),
     token: text("token").notNull().unique(),
@@ -68,6 +65,9 @@ export const notifications = sqliteTable(
       unknown
     > | null>(),
     id: text("id").primaryKey(),
+    inAppVisible: integer("in_app_visible", { mode: "boolean" })
+      .notNull()
+      .default(true),
     milestoneKey: text("milestone_key").notNull().unique(),
     readAt: integer("read_at", { mode: "timestamp_ms" }),
     ticketId: text("ticket_id").references(() => tickets.id, {

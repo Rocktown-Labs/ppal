@@ -33,17 +33,17 @@ bun install
 
 ## Database Setup
 
-This project uses Cloudflare D1 (SQLite) with Drizzle ORM.
+This project uses Cloudflare D1 (SQLite) with Drizzle ORM for runtime queries.
 
 Runtime database access uses the Cloudflare `DB` binding from `packages/infra/alchemy.run.ts`. If a local `DATABASE_URL` is present, it is only for database tooling.
 
-Alchemy provisions the D1 database and applies migrations during `deploy`.
-
-1. Generate migration files:
+Alchemy provisions the D1 database and applies the forward-only SQL migrations under `packages/db/src/migrations/<timestamp>_<name>/migration.sql` during `deploy`. Apply the same migrations to a local Wrangler D1 database with:
 
 ```bash
-bun run db:generate
+bun run db:migrate:local
 ```
+
+The migration directory intentionally uses Alchemy's recursive Drizzle-v1 layout; do not run `drizzle-kit generate` against it. Add a new forward-only SQL migration directory instead so Alchemy and Wrangler share one source of truth.
 
 Then, run the development server:
 
@@ -51,7 +51,7 @@ Then, run the development server:
 bun run dev
 ```
 
-Open [http://localhost:3001](http://localhost:3001) in your browser to see the web application. Use the Expo Go app to run the mobile application. The local API is running at [http://127.0.0.1:3000](http://127.0.0.1:3000).
+Open [http://127.0.0.1:3001](http://127.0.0.1:3001) in your browser to see the web application. Keeping both development servers on `127.0.0.1` preserves the Better Auth same-site cookie boundary. Use the Expo Go app to run the mobile application. The local API is running at [http://127.0.0.1:3000](http://127.0.0.1:3000).
 
 ## UI Customization
 
@@ -139,5 +139,4 @@ ppal/
 - `bun run dev:server`: Start only the server
 - `bun run check-types`: Check TypeScript types across all apps
 - `bun run dev:native`: Start the React Native/Expo development server
-- `bun run db:generate`: Generate database client/types
 - `bun run check`: Run Oxlint and Oxfmt

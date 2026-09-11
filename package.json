@@ -32,7 +32,6 @@
     "dev:infra": "turbo run dev -F @ppal/infra --",
     "build": "turbo run build",
     "check-types": "turbo run check-types",
-    "db:generate": "turbo run db:generate -F @ppal/db --",
     "db:migrate:local": "turbo run db:migrate:local -F server --",
     "deploy": "turbo run deploy -F @ppal/infra --",
     "destroy": "turbo run destroy -F @ppal/infra --",

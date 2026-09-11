@@ -75,7 +75,9 @@ export const createUploadRoutes = (auth: Auth) =>
       "/intents",
       zValidator("json", createUploadRequestSchema),
       async (c) => {
-        const user = await getAuthUser(auth, c.req.raw.headers);
+        const user = await getAuthUser(auth, c.req.raw.headers, {
+          authoritative: true,
+        });
         if (!user) {
           return c.json({ code: "UNAUTHORIZED", error: "Unauthorized" }, 401);
         }
@@ -165,7 +167,9 @@ export const createUploadRoutes = (auth: Auth) =>
       }
     )
     .put("/:uploadId/content", async (c) => {
-      const user = await getAuthUser(auth, c.req.raw.headers);
+      const user = await getAuthUser(auth, c.req.raw.headers, {
+        authoritative: true,
+      });
       if (!user) {
         return c.json({ code: "UNAUTHORIZED", error: "Unauthorized" }, 401);
       }
@@ -258,7 +262,9 @@ export const createUploadRoutes = (auth: Auth) =>
       return c.json({ accepted: true, uploadId: upload.id }, 202);
     })
     .get("/:uploadId/content", async (c) => {
-      const user = await getAuthUser(auth, c.req.raw.headers);
+      const user = await getAuthUser(auth, c.req.raw.headers, {
+        authoritative: true,
+      });
       if (!user) {
         return c.json({ code: "UNAUTHORIZED", error: "Unauthorized" }, 401);
       }
@@ -305,7 +311,9 @@ export const createUploadRoutes = (auth: Auth) =>
       return new Response(object.body, { headers });
     })
     .get("/:uploadId", async (c) => {
-      const user = await getAuthUser(auth, c.req.raw.headers);
+      const user = await getAuthUser(auth, c.req.raw.headers, {
+        authoritative: true,
+      });
       if (!user) {
         return c.json({ code: "UNAUTHORIZED", error: "Unauthorized" }, 401);
       }

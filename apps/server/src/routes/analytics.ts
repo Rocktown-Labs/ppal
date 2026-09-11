@@ -39,7 +39,9 @@ const mapPlayer = (row: PlayerSummaryRow) => ({
 export const createAnalyticsRoutes = (auth: Auth) =>
   new Hono()
     .get("/analytics/overview", async (c) => {
-      const user = await getAuthUser(auth, c.req.raw.headers);
+      const user = await getAuthUser(auth, c.req.raw.headers, {
+        authoritative: true,
+      });
       if (!user) {
         return c.json({ code: "UNAUTHORIZED", error: "Unauthorized" }, 401);
       }
@@ -73,7 +75,9 @@ export const createAnalyticsRoutes = (auth: Auth) =>
       });
     })
     .get("/analytics/players", async (c) => {
-      const user = await getAuthUser(auth, c.req.raw.headers);
+      const user = await getAuthUser(auth, c.req.raw.headers, {
+        authoritative: true,
+      });
       if (!user) {
         return c.json({ code: "UNAUTHORIZED", error: "Unauthorized" }, 401);
       }
@@ -85,7 +89,9 @@ export const createAnalyticsRoutes = (auth: Auth) =>
       return c.json({ players: rows.results.map(mapPlayer) });
     })
     .get("/analytics/players/:participantId", async (c) => {
-      const user = await getAuthUser(auth, c.req.raw.headers);
+      const user = await getAuthUser(auth, c.req.raw.headers, {
+        authoritative: true,
+      });
       if (!user) {
         return c.json({ code: "UNAUTHORIZED", error: "Unauthorized" }, 401);
       }

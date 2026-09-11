@@ -77,7 +77,9 @@ const ensureReferralCode = async (userId: string): Promise<string> => {
 export const createReferralRoutes = (auth: Auth) =>
   new Hono()
     .get("/referrals", async (c) => {
-      const user = await getAuthUser(auth, c.req.raw.headers);
+      const user = await getAuthUser(auth, c.req.raw.headers, {
+        authoritative: true,
+      });
       if (!user) {
         return c.json({ code: "UNAUTHORIZED", error: "Unauthorized" }, 401);
       }
@@ -103,7 +105,9 @@ export const createReferralRoutes = (auth: Auth) =>
       });
     })
     .post("/referrals", async (c) => {
-      const user = await getAuthUser(auth, c.req.raw.headers);
+      const user = await getAuthUser(auth, c.req.raw.headers, {
+        authoritative: true,
+      });
       if (!user) {
         return c.json({ code: "UNAUTHORIZED", error: "Unauthorized" }, 401);
       }
@@ -127,7 +131,9 @@ export const createReferralRoutes = (auth: Auth) =>
         : c.json({ code: "NOT_FOUND", error: "Referral not found" }, 404);
     })
     .post("/referrals/:code/claim", async (c) => {
-      const user = await getAuthUser(auth, c.req.raw.headers);
+      const user = await getAuthUser(auth, c.req.raw.headers, {
+        authoritative: true,
+      });
       if (!user) {
         return c.json({ code: "UNAUTHORIZED", error: "Unauthorized" }, 401);
       }
