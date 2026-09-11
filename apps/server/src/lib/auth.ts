@@ -42,13 +42,11 @@ const getSessionFromHandler = async (
     headers: new Headers(headers),
     method: "GET",
   });
-  const response = await auth.handler(request);
-  if (!response.ok) {
-    return null;
-  }
-
-  const payload: unknown = await response.json();
-  if (!isRecord(payload) || !isRecord(payload.user)) {
+  const payload = (await auth.api.getSession({
+    headers: request.headers,
+    request,
+  })) as AuthSession | null;
+  if (!payload || !isRecord(payload.user)) {
     return null;
   }
   const { email, id, name } = payload.user;
