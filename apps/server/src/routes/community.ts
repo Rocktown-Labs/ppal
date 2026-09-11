@@ -129,7 +129,10 @@ export const createCommunityRoutes = (auth: Auth) =>
       }
       const user = await getAuthUser(auth, c.req.raw);
       if (!user) {
-        return c.json({ code: "UNAUTHORIZED", error: "Unauthorized" }, 401);
+        return c.json(
+          { build: "86be0ff", code: "UNAUTHORIZED", error: "Unauthorized" },
+          401
+        );
       }
       const profile = await env.DB.prepare(
         `SELECT bio, is_public, username FROM profiles WHERE user_id = ?`
