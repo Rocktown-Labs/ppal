@@ -9,6 +9,7 @@ import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { secureHeaders } from "hono/secure-headers";
 
+import { getAuthDiagnostics, getAuthUser } from "./lib/auth";
 import { createAnalyticsRoutes } from "./routes/analytics";
 import { createBillingRoutes } from "./routes/billing";
 import { createCatalogRoutes } from "./routes/catalog";
@@ -152,6 +153,15 @@ const routes = app
       timestamp: new Date().toISOString(),
     })
   )
+  .get("/api/v1/debug-auth", async (c) => {
+    const headersUser = await getAuthUser(auth, c.req.raw.headers);
+    const requestUser = await getAuthUser(auth, c.req.raw);
+    return c.json({
+      diagnostics: await getAuthDiagnostics(auth, c.req.raw),
+      headersUserId: headersUser?.id ?? null,
+      requestUserId: requestUser?.id ?? null,
+    });
+  })
   .get("/api/v1/ping", (c) => c.json({ build: "86be0ff", ok: true }))
   .route("/api/v1/uploads", createUploadRoutes(auth))
   .route("/api/v1/tickets", createTicketRoutes(auth))
