@@ -102,6 +102,51 @@ const getSessionFromHandler = async (
   return { user: { email, id, name } };
 };
 
+export const getAuthDiagnostics = async (
+  auth: Auth,
+  request: Request
+): Promise<Record<string, unknown>> => {
+  const sessionRequest = createSessionRequest(auth, request);
+  if (!sessionRequest) {
+    return {
+      cookie: false,
+      host: request.headers.get("host"),
+      requestUrl: request.url,
+    };
+  }
+  let direct = "null";
+  let directError: string | null = null;
+  try {
+    const result = await auth.api.getSession({
+      headers: sessionRequest.headers,
+      request: sessionRequest,
+    });
+    direct = result ? "session" : "null";
+  } catch (error) {
+    directError = error instanceof Error ? error.message : "unknown";
+  }
+  let handlerStatus: number | null = null;
+  let handlerBody = "unknown";
+  try {
+    const response = await auth.handler(sessionRequest.clone());
+    handlerStatus = response.status;
+    const payload: unknown = await response.json();
+    handlerBody =
+      isRecord(payload) && isRecord(payload.user) ? "session" : "null";
+  } catch (error) {
+    handlerBody = error instanceof Error ? error.message : "unknown";
+  }
+  return {
+    cookie: true,
+    direct,
+    directError,
+    handlerBody,
+    handlerStatus,
+    host: request.headers.get("host"),
+    requestUrl: sessionRequest.url,
+  };
+};
+
 export const getAuthUser = async (
   auth: Auth,
   input: Headers | Request

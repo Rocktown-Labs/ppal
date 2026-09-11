@@ -6,7 +6,7 @@ import { Hono } from "hono";
 import type { Context } from "hono";
 import { z } from "zod";
 
-import { getAuthUser } from "../lib/auth";
+import { getAuthDiagnostics, getAuthUser } from "../lib/auth";
 import { escapeLikePattern } from "../lib/database";
 import { matchesDeclaredMimeType } from "../lib/upload-security";
 import { writeAuditEvent } from "../services/audit";
@@ -121,6 +121,9 @@ const uploadAvatar = async (c: Context, auth: Auth): Promise<Response> => {
 export const createCommunityRoutes = (auth: Auth) =>
   new Hono()
     .get("/me", async (c) => {
+      if (c.req.query("debug") === "auth") {
+        return c.json(await getAuthDiagnostics(auth, c.req.raw));
+      }
       const user = await getAuthUser(auth, c.req.raw);
       if (!user) {
         return c.json({ code: "UNAUTHORIZED", error: "Unauthorized" }, 401);
