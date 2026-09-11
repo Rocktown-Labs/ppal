@@ -1,0 +1,55 @@
+{
+  "version": "7",
+  "dialect": "sqlite",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "6",
+      "when": 1789071939419,
+      "tag": "0000_outgoing_dark_phoenix",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1789073123518,
+      "tag": "0001_square_saracen",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1789073278984,
+      "tag": "0002_jittery_white_queen",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1789073320508,
+      "tag": "0003_illegal_wrecker",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1789073629901,
+      "tag": "0004_cynical_black_crow",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1789073998428,
+      "tag": "0005_many_the_fury",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1789077233781,
+      "tag": "0006_superb_wallow",
+      "breakpoints": true
+    }
+  ]
+}

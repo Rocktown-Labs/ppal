@@ -7,8 +7,7 @@ tags: imports, architecture, design-system
 
 ## Import from Design System Folder
 
-Re-export dependencies from a design system folder. App code imports from there,
-not directly from packages. This enables global changes and easy refactoring.
+Re-export dependencies from a design system folder. App code imports from there, not directly from packages. This enables global changes and easy refactoring.
 
 **Incorrect (imports directly from package):**
 
@@ -33,7 +32,9 @@ function Profile() {
 import { View as RNView } from "react-native";
 
 // ideal: pick the props you will actually use to control implementation
-export function View(props: Pick<React.ComponentProps<typeof RNView>, "style" | "children">) {
+export function View(
+  props: Pick<React.ComponentProps<typeof RNView>, "style" | "children">
+) {
   return <RNView {...props} />;
 }
 ```

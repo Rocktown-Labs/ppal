@@ -1,59 +1,101 @@
 import { Toaster } from "@ppal/ui/components/sonner";
-import { HeadContent, Outlet, Scripts, createRootRouteWithContext } from "@tanstack/react-router";
+import {
+  createRootRouteWithContext,
+  HeadContent,
+  Link,
+  Outlet,
+  Scripts,
+  useNavigate,
+} from "@tanstack/react-router";
 import { TanStackRouterDevtools } from "@tanstack/react-router-devtools";
 import { createMiddleware } from "@tanstack/react-start";
 import { evlogErrorHandler } from "evlog/nitro/v3";
 
-import Header from "../components/header";
+import { AuthProvider } from "@/components/auth/auth-provider";
+import { authClient } from "@/lib/auth-client";
 
 import appCss from "../index.css?url";
 
-export interface RouterAppContext {}
+export type RouterAppContext = Record<string, unknown>;
 
-export const Route = createRootRouteWithContext<RouterAppContext>()({
-  server: {
-    middleware: [createMiddleware().server(evlogErrorHandler)],
-  },
+const TanStackLinkAdapter = ({
+  href,
+  ...props
+}: {
+  href: string;
+  [key: string]: unknown;
+}) => <Link to={href} {...props} />;
 
-  head: () => ({
-    meta: [
-      {
-        charSet: "utf-8",
-      },
-      {
-        name: "viewport",
-        content: "width=device-width, initial-scale=1",
-      },
-      {
-        title: "My App",
-      },
-    ],
-    links: [
-      {
-        rel: "stylesheet",
-        href: appCss,
-      },
-    ],
-  }),
+const RootDocument = () => {
+  const navigate = useNavigate();
 
-  component: RootDocument,
-});
-
-function RootDocument() {
   return (
-    <html lang="en" className="dark">
+    <html className="dark" lang="en">
       <head>
         <HeadContent />
       </head>
-      <body>
-        <div className="grid h-svh grid-rows-[auto_1fr]">
-          <Header />
+      <body className="min-h-screen bg-zinc-950 font-sans text-zinc-100 antialiased selection:bg-emerald-500 selection:text-black">
+        <AuthProvider
+          Link={TanStackLinkAdapter}
+          authClient={authClient}
+          navigate={({ to, replace }) => {
+            void navigate({ replace, to });
+          }}
+        >
           <Outlet />
-        </div>
+        </AuthProvider>
         <Toaster richColors />
         <TanStackRouterDevtools position="bottom-left" />
         <Scripts />
       </body>
     </html>
   );
-}
+};
+
+export const Route = createRootRouteWithContext<RouterAppContext>()({
+  component: RootDocument,
+
+  head: () => ({
+    links: [
+      {
+        href: appCss,
+        rel: "stylesheet",
+      },
+      {
+        href: "/favicon.ico",
+        rel: "icon",
+        sizes: "any",
+      },
+      {
+        href: "/favicon.svg",
+        rel: "icon",
+        type: "image/svg+xml",
+      },
+      {
+        href: "/apple-touch-icon.png",
+        rel: "apple-touch-icon",
+      },
+    ],
+    meta: [
+      {
+        charSet: "utf-8",
+      },
+      {
+        content: "width=device-width, initial-scale=1",
+        name: "viewport",
+      },
+      {
+        title: "ParlayPal — Sportsbook-Independent Live Bet Companion",
+      },
+      {
+        content:
+          "ParlayPal tracks every leg of your sports parlays live, independently of any sportsbook. Upload your slip, follow stat progress in real time, and build your personal hit-rate history.",
+        name: "description",
+      },
+    ],
+  }),
+
+  server: {
+    middleware: [createMiddleware().server(evlogErrorHandler)],
+  },
+});

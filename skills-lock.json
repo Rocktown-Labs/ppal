@@ -1,6 +1,12 @@
 {
   "version": 1,
   "skills": {
+    "agent-email-inbox": {
+      "source": "resend/resend-skills",
+      "sourceType": "github",
+      "skillPath": "skills/agent-email-inbox/SKILL.md",
+      "computedHash": "65ed829de5d962d032c4d0aa96c8557bc48b79e5ba00ee13eb29b3bc881623d2"
+    },
     "better-auth-best-practices": {
       "source": "better-auth/skills",
       "sourceType": "github",
@@ -12,6 +18,12 @@
       "sourceType": "github",
       "skillPath": "security/SKILL.md",
       "computedHash": "7a230edf3a24ce18162cb4379f59b6a19b8d24ca04db530609d0f15cede556dc"
+    },
+    "better-auth-ui-react": {
+      "source": "better-auth-ui/better-auth-ui",
+      "sourceType": "github",
+      "skillPath": "packages/react/skills/better-auth-ui-react/SKILL.md",
+      "computedHash": "9823e1b1cf4d30b06e67ab4886fb55d4833411dc4c0bf6fefb855a8a26a2e5a7"
     },
     "build-audit-logs": {
       "source": "evlog.dev",
@@ -37,6 +49,12 @@
       "sourceType": "github",
       "skillPath": "better-auth/emailAndPassword/SKILL.md",
       "computedHash": "863886759f729081e265941f4f72c503835d55a1f34f6d63cebe6571159fff4a"
+    },
+    "email-best-practices": {
+      "source": "resend/resend-skills",
+      "sourceType": "github",
+      "skillPath": "skills/email-best-practices/SKILL.md",
+      "computedHash": "c7218333381fa335b8a912bd55b3bb58b5b567a174f9e1d8b41940ff82f1a6b6"
     },
     "expo-data-fetching": {
       "source": "expo/skills",
@@ -73,6 +91,24 @@
       "sourceType": "github",
       "skillPath": "skills/heroui-native/SKILL.md",
       "computedHash": "8f8fc3913fd585563795ce27a534428024f794621114f0c83039bc3c983dabdd"
+    },
+    "react-email": {
+      "source": "resend/resend-skills",
+      "sourceType": "github",
+      "skillPath": "skills/react-email/SKILL.md",
+      "computedHash": "ff40e3355c318e5ef203eb1118cab574454ce65dae01bb268b05a2e244b8041b"
+    },
+    "resend": {
+      "source": "resend/resend-skills",
+      "sourceType": "github",
+      "skillPath": "skills/resend/SKILL.md",
+      "computedHash": "72cf7baf929ec7bf167f9b1c86b0d02588449ba1d766a9680d8793df5cfc81be"
+    },
+    "resend-cli": {
+      "source": "resend/resend-skills",
+      "sourceType": "github",
+      "skillPath": "skills/resend-cli/SKILL.md",
+      "computedHash": "5117b68f494652f61f2ad40a429a6f26ba6808c327854d48477a6d4847247028"
     },
     "review-logging-patterns": {
       "source": "evlog.dev",

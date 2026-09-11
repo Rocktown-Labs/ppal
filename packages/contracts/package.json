@@ -1,0 +1,30 @@
+{
+  "name": "@ppal/contracts",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./analytics": "./src/analytics.ts",
+    "./api": "./src/api.ts",
+    "./billing": "./src/billing.ts",
+    "./catalog": "./src/catalog.ts",
+    "./community": "./src/community.ts",
+    "./imports": "./src/imports.ts",
+    "./notifications": "./src/notifications.ts",
+    "./operations": "./src/operations.ts",
+    "./queues": "./src/queues.ts",
+    "./referrals": "./src/referrals.ts",
+    "./tickets": "./src/tickets.ts",
+    "./uploads": "./src/uploads.ts"
+  },
+  "scripts": {
+    "check-types": "tsc --noEmit"
+  },
+  "dependencies": {
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@ppal/config": "workspace:*",
+    "typescript": "^6.0.3"
+  }
+}

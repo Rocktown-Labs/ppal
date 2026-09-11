@@ -1,0 +1,1 @@
+ALTER TABLE `notification_deliveries` ADD `destination` text NOT NULL;

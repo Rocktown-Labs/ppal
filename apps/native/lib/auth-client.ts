@@ -9,8 +9,8 @@ export const authClient = createAuthClient({
   plugins: [
     expoClient({
       scheme: Constants.expoConfig?.scheme as string,
-      storagePrefix: Constants.expoConfig?.scheme as string,
       storage: SecureStore,
+      storagePrefix: Constants.expoConfig?.scheme as string,
     }),
   ],
 });

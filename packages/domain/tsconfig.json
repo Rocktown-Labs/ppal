@@ -1,0 +1,8 @@
+{
+  "extends": "@ppal/config/tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "types": ["node", "@cloudflare/workers-types", "bun"]
+  },
+  "include": ["src/**/*.ts", "tests/**/*.ts"]
+}

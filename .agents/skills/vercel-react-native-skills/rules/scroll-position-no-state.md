@@ -7,15 +7,17 @@ tags: scroll, performance, reanimated, useRef
 
 ## Never Track Scroll Position in useState
 
-Never store scroll position in `useState`. Scroll events fire rapidly—state
-updates cause render thrashing and dropped frames. Use a Reanimated shared value
-for animations or a ref for non-reactive tracking.
+Never store scroll position in `useState`. Scroll events fire rapidly—state updates cause render thrashing and dropped frames. Use a Reanimated shared value for animations or a ref for non-reactive tracking.
 
 **Incorrect (useState causes jank):**
 
 ```tsx
 import { useState } from "react";
-import { ScrollView, NativeSyntheticEvent, NativeScrollEvent } from "react-native";
+import {
+  ScrollView,
+  NativeSyntheticEvent,
+  NativeScrollEvent,
+} from "react-native";
 
 function Feed() {
   const [scrollY, setScrollY] = useState(0);
@@ -31,7 +33,10 @@ function Feed() {
 **Correct (Reanimated for animations):**
 
 ```tsx
-import Animated, { useSharedValue, useAnimatedScrollHandler } from "react-native-reanimated";
+import Animated, {
+  useSharedValue,
+  useAnimatedScrollHandler,
+} from "react-native-reanimated";
 
 function Feed() {
   const scrollY = useSharedValue(0);
@@ -57,7 +62,11 @@ function Feed() {
 
 ```tsx
 import { useRef } from "react";
-import { ScrollView, NativeSyntheticEvent, NativeScrollEvent } from "react-native";
+import {
+  ScrollView,
+  NativeSyntheticEvent,
+  NativeScrollEvent,
+} from "react-native";
 
 function Feed() {
   const scrollY = useRef(0);

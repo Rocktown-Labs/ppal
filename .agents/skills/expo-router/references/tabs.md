@@ -6,13 +6,13 @@ Always prefer NativeTabs from 'expo-router/unstable-native-tabs' for the best iO
 
 ## SDK Compatibility
 
-| Aspect        | SDK 54                                                  | SDK 55+                                                     |
-| ------------- | ------------------------------------------------------- | ----------------------------------------------------------- |
-| Import        | `import { NativeTabs, Icon, Label, Badge, VectorIcon }` | `import { NativeTabs }` only                                |
-| Icon          | `<Icon sf="house.fill" />`                              | `<NativeTabs.Trigger.Icon sf="house.fill" />`               |
-| Label         | `<Label>Home</Label>`                                   | `<NativeTabs.Trigger.Label>Home</NativeTabs.Trigger.Label>` |
-| Badge         | `<Badge>9+</Badge>`                                     | `<NativeTabs.Trigger.Badge>9+</NativeTabs.Trigger.Badge>`   |
-| Android icons | `drawable` prop                                         | `md` prop (Material Symbols)                                |
+| Aspect | SDK 54 | SDK 55+ |
+| --- | --- | --- |
+| Import | `import { NativeTabs, Icon, Label, Badge, VectorIcon }` | `import { NativeTabs }` only |
+| Icon | `<Icon sf="house.fill" />` | `<NativeTabs.Trigger.Icon sf="house.fill" />` |
+| Label | `<Label>Home</Label>` | `<NativeTabs.Trigger.Label>Home</NativeTabs.Trigger.Label>` |
+| Badge | `<Badge>9+</Badge>` | `<NativeTabs.Trigger.Badge>9+</NativeTabs.Trigger.Badge>` |
+| Android icons | `drawable` prop | `md` prop (Material Symbols) |
 
 All examples below use SDK 55 syntax. For SDK 54, replace `NativeTabs.Trigger.Icon/Label/Badge` with standalone `Icon`, `Label`, `Badge` imports.
 
@@ -192,7 +192,13 @@ import { NativeTabs } from "expo-router/unstable-native-tabs";
 import { useState } from "react";
 import { Pressable, Text, View } from "react-native";
 
-function MiniPlayer({ isPlaying, onToggle }: { isPlaying: boolean; onToggle: () => void }) {
+function MiniPlayer({
+  isPlaying,
+  onToggle,
+}: {
+  isPlaying: boolean;
+  onToggle: () => void;
+}) {
   const placement = NativeTabs.BottomAccessory.usePlacement();
   if (placement === "inline") {
     return (
@@ -209,7 +215,10 @@ export default function TabLayout() {
   return (
     <NativeTabs>
       <NativeTabs.BottomAccessory>
-        <MiniPlayer isPlaying={isPlaying} onToggle={() => setIsPlaying(!isPlaying)} />
+        <MiniPlayer
+          isPlaying={isPlaying}
+          onToggle={() => setIsPlaying(!isPlaying)}
+        />
       </NativeTabs.BottomAccessory>
       <NativeTabs.Trigger name="index">
         <NativeTabs.Trigger.Icon sf="house.fill" md="home" />
@@ -291,7 +300,10 @@ import Stack from "expo-router/stack";
 export default function HomeStack() {
   return (
     <Stack>
-      <Stack.Screen name="index" options={{ title: "Home", headerLargeTitleEnabled: true }} />
+      <Stack.Screen
+        name="index"
+        options={{ title: "Home", headerLargeTitleEnabled: true }}
+      />
       <Stack.Screen name="details" options={{ title: "Details" }} />
     </Stack>
   );
@@ -387,7 +399,11 @@ Configure in app.json:
 7. **Header buttons flicker when navigating between tabs**: Make sure the app is wrapped in a `ThemeProvider`
 
 ```tsx
-import { ThemeProvider, DarkTheme, DefaultTheme } from "expo-router/react-navigation";
+import {
+  ThemeProvider,
+  DarkTheme,
+  DefaultTheme,
+} from "expo-router/react-navigation";
 import { useColorScheme } from "react-native";
 import { Stack } from "expo-router";
 

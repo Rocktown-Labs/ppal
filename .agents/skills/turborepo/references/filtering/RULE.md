@@ -141,10 +141,10 @@ turbo run build --filter=web --filter=api   # runs in both
 
 ## Quick Reference: Changed Packages
 
-| Goal                               | Command                                                    |
-| ---------------------------------- | ---------------------------------------------------------- |
-| Changed + dependents (recommended) | `turbo run build --affected`                               |
-| Custom base branch                 | `TURBO_SCM_BASE=origin/develop turbo run build --affected` |
-| Only changed (no dependents)       | `turbo run build --filter=[origin/main]`                   |
-| Changed + dependencies             | `turbo run build --filter=[origin/main]...`                |
-| Since last commit                  | `turbo run build --filter=...[HEAD^1]`                     |
+| Goal | Command |
+| --- | --- |
+| Changed + dependents (recommended) | `turbo run build --affected` |
+| Custom base branch | `TURBO_SCM_BASE=origin/develop turbo run build --affected` |
+| Only changed (no dependents) | `turbo run build --filter=[origin/main]` |
+| Changed + dependencies | `turbo run build --filter=[origin/main]...` |
+| Since last commit | `turbo run build --filter=...[HEAD^1]` |

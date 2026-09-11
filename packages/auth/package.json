@@ -12,14 +12,21 @@
   "scripts": {},
   "dependencies": {
     "@better-auth/expo": "catalog:",
+    "@better-auth/passkey": "1.7.1",
+    "@better-auth/stripe": "1.7.1",
     "@ppal/db": "workspace:*",
     "@ppal/env": "workspace:*",
+    "bcryptjs": "^3.0.2",
     "better-auth": "catalog:",
     "dotenv": "catalog:",
+    "resend": "^6.27.0",
+    "stripe": "^22.6.2",
     "zod": "catalog:"
   },
   "devDependencies": {
     "@ppal/config": "workspace:*",
+    "@simplewebauthn/server": "13.3.3",
+    "@types/bcryptjs": "^3.0.0",
     "typescript": "^6.0.3"
   }
 }

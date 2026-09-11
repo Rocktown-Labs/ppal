@@ -9,16 +9,12 @@ license: MIT
 
 ## Start Here — read before doing anything
 
-**Do not guess the skill from project files alone.** Many Expo goals look similar from
-the filesystem but need different skills.
+**Do not guess the skill from project files alone.** Many Expo goals look similar from the filesystem but need different skills.
 
-1. **Confirm this is Expo or EAS work** — the request mentions Expo or EAS, or
-   `package.json` has an `expo` dependency. Otherwise this skill does not apply.
-   A native app using EAS for delivery qualifies without an Expo runtime.
+1. **Confirm this is Expo or EAS work** — the request mentions Expo or EAS, or `package.json` has an `expo` dependency. Otherwise this skill does not apply. A native app using EAS for delivery qualifies without an Expo runtime.
 2. **Read the user's goal** — what outcome do they want, in plain terms?
 3. **Classify it** using the Skill Map below, translating casual phrasing to a goal.
-4. **Confirm intent** if ambiguous ("Sounds like you want to ship to the stores — that's
-   `eas-app-stores`. Right?"), then load that skill's `SKILL.md` and follow it.
+4. **Confirm intent** if ambiguous ("Sounds like you want to ship to the stores — that's `eas-app-stores`. Right?"), then load that skill's `SKILL.md` and follow it.
 5. **Trust the leaf skill** — it has its own detection logic and steps. Don't improvise.
 
 ## Skill Map (by goal)
@@ -77,38 +73,19 @@ Some everyday phrasings don't obviously map to a skill name — translate before
 
 Apply the rules that match the project and the requested task.
 
-- **Native app using EAS for delivery?** Route to `eas-app-stores`; its
-  `references/native-ios.md` covers SwiftUI/UIKit on iOS. Keep the existing native
-  project. Apply EAS auth/linking below; Expo scaffolding, SDK, and package-install
-  rules do not apply to this path.
-- **Starting a new Expo app?** Start one the standard way before routing to a feature skill:
-  `npx create-expo-app@latest`, laying out folders per `expo-project-structure`. Then
-  classify the user's goal and route.
-- **Detect the SDK version** before giving version-specific advice: read the `expo`
-  version in `package.json` (and `app.json` / `app.config.{js,ts}`). Many APIs and
-  defaults differ by SDK.
-- **Read the docs for that SDK, not `latest`.** Use the version-pinned URL, e.g.
-  `https://docs.expo.dev/versions/v56.0.0/sdk/ui/` on SDK 56 instead of
-  `https://docs.expo.dev/versions/latest/sdk/ui/` — the `latest` pages track the newest
-  SDK and can document APIs the project does not have yet.
-- **Moving to a newer SDK is its own task** — load `expo-upgrade` instead of bumping
-  versions by hand.
-- **Managed vs. bare/prebuild**: the presence of committed `ios/` and `android/`
-  directories means native projects exist (prebuild or bare). Config-plugin and
-  native-setup steps differ — note which one the project is in.
-- **Install packages with `npx expo install <pkg>`**, not raw `npm`/`yarn`/`pnpm add`,
-  so versions stay compatible with the project's SDK.
-- **EAS auth & linking** (only needed for build/submit/update/observe/workflows): check
-  login with `eas whoami`, log in with `eas login`. A project is linked when
-  `extra.eas.projectId` exists in the app config; create it with `eas init` if missing.
+- **Native app using EAS for delivery?** Route to `eas-app-stores`; its `references/native-ios.md` covers SwiftUI/UIKit on iOS. Keep the existing native project. Apply EAS auth/linking below; Expo scaffolding, SDK, and package-install rules do not apply to this path.
+- **Starting a new Expo app?** Start one the standard way before routing to a feature skill: `npx create-expo-app@latest`, laying out folders per `expo-project-structure`. Then classify the user's goal and route.
+- **Detect the SDK version** before giving version-specific advice: read the `expo` version in `package.json` (and `app.json` / `app.config.{js,ts}`). Many APIs and defaults differ by SDK.
+- **Read the docs for that SDK, not `latest`.** Use the version-pinned URL, e.g. `https://docs.expo.dev/versions/v56.0.0/sdk/ui/` on SDK 56 instead of `https://docs.expo.dev/versions/latest/sdk/ui/` — the `latest` pages track the newest SDK and can document APIs the project does not have yet.
+- **Moving to a newer SDK is its own task** — load `expo-upgrade` instead of bumping versions by hand.
+- **Managed vs. bare/prebuild**: the presence of committed `ios/` and `android/` directories means native projects exist (prebuild or bare). Config-plugin and native-setup steps differ — note which one the project is in.
+- **Install packages with `npx expo install <pkg>`**, not raw `npm`/`yarn`/`pnpm add`, so versions stay compatible with the project's SDK.
+- **EAS auth & linking** (only needed for build/submit/update/observe/workflows): check login with `eas whoami`, log in with `eas login`. A project is linked when `extra.eas.projectId` exists in the app config; create it with `eas init` if missing.
 
 ## When to skip the router hop
 
-- Only when the user explicitly named a specific `expo-*` / `eas-*` skill → load that
-  skill directly.
-- A fully-specified task (SDK version pinned, file layout given, libraries named) is
-  **not** a reason to skip: the shared rules above still apply — check them, then route
-  to the matching leaf skill.
+- Only when the user explicitly named a specific `expo-*` / `eas-*` skill → load that skill directly.
+- A fully-specified task (SDK version pinned, file layout given, libraries named) is **not** a reason to skip: the shared rules above still apply — check them, then route to the matching leaf skill.
 
 ## Submitting Feedback
 
@@ -118,5 +95,4 @@ If you encounter errors, misleading or outdated information in this skill, repor
 npx --yes submit-expo-feedback@latest --category skills --subject "expo-overview" "<actionable feedback>"
 ```
 
-Only submit when you have something specific and actionable to report. Include as much relevant context as possible.
-If an AI agent repeatedly failed or the user had to take over an Expo task, load the expo-skill-feedback skill and follow its eval-candidate flow instead of reusing the command above.
+Only submit when you have something specific and actionable to report. Include as much relevant context as possible. If an AI agent repeatedly failed or the user had to take over an Expo task, load the expo-skill-feedback skill and follow its eval-candidate flow instead of reusing the command above.

@@ -1,0 +1,23 @@
+{
+  "name": "@ppal/domain",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./tracking/evaluate-leg": "./src/tracking/evaluate-leg.ts",
+    "./tracking/evaluate-ticket": "./src/tracking/evaluate-ticket.ts",
+    "./tracking/types": "./src/tracking/types.ts"
+  },
+  "scripts": {
+    "check-types": "tsc --noEmit",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "@ppal/contracts": "workspace:*"
+  },
+  "devDependencies": {
+    "@ppal/config": "workspace:*",
+    "@types/bun": "^1.3.10",
+    "typescript": "^6.0.3"
+  }
+}

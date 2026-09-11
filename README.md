@@ -15,6 +15,10 @@ This project was created with [Better-T-Stack](https://github.com/AmanVarshney01
 - **Drizzle** - TypeScript-first ORM
 - **Cloudflare D1** - Database engine
 - **Authentication** - Better-Auth
+- **Billing** - Better Auth Stripe plugin + RevenueCat entitlement webhooks
+- **Uploads** - private R2 objects with SHA-256 verification
+- **Async processing** - Cloudflare Queues with dead-letter queues
+- **Sports tracking** - shared Sportradar event polling and deterministic settlement
 - **Turborepo** - Optimized monorepo build system
 - **Oxlint** - Oxlint + Oxfmt (linting & formatting)
 - **Husky** - Git hooks for code quality
@@ -47,9 +51,7 @@ Then, run the development server:
 bun run dev
 ```
 
-Open [http://localhost:3001](http://localhost:3001) in your browser to see the web application.
-Use the Expo Go app to run the mobile application.
-The API is running at [http://localhost:3000](http://localhost:3000).
+Open [http://localhost:3001](http://localhost:3001) in your browser to see the web application. Use the Expo Go app to run the mobile application. The API is running at [http://localhost:3000](http://localhost:3000).
 
 ## UI Customization
 
@@ -88,6 +90,15 @@ If you want to add app-specific blocks instead of shared primitives, run the sha
 - Destroy: bun run destroy
 
 `alchemy login --configure` stores the selected Cloudflare, Neon, PlanetScale, and/or Prisma provider profiles under `~/.alchemy`; no provider-specific setup command is required by this scaffold.
+
+Copy `apps/server/.env.example` to `apps/server/.env` and provide real provider credentials before running Alchemy. Production uses `myparlaypal.com` for the TanStack app and `api.myparlaypal.com` for the Hono Worker.
+
+Configure provider webhooks after the first production deployment:
+
+- Stripe: `https://api.myparlaypal.com/api/auth/stripe/webhook`
+- RevenueCat: `https://api.myparlaypal.com/api/v1/webhooks/revenuecat`
+
+Use the Better Auth subscription endpoints under `/api/auth/subscription/*` for Checkout and the Stripe billing portal. Configure RevenueCat to use the Better Auth user ID as its App User ID; anonymous RevenueCat IDs are deliberately not trusted for server entitlements.
 
 Deploys are staged and default to a personal `dev_<username>` stage. For production, run the deploy with an explicit stage from `packages/infra`:
 

@@ -1,0 +1,60 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "ppal-server",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-09-10",
+  "compatibility_flags": ["nodejs_compat"],
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "ppal-db",
+      "database_id": "ppal-local-db",
+      "migrations_dir": "../../packages/db/src/migrations",
+    },
+  ],
+  "r2_buckets": [
+    {
+      "binding": "R2_UPLOADS",
+      "bucket_name": "ppal-uploads",
+    },
+  ],
+  "queues": {
+    "producers": [
+      {
+        "binding": "EXTRACTION_QUEUE",
+        "queue": "extraction-queue",
+      },
+      {
+        "binding": "NOTIFICATION_QUEUE",
+        "queue": "notification-queue",
+      },
+      {
+        "binding": "SPORTS_QUEUE",
+        "queue": "sports-poll-queue",
+      },
+    ],
+    "consumers": [
+      {
+        "queue": "extraction-queue",
+        "max_batch_size": 5,
+        "max_batch_timeout": 1,
+        "max_retries": 5,
+      },
+      {
+        "queue": "sports-poll-queue",
+        "max_batch_size": 10,
+        "max_batch_timeout": 1,
+        "max_retries": 5,
+      },
+      {
+        "queue": "notification-queue",
+        "max_batch_size": 25,
+        "max_batch_timeout": 1,
+        "max_retries": 5,
+      },
+    ],
+  },
+  "triggers": {
+    "crons": ["*/1 * * * *", "5 */6 * * *"],
+  },
+}

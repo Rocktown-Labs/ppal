@@ -214,7 +214,11 @@ On Android an SF Symbol source renders nothing - an app that ships SF-only icono
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 
 process.env.EXPO_OS === "ios" ? (
-  <SymbolView name="gear" tintColor={colors.label} style={{ width: 24, height: 24 }} />
+  <SymbolView
+    name="gear"
+    tintColor={colors.label}
+    style={{ width: 24, height: 24 }}
+  />
 ) : (
   <MaterialIcons name="settings" size={24} color={colors.label} />
 );

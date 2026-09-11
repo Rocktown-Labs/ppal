@@ -37,9 +37,18 @@ function Camera({ onPicture }: { onPicture: (uri: string) => Promise<void> }) {
           backgroundColor: colors.systemBackground,
         }}
       >
-        <Text style={{ color: colors.label, padding: 16 }}>Camera access is required</Text>
-        <GlassView isInteractive tintColor={colors.systemBlue} style={{ borderRadius: 12 }}>
-          <Pressable onPress={requestPermission} style={{ padding: 12, borderRadius: 12 }}>
+        <Text style={{ color: colors.label, padding: 16 }}>
+          Camera access is required
+        </Text>
+        <GlassView
+          isInteractive
+          tintColor={colors.systemBlue}
+          style={{ borderRadius: 12 }}
+        >
+          <Pressable
+            onPress={requestPermission}
+            style={{ padding: 12, borderRadius: 12 }}
+          >
             <Text style={{ color: "white" }}>Grant Permission</Text>
           </Pressable>
         </GlassView>
@@ -82,11 +91,20 @@ function Camera({ onPicture }: { onPicture: (uri: string) => Promise<void> }) {
         <GlassView isInteractive style={{ padding: 8, borderRadius: 99 }}>
           <Pressable
             onPress={takePhoto}
-            style={{ width: 64, height: 64, borderRadius: 99, backgroundColor: "white" }}
+            style={{
+              width: 64,
+              height: 64,
+              borderRadius: 99,
+              backgroundColor: "white",
+            }}
           />
         </GlassView>
         <View
-          style={{ flexDirection: "row", justifyContent: "space-around", paddingHorizontal: 8 }}
+          style={{
+            flexDirection: "row",
+            justifyContent: "space-around",
+            paddingHorizontal: 8,
+          }}
         >
           <GlassButton onPress={selectPhoto} icon="photo" />
           <GlassButton
@@ -107,7 +125,9 @@ Use `expo-audio` not `expo-av`:
 ```tsx
 import { useAudioPlayer } from "expo-audio";
 
-const player = useAudioPlayer({ uri: "https://stream.nightride.fm/rektory.mp3" });
+const player = useAudioPlayer({
+  uri: "https://stream.nightride.fm/rektory.mp3",
+});
 
 <Button title="Play" onPress={() => player.play()} />;
 ```
@@ -166,7 +186,9 @@ const player = useVideoPlayer(videoSource, (player) => {
   player.play();
 });
 
-const { isPlaying } = useEvent(player, "playingChange", { isPlaying: player.playing });
+const { isPlaying } = useEvent(player, "playingChange", {
+  isPlaying: player.playing,
+});
 
 <VideoView player={player} fullscreenOptions={{}} allowsPictureInPicture />;
 ```
