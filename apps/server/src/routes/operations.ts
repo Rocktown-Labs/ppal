@@ -44,7 +44,10 @@ const authGuard = async (
 
 export const createOperationRoutes = () => {
   const app = new Hono();
-  app.use("*", authGuard);
+  // Scope the operations-only bearer guard to the operations namespace. The
+  // route group is mounted at /api/v1 alongside user-facing routes; a global
+  // wildcard here would reject every route registered after this group.
+  app.use("/operations/*", authGuard);
   return app
     .get("/operations/health", async (c) => {
       const [failures, stuckUploads, staleLeases] = await env.DB.batch([
