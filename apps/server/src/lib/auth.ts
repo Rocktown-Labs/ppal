@@ -46,10 +46,29 @@ const getSessionFromHandler = async (
     headers: request.headers,
     request,
   })) as AuthSession | null;
-  if (!payload || !isRecord(payload.user)) {
+  if (payload && isRecord(payload.user)) {
+    const { email, id, name } = payload.user;
+    if (
+      typeof email === "string" &&
+      typeof id === "string" &&
+      typeof name === "string"
+    ) {
+      return { user: { email, id, name } };
+    }
+  }
+
+  // Cloudflare's request adapter can lose the per-request auth context on a
+  // direct API call. The same handler over the worker origin remains the
+  // authoritative fallback and preserves Better Auth's cookie validation.
+  const response = await fetch(request.clone());
+  if (!response.ok) {
     return null;
   }
-  const { email, id, name } = payload.user;
+  const responsePayload: unknown = await response.json();
+  if (!isRecord(responsePayload) || !isRecord(responsePayload.user)) {
+    return null;
+  }
+  const { email, id, name } = responsePayload.user;
   if (
     typeof email !== "string" ||
     typeof id !== "string" ||
