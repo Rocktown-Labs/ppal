@@ -174,6 +174,29 @@ const routes = app
         .map(({ method, path }) => ({ method, path })),
     })
   )
+  .get("/api/v1/me", async (c) => {
+    const user = await getAuthUser(auth, c.req.raw);
+    if (!user) {
+      return c.json({ code: "UNAUTHORIZED", error: "Unauthorized" }, 401);
+    }
+    const profile = await env.DB.prepare(
+      `SELECT bio, is_public, username FROM profiles WHERE user_id = ?`
+    )
+      .bind(user.id)
+      .first<{ bio: string | null; is_public: number; username: string }>();
+    return c.json({
+      user: {
+        ...user,
+        profile: profile
+          ? {
+              bio: profile.bio,
+              isPublic: profile.is_public === 1,
+              username: profile.username,
+            }
+          : null,
+      },
+    });
+  })
   .route("/api/v1/uploads", createUploadRoutes(auth))
   .route("/api/v1/tickets", createTicketRoutes(auth))
   .route("/api/v1", createHistoricalImportRoutes(auth))
