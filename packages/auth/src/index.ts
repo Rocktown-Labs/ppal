@@ -15,7 +15,6 @@ import { twoFactor } from "better-auth/plugins";
 import { Resend } from "resend";
 import StripeSdk from "stripe";
 
-const stripeClient = new StripeSdk(env.STRIPE_SECRET_KEY);
 const useSecureCookies = env.BETTER_AUTH_URL.startsWith("https://");
 
 const getResendClient = (): Resend | null => {
@@ -128,8 +127,64 @@ const synchronizeStripeEntitlement = async (
     .run();
 };
 
+const createStripePlugin = () => {
+  const stripeSecretKey = env.STRIPE_SECRET_KEY?.trim();
+  const stripeWebhookSecret = env.STRIPE_WEBHOOK_SECRET?.trim();
+  const proPriceId = env.STRIPE_PRO_PRICE_ID?.trim();
+  const creatorPriceId = env.STRIPE_CREATOR_PRICE_ID?.trim();
+  if (
+    !(stripeSecretKey && stripeWebhookSecret && proPriceId && creatorPriceId)
+  ) {
+    return null;
+  }
+  const stripeClient = new StripeSdk(stripeSecretKey);
+  return stripe({
+    stripeClient,
+    stripeWebhookSecret,
+    subscription: {
+      enabled: true,
+      onSubscriptionComplete: async ({ subscription }) => {
+        await synchronizeStripeEntitlement(subscription);
+      },
+      onSubscriptionCreated: async ({ subscription }) => {
+        await synchronizeStripeEntitlement(subscription);
+      },
+      onSubscriptionDeleted: async ({ subscription }) => {
+        await synchronizeStripeEntitlement(subscription);
+      },
+      onSubscriptionUpdate: async ({ subscription }) => {
+        await synchronizeStripeEntitlement(subscription);
+      },
+      plans: [
+        {
+          annualDiscountPriceId: env.STRIPE_PRO_ANNUAL_PRICE_ID,
+          limits: { monthlyUploads: 500 },
+          name: "pro",
+          priceId: proPriceId,
+        },
+        {
+          annualDiscountPriceId: env.STRIPE_CREATOR_ANNUAL_PRICE_ID,
+          limits: { monthlyUploads: 1000 },
+          name: "creator",
+          priceId: creatorPriceId,
+        },
+      ],
+      getCheckoutSessionParams: () => ({
+        params:
+          env.STRIPE_TAX_ENABLED === "true"
+            ? {
+                automatic_tax: { enabled: true },
+                customer_update: { address: "auto" },
+              }
+            : {},
+      }),
+    },
+  });
+};
+
 export const createAuth = () => {
   const db = createDb();
+  const stripePlugin = createStripePlugin();
 
   return betterAuth({
     database: drizzleAdapter(db, {
@@ -225,48 +280,7 @@ export const createAuth = () => {
         issuer: "ParlayPal",
       }),
       passkey(),
-      stripe({
-        stripeClient,
-        stripeWebhookSecret: env.STRIPE_WEBHOOK_SECRET,
-        subscription: {
-          enabled: true,
-          onSubscriptionComplete: async ({ subscription }) => {
-            await synchronizeStripeEntitlement(subscription);
-          },
-          onSubscriptionCreated: async ({ subscription }) => {
-            await synchronizeStripeEntitlement(subscription);
-          },
-          onSubscriptionDeleted: async ({ subscription }) => {
-            await synchronizeStripeEntitlement(subscription);
-          },
-          onSubscriptionUpdate: async ({ subscription }) => {
-            await synchronizeStripeEntitlement(subscription);
-          },
-          plans: [
-            {
-              annualDiscountPriceId: env.STRIPE_PRO_ANNUAL_PRICE_ID,
-              limits: { monthlyUploads: 500 },
-              name: "pro",
-              priceId: env.STRIPE_PRO_PRICE_ID,
-            },
-            {
-              annualDiscountPriceId: env.STRIPE_CREATOR_ANNUAL_PRICE_ID,
-              limits: { monthlyUploads: 1000 },
-              name: "creator",
-              priceId: env.STRIPE_CREATOR_PRICE_ID,
-            },
-          ],
-          getCheckoutSessionParams: () => ({
-            params:
-              env.STRIPE_TAX_ENABLED === "true"
-                ? {
-                    automatic_tax: { enabled: true },
-                    customer_update: { address: "auto" },
-                  }
-                : {},
-          }),
-        },
-      }),
+      ...(stripePlugin ? [stripePlugin] : []),
     ],
   });
 };
