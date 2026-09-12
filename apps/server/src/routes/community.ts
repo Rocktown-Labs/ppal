@@ -1416,6 +1416,18 @@ export const createCommunityRoutes = (auth: Auth) =>
             403
           );
         }
+        const message = await env.DB.prepare(
+          "SELECT 1 AS present FROM community_messages WHERE id = ? AND community_id = ? AND channel_id = ?"
+        )
+          .bind(
+            c.req.param("messageId"),
+            community.id,
+            c.req.param("channelId")
+          )
+          .first<{ present: number }>();
+        if (!message) {
+          return c.json({ code: "NOT_FOUND", error: "Message not found" }, 404);
+        }
         const input = c.req.valid("json");
         try {
           await env.DB.prepare(
