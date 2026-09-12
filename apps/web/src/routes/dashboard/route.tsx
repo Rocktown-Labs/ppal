@@ -1,3 +1,4 @@
+import { unsubscribe } from "@mmmike/web-push/client";
 import {
   Link,
   Outlet,
@@ -55,6 +56,14 @@ const isNavItemActive = (
 };
 
 const handleSignOut = async () => {
+  try {
+    const endpoint = await unsubscribe();
+    if (endpoint) {
+      await api.notifications.removeWebPushSubscription(endpoint);
+    }
+  } catch {
+    // Push cleanup is best effort; sign out must still complete.
+  }
   await authClient.signOut();
   window.location.href = "/";
 };
