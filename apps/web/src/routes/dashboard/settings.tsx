@@ -1,3 +1,10 @@
+import {
+  getCurrentSubscription,
+  isPushSupported,
+  serializeSubscription,
+  subscribe,
+  unsubscribe,
+} from "@mmmike/web-push/client";
 import { createFileRoute } from "@tanstack/react-router";
 import {
   Bell,
@@ -39,6 +46,38 @@ const getPlanQuota = (plan: string) => {
   return "5 / mo";
 };
 
+const enableBrowserPush = async (): Promise<void> => {
+  const config = await api.notifications.getWebPushConfig();
+  if (!config.enabled || !config.publicKey) {
+    throw new Error("Browser push notifications are not configured yet");
+  }
+  if (!isPushSupported()) {
+    throw new Error(
+      "This browser does not support push notifications. Try Chrome, Edge, Firefox, or an installed iOS web app."
+    );
+  }
+  await navigator.serviceWorker.register("/sw.js");
+  const result = await subscribe(config.publicKey);
+  if (result.status === "denied") {
+    throw new Error(
+      "Notifications are blocked. Allow notifications for ParlayPal in your browser settings and try again."
+    );
+  }
+  if (result.status === "unsupported") {
+    throw new Error("This browser does not support push notifications");
+  }
+  await api.notifications.saveWebPushSubscription(
+    serializeSubscription(result.subscription)
+  );
+};
+
+const disableBrowserPush = async (): Promise<void> => {
+  const endpoint = await unsubscribe();
+  if (endpoint) {
+    await api.notifications.removeWebPushSubscription(endpoint);
+  }
+};
+
 const SettingsComponent = () => {
   const [entitlement, setEntitlement] = useState<BillingEntitlement | null>(
     null
@@ -60,6 +99,9 @@ const SettingsComponent = () => {
   });
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [isWebPushEnabled, setIsWebPushEnabled] = useState(false);
+  const [isWebPushSaving, setIsWebPushSaving] = useState(false);
+  const [webPushAvailable, setWebPushAvailable] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -114,6 +156,30 @@ const SettingsComponent = () => {
     };
   }, []);
 
+  useEffect(() => {
+    let active = true;
+    const fetchWebPushStatus = async () => {
+      try {
+        const config = await api.notifications.getWebPushConfig();
+        if (!active) {
+          return;
+        }
+        setWebPushAvailable(config.enabled && isPushSupported());
+        if (config.enabled && isPushSupported()) {
+          setIsWebPushEnabled(Boolean(await getCurrentSubscription()));
+        }
+      } catch {
+        if (active) {
+          setWebPushAvailable(false);
+        }
+      }
+    };
+    void fetchWebPushStatus();
+    return () => {
+      active = false;
+    };
+  }, []);
+
   const handleCopyReferral = () => {
     if (!referral?.shareUrl) {
       return;
@@ -138,6 +204,39 @@ const SettingsComponent = () => {
     }
   };
 
+  const handleEnableWebPush = async () => {
+    setIsWebPushSaving(true);
+    try {
+      await enableBrowserPush();
+      setIsWebPushEnabled(true);
+      setWebPushAvailable(true);
+      toast.success("Browser notifications enabled");
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Could not enable browser notifications"
+      );
+    }
+    setIsWebPushSaving(false);
+  };
+
+  const handleDisableWebPush = async () => {
+    setIsWebPushSaving(true);
+    try {
+      await disableBrowserPush();
+      setIsWebPushEnabled(false);
+      toast.success("Browser notifications disabled");
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Could not disable browser notifications"
+      );
+    }
+    setIsWebPushSaving(false);
+  };
+
   if (isLoading) {
     return (
       <div className="flex h-96 items-center justify-center">
@@ -147,6 +246,12 @@ const SettingsComponent = () => {
   }
 
   const plan = entitlement?.plan || "free";
+  let webPushActionLabel = "Enable";
+  if (isWebPushSaving) {
+    webPushActionLabel = "Updating...";
+  } else if (isWebPushEnabled) {
+    webPushActionLabel = "Disable";
+  }
 
   return (
     <div className="mx-auto max-w-4xl space-y-8 pb-16">
@@ -326,6 +431,28 @@ const SettingsComponent = () => {
                 className="size-4 cursor-pointer accent-emerald-500"
               />
             </label>
+          </div>
+          <div className="flex flex-col gap-3 rounded-2xl border border-zinc-800 bg-zinc-950/40 p-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-xs font-semibold text-white">
+                Browser notifications
+              </p>
+              <p className="mt-1 text-[11px] text-zinc-500">
+                Get ticket updates even when ParlayPal is closed.
+                {!webPushAvailable &&
+                  " Push setup is not available on this browser or environment."}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={
+                isWebPushEnabled ? handleDisableWebPush : handleEnableWebPush
+              }
+              disabled={!webPushAvailable || isWebPushSaving}
+              className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3.5 py-2 text-xs font-bold text-emerald-400 transition hover:bg-emerald-500/20 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {webPushActionLabel}
+            </button>
           </div>
         </div>
 

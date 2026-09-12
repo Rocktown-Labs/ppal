@@ -411,6 +411,10 @@ GET    /api/v1/analytics/players/:id
 
 GET    /api/v1/notifications
 PATCH  /api/v1/notifications/:id/read
+GET    /api/v1/notifications/stream
+GET    /api/v1/notifications/web-push/config
+PUT    /api/v1/notifications/web-push/subscription
+DELETE /api/v1/notifications/web-push/subscription
 GET    /api/v1/settings/notifications
 PATCH  /api/v1/settings/notifications
 

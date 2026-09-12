@@ -10,6 +10,25 @@ export const notificationPreferencesSchema = z.object({
   ticketWon: z.boolean(),
 });
 
+export const webPushSubscriptionSchema = z.object({
+  endpoint: z
+    .string()
+    .url()
+    .max(2048)
+    .refine((value) => new URL(value).protocol === "https:", {
+      message: "Push subscription endpoint must use HTTPS",
+    }),
+  keys: z.object({
+    auth: z.string().min(1).max(256),
+    p256dh: z.string().min(1).max(256),
+  }),
+});
+
+export const webPushConfigSchema = z.object({
+  enabled: z.boolean(),
+  publicKey: z.string().nullable(),
+});
+
 export const notificationSchema = z.object({
   body: z.string(),
   createdAt: z.string().datetime(),
@@ -25,3 +44,5 @@ export type NotificationContract = z.infer<typeof notificationSchema>;
 export type NotificationPreferences = z.infer<
   typeof notificationPreferencesSchema
 >;
+export type WebPushSubscription = z.infer<typeof webPushSubscriptionSchema>;
+export type WebPushConfig = z.infer<typeof webPushConfigSchema>;

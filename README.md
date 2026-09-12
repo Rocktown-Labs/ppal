@@ -95,6 +95,14 @@ Copy `packages/infra/.env.example` to `packages/infra/.env` only for a local Alc
 
 The Cloudflare deployment token must be scoped to the target account and the `myparlaypal.com` zone. Grant only the edit/read permissions Alchemy needs for Workers Scripts, D1, R2, Queues, Analytics Engine, and Workers Routes/custom domains. A token copied from an R2 S3 access-key flow is not a Cloudflare API token and will fail authentication.
 
+Browser push is opt-in from Dashboard → Settings. Generate one VAPID key pair and add `WEB_PUSH_VAPID_PRIVATE_KEY` as a secret and `WEB_PUSH_VAPID_PUBLIC_KEY` as an environment variable in both the `preview` and `production` GitHub environments. The optional subject defaults to `mailto:support@myparlaypal.com`. Generate keys locally with:
+
+```bash
+bun -e 'import { generateVapidKeys } from "@mmmike/web-push/vapid"; console.log(await generateVapidKeys())'
+```
+
+The public key is returned only to an authenticated browser. The private key stays in the Worker binding and is never exposed to the web bundle.
+
 Configure provider webhooks after the first production deployment:
 
 - Stripe: `https://api.myparlaypal.com/api/auth/stripe/webhook`

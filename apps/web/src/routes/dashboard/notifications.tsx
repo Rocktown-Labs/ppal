@@ -10,8 +10,8 @@ import {
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
+import { useNotificationFeed } from "@/components/notifications/notification-provider";
 import { api } from "@/lib/api";
-import type { NotificationItem } from "@/lib/api";
 
 const getNotificationIcon = (type: string) => {
   switch (type) {
@@ -33,7 +33,8 @@ const getNotificationIcon = (type: string) => {
 };
 
 const NotificationsComponent = () => {
-  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
+  const { markRead, notifications, replaceNotifications, unreadCount } =
+    useNotificationFeed();
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [filter, setFilter] = useState<"all" | "unread">("all");
@@ -44,7 +45,7 @@ const NotificationsComponent = () => {
     }
     try {
       const res = await api.notifications.list();
-      setNotifications(res.notifications);
+      replaceNotifications(res.notifications);
       setIsLoading(false);
       setIsRefreshing(false);
     } catch {
@@ -59,7 +60,7 @@ const NotificationsComponent = () => {
       try {
         const res = await api.notifications.list();
         if (active) {
-          setNotifications(res.notifications);
+          replaceNotifications(res.notifications);
           setIsLoading(false);
         }
       } catch {
@@ -72,16 +73,12 @@ const NotificationsComponent = () => {
     return () => {
       active = false;
     };
-  }, []);
+  }, [replaceNotifications]);
 
   const handleMarkRead = async (id: string) => {
     try {
       await api.notifications.markRead(id);
-      setNotifications((prev) =>
-        prev.map((n) =>
-          n.id === id ? { ...n, readAt: new Date().toISOString() } : n
-        )
-      );
+      markRead(id);
       toast.success("Notification marked as read");
     } catch {
       toast.error("Failed to mark as read");
@@ -94,8 +91,6 @@ const NotificationsComponent = () => {
     }
     return true;
   });
-
-  const unreadCount = notifications.filter((n) => n.readAt === null).length;
 
   return (
     <div className="mx-auto max-w-4xl space-y-6 pb-16">

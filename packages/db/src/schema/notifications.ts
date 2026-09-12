@@ -109,7 +109,7 @@ export const notificationDeliveries = sqliteTable(
   (table) => [
     check(
       "notification_deliveries_channel_check",
-      sql`${table.channel} in ('push', 'email')`
+      sql`${table.channel} in ('push', 'email', 'web_push')`
     ),
     check(
       "notification_deliveries_status_check",
@@ -120,6 +120,22 @@ export const notificationDeliveries = sqliteTable(
       table.updatedAt
     ),
   ]
+);
+
+export const webPushSubscriptions = sqliteTable(
+  "web_push_subscriptions",
+  {
+    auth: text("auth").notNull(),
+    createdAt: createdAtColumn(),
+    endpoint: text("endpoint").primaryKey(),
+    lastSeenAt: integer("last_seen_at", { mode: "timestamp_ms" }).notNull(),
+    p256dh: text("p256dh").notNull(),
+    updatedAt: updatedAtColumn(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+  },
+  (table) => [index("web_push_subscriptions_user_idx").on(table.userId)]
 );
 
 export const notificationStreamLeases = sqliteTable(

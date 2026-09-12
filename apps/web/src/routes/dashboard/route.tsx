@@ -20,6 +20,10 @@ import {
 import { useEffect, useState } from "react";
 
 import { UserButton } from "@/components/auth/user/user-button";
+import {
+  NotificationProvider,
+  useNotificationFeed,
+} from "@/components/notifications/notification-provider";
 import { api } from "@/lib/api";
 import type { CurrentUserWithProfile } from "@/lib/api";
 import { authClient } from "@/lib/auth-client";
@@ -55,7 +59,8 @@ const handleSignOut = async () => {
   window.location.href = "/";
 };
 
-const DashboardLayout = () => {
+const DashboardLayoutContent = () => {
+  const { unreadCount } = useNotificationFeed();
   const routerState = useRouterState();
   const currentPath = routerState.location.pathname;
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -111,6 +116,7 @@ const DashboardLayout = () => {
     {
       icon: Bell,
       label: "Notifications",
+      badge: unreadCount > 0 ? String(Math.min(unreadCount, 99)) : undefined,
       to: "/dashboard/notifications",
     },
     {
@@ -249,6 +255,11 @@ const DashboardLayout = () => {
                     <Icon className="size-4" />
                     <span>{item.label}</span>
                   </div>
+                  {item.badge ? (
+                    <span className="rounded bg-emerald-500/20 px-1.5 py-0.5 text-[10px] font-bold text-emerald-400">
+                      {item.badge}
+                    </span>
+                  ) : null}
                 </Link>
               );
             })}
@@ -273,6 +284,12 @@ const DashboardLayout = () => {
     </div>
   );
 };
+
+const DashboardLayout = () => (
+  <NotificationProvider>
+    <DashboardLayoutContent />
+  </NotificationProvider>
+);
 
 export const Route = createFileRoute("/dashboard")({
   ssr: false,

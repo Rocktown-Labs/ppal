@@ -21,6 +21,10 @@ flowchart TD
   NotifyQ --> Delivery[Delivery consumer]
   Delivery --> Resend[Resend email]
   Delivery --> Expo[Expo push]
+  Delivery --> WebPush[Encrypted Web Push]
+  WebPush --> PushService[Browser push service]
+  PushService --> SW[Web service worker]
+  SW --> OS[Browser/OS notification]
   D1 --> SSE[SSE notification stream]
   SSE --> Client
 
@@ -54,7 +58,8 @@ flowchart TD
 - R2 is private and stores only server-generated object keys. The upload endpoint validates ownership, declared length, MIME type, and the SHA-256 digest supplied at intent creation.
 - A sports event is fetched once per polling interval and fans out to every subscribed leg. This is the key scaling property: provider traffic grows with active events, not users.
 - Terminal queue failures are written to `operation_failures`. Replay repairs extraction state/quota or sports leases before enqueueing again, rather than blindly duplicating work.
-- Live updates use reconnectable SSE backed by durable notification rows. Email and push delivery run independently through the notification queue and preserve provider receipt IDs.
+- Live updates use reconnectable SSE backed by durable notification rows. Email, Expo push, and encrypted browser Web Push delivery run independently through the notification queue; expired browser subscriptions are pruned automatically.
+- Browser push subscriptions are authenticated, stored per user in D1, and accepted only for known HTTPS push-service hosts. The VAPID private key is a Worker secret; the public key is returned only to authenticated clients for subscription.
 
 ## Provider coverage
 

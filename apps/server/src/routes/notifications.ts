@@ -2,7 +2,10 @@
 
 import { zValidator } from "@hono/zod-validator";
 import type { Auth } from "@ppal/auth";
-import { notificationPreferencesSchema } from "@ppal/contracts/notifications";
+import {
+  notificationPreferencesSchema,
+  webPushSubscriptionSchema,
+} from "@ppal/contracts/notifications";
 import { env } from "@ppal/env/server";
 import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
@@ -13,6 +16,16 @@ import { safeJsonParse } from "../lib/database";
 const STREAM_DURATION_MS = 60_000;
 const STREAM_LEASE_MS = 75_000;
 const MAX_REPLAY_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+
+const isTrustedPushEndpoint = (endpoint: string): boolean => {
+  const hostname = new URL(endpoint).hostname.toLowerCase();
+  return (
+    hostname === "fcm.googleapis.com" ||
+    hostname === "updates.push.services.mozilla.com" ||
+    hostname.endsWith(".push.services.mozilla.com") ||
+    hostname.endsWith(".push.apple.com")
+  );
+};
 
 const preferenceSelect = `SELECT email_enabled, in_app_enabled, leg_lost,
   leg_won, push_enabled, ticket_lost, ticket_won
@@ -196,6 +209,91 @@ export const createNotificationRoutes = (auth: Auth) =>
         preferences: mapPreferences(preferences),
       });
     })
+    .get("/notifications/web-push/config", async (c) => {
+      const user = await getAuthUser(auth, c.req.raw.headers, {
+        authoritative: true,
+      });
+      if (!user) {
+        return c.json({ code: "UNAUTHORIZED", error: "Unauthorized" }, 401);
+      }
+      const publicKey = env.WEB_PUSH_VAPID_PUBLIC_KEY.trim();
+      return c.json({
+        enabled: Boolean(publicKey && env.WEB_PUSH_VAPID_PRIVATE_KEY),
+        publicKey: publicKey || null,
+      });
+    })
+    .put(
+      "/notifications/web-push/subscription",
+      zValidator("json", webPushSubscriptionSchema),
+      async (c) => {
+        const user = await getAuthUser(auth, c.req.raw.headers, {
+          authoritative: true,
+        });
+        if (!user) {
+          return c.json({ code: "UNAUTHORIZED", error: "Unauthorized" }, 401);
+        }
+        if (!env.WEB_PUSH_VAPID_PUBLIC_KEY.trim()) {
+          return c.json(
+            {
+              code: "WEB_PUSH_DISABLED",
+              error: "Browser push notifications are not configured",
+            },
+            503
+          );
+        }
+        const input = c.req.valid("json");
+        if (!isTrustedPushEndpoint(input.endpoint)) {
+          return c.json(
+            {
+              code: "INVALID_ENDPOINT",
+              error: "Unsupported browser push service endpoint",
+            },
+            400
+          );
+        }
+        const now = Date.now();
+        await env.DB.prepare(
+          `INSERT INTO web_push_subscriptions
+           (auth, endpoint, last_seen_at, p256dh, updated_at, user_id)
+           VALUES (?, ?, ?, ?, ?, ?)
+           ON CONFLICT(endpoint) DO UPDATE SET
+             auth = excluded.auth,
+             last_seen_at = excluded.last_seen_at,
+             p256dh = excluded.p256dh,
+             updated_at = excluded.updated_at,
+             user_id = excluded.user_id`
+        )
+          .bind(
+            input.keys.auth,
+            input.endpoint,
+            now,
+            input.keys.p256dh,
+            now,
+            user.id
+          )
+          .run();
+        return c.json({ subscribed: true });
+      }
+    )
+    .delete(
+      "/notifications/web-push/subscription",
+      zValidator("json", webPushSubscriptionSchema.pick({ endpoint: true })),
+      async (c) => {
+        const user = await getAuthUser(auth, c.req.raw.headers, {
+          authoritative: true,
+        });
+        if (!user) {
+          return c.json({ code: "UNAUTHORIZED", error: "Unauthorized" }, 401);
+        }
+        const { endpoint } = c.req.valid("json");
+        const result = await env.DB.prepare(
+          "DELETE FROM web_push_subscriptions WHERE endpoint = ? AND user_id = ?"
+        )
+          .bind(endpoint, user.id)
+          .run();
+        return c.json({ deleted: result.meta.changes > 0 });
+      }
+    )
     .patch(
       "/settings/notifications",
       zValidator("json", notificationPreferencesSchema),

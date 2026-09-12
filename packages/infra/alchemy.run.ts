@@ -124,6 +124,15 @@ export const server = Cloudflare.Worker("server", {
       namespaceId: rateLimitNamespaceOffset + 1002,
       simple: { limit: 20, period: 60 },
     }),
+    WEB_PUSH_VAPID_PRIVATE_KEY: Config.redacted(
+      "WEB_PUSH_VAPID_PRIVATE_KEY"
+    ).pipe(Config.withDefault(Redacted.make(""))),
+    WEB_PUSH_VAPID_PUBLIC_KEY: Config.string("WEB_PUSH_VAPID_PUBLIC_KEY").pipe(
+      Config.withDefault("")
+    ),
+    WEB_PUSH_VAPID_SUBJECT: Config.string("WEB_PUSH_VAPID_SUBJECT").pipe(
+      Config.withDefault("mailto:support@myparlaypal.com")
+    ),
     WEBHOOK_RATE_LIMIT: Cloudflare.RateLimit("webhook-rate-limit", {
       namespaceId: rateLimitNamespaceOffset + 1004,
       simple: { limit: 300, period: 60 },

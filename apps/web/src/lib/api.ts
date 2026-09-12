@@ -1,4 +1,8 @@
 import type {
+  WebPushConfig,
+  WebPushSubscription,
+} from "@ppal/contracts/notifications";
+import type {
   TicketContract,
   reviewTicketRequestSchema,
 } from "@ppal/contracts/tickets";
@@ -13,7 +17,7 @@ import { normalizeServerUrl } from "./server-url";
 
 export type ReviewTicketRequest = z.infer<typeof reviewTicketRequestSchema>;
 
-const BASE_URL = normalizeServerUrl(env.VITE_SERVER_URL);
+export const API_BASE_URL = normalizeServerUrl(env.VITE_SERVER_URL);
 const pathSegment = (value: string): string => encodeURIComponent(value);
 const UPLOAD_URL_PATTERN = /^\/api\/v1\/uploads\/[a-z0-9-]+\/content$/iu;
 
@@ -154,7 +158,7 @@ export interface ManualVerificationRequest {
 }
 
 const request = async <T>(path: string, init?: RequestInit): Promise<T> => {
-  const url = path.startsWith("http") ? path : `${BASE_URL}${path}`;
+  const url = path.startsWith("http") ? path : `${API_BASE_URL}${path}`;
   const response = await fetch(url, {
     ...init,
     credentials: "include",
@@ -198,8 +202,8 @@ export const resolveApiAsset = (
     return null;
   }
   try {
-    const url = new URL(path, BASE_URL);
-    const base = new URL(BASE_URL);
+    const url = new URL(path, API_BASE_URL);
+    const base = new URL(API_BASE_URL);
     const validPath = /^\/api\/v1\/avatar\/[a-z0-9_.-]+\/[a-z0-9_.-]+$/iu.test(
       url.pathname
     );
@@ -292,7 +296,7 @@ export const api = {
     uploadAvatar: async (file: File) => {
       const formData = new FormData();
       formData.append("avatar", file);
-      const url = `${BASE_URL}/api/v1/me/avatar`;
+      const url = `${API_BASE_URL}/api/v1/me/avatar`;
       const response = await fetch(url, {
         body: formData,
         credentials: "include",
@@ -323,6 +327,9 @@ export const api = {
         "/api/v1/settings/notifications"
       ),
 
+    getWebPushConfig: () =>
+      request<WebPushConfig>("/api/v1/notifications/web-push/config"),
+
     list: () =>
       request<{ notifications: NotificationItem[] }>("/api/v1/notifications"),
 
@@ -331,6 +338,24 @@ export const api = {
         `/api/v1/notifications/${pathSegment(id)}/read`,
         {
           method: "PATCH",
+        }
+      ),
+
+    removeWebPushSubscription: (endpoint: string) =>
+      request<{ deleted: boolean }>(
+        "/api/v1/notifications/web-push/subscription",
+        {
+          body: JSON.stringify({ endpoint }),
+          method: "DELETE",
+        }
+      ),
+
+    saveWebPushSubscription: (payload: WebPushSubscription) =>
+      request<{ subscribed: boolean }>(
+        "/api/v1/notifications/web-push/subscription",
+        {
+          body: JSON.stringify(payload),
+          method: "PUT",
         }
       ),
 
@@ -459,7 +484,7 @@ export const api = {
       if (!UPLOAD_URL_PATTERN.test(uploadUrl)) {
         throw new Error("The API returned an invalid upload destination");
       }
-      const url = `${BASE_URL}${uploadUrl}`;
+      const url = `${API_BASE_URL}${uploadUrl}`;
       const response = await fetch(url, {
         body: file,
         credentials: "include",
