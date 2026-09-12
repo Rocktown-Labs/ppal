@@ -11,7 +11,7 @@ import {
 import type { ReactNode } from "react";
 import { toast } from "sonner";
 
-import { API_BASE_URL } from "@/lib/api";
+import { API_BASE_URL, api } from "@/lib/api";
 import type { NotificationItem } from "@/lib/api";
 
 interface NotificationContextValue {
@@ -99,6 +99,24 @@ export const NotificationProvider = ({ children }: { children: ReactNode }) => {
       )
     );
   }, []);
+
+  useEffect(() => {
+    let active = true;
+    const loadNotifications = async () => {
+      try {
+        const response = await api.notifications.list();
+        if (active) {
+          replaceNotifications(response.notifications);
+        }
+      } catch {
+        // The dashboard remains usable if the initial feed request fails; SSE can reconnect.
+      }
+    };
+    void loadNotifications();
+    return () => {
+      active = false;
+    };
+  }, [replaceNotifications]);
 
   useEffect(() => {
     if (typeof navigator === "undefined") {

@@ -15,11 +15,15 @@ import { api } from "@/lib/api";
 
 const getNotificationIcon = (type: string) => {
   switch (type) {
+    case "ticket.won":
     case "ticket_won":
+    case "leg.won":
     case "leg_won": {
       return <CheckCircle2 className="size-4 text-emerald-400" />;
     }
+    case "ticket.lost":
     case "ticket_lost":
+    case "leg.lost":
     case "leg_lost": {
       return <XCircle className="size-4 text-rose-400" />;
     }
