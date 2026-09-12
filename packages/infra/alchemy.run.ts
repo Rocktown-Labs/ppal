@@ -7,6 +7,8 @@ import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 
+import type { CommunityChannelRoom } from "../../apps/server/src/durable-objects/community-channel-room";
+
 config({ path: "./.env" });
 config({ path: "../../apps/web/.env" });
 config({ path: "../../apps/server/.env" });
@@ -76,6 +78,24 @@ export const server = Cloudflare.Worker("server", {
       namespaceId: rateLimitNamespaceOffset + 1001,
       simple: { limit: 120, period: 60 },
     }),
+    COMMUNITY_HTTP_RATE_LIMIT: Cloudflare.RateLimit(
+      "community-http-rate-limit",
+      {
+        namespaceId: rateLimitNamespaceOffset + 1006,
+        simple: { limit: 120, period: 60 },
+      }
+    ),
+    COMMUNITY_CHAT_RATE_LIMIT: Cloudflare.RateLimit(
+      "community-chat-rate-limit",
+      {
+        namespaceId: rateLimitNamespaceOffset + 1007,
+        simple: { limit: 60, period: 60 },
+      }
+    ),
+    COMMUNITY_CHANNEL_ROOMS: Cloudflare.DurableObject<CommunityChannelRoom>(
+      "COMMUNITY_CHANNEL_ROOMS",
+      { className: "CommunityChannelRoom" }
+    ),
     AUTH_RATE_LIMIT: Cloudflare.RateLimit("auth-rate-limit", {
       namespaceId: rateLimitNamespaceOffset + 1003,
       simple: { limit: 30, period: 60 },

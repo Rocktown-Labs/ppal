@@ -24,6 +24,7 @@
     "dotenv": "catalog:",
     "evlog": "catalog:",
     "hono": "^4.12.32",
+    "stripe": "^22.6.2",
     "zod": "catalog:"
   },
   "devDependencies": {

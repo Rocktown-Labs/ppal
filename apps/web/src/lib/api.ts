@@ -148,6 +148,44 @@ export interface ReferralSummary {
   total: number;
 }
 
+export interface CommunitySummary {
+  access: "free" | "paid";
+  description: string | null;
+  id: string;
+  name: string;
+  ownerUserId: string;
+  priceCents: number | null;
+  rules: string | null;
+  slug: string;
+  visibility: "public" | "private";
+}
+
+export interface CommunityChannel {
+  description: string | null;
+  id: string;
+  isDefault: boolean;
+  name: string;
+  position: number;
+  slug: string;
+}
+
+export interface CommunityMembership {
+  role: "owner" | "moderator" | "member";
+  status: "active" | "pending" | "muted" | "banned";
+}
+
+export interface CommunityMessage {
+  author: { avatarUrl: string | null; name: string; username: string | null };
+  body: string;
+  clientId?: string;
+  createdAt: string;
+  deletedAt: string | null;
+  editedAt: string | null;
+  id: string;
+  mentions: string[];
+  replyToId: string | null;
+}
+
 export interface ManualVerificationRequest {
   legs: {
     id: string;
@@ -259,6 +297,37 @@ export const api = {
   },
 
   community: {
+    completePaidJoin: (slug: string, sessionId: string) =>
+      request<{ membership: CommunityMembership }>(
+        `/api/v1/communities/${pathSegment(slug)}/join/complete`,
+        { body: JSON.stringify({ sessionId }), method: "POST" }
+      ),
+
+    create: (payload: {
+      access: "free" | "paid";
+      description?: string | null;
+      name: string;
+      priceCents?: number | null;
+      rules?: string | null;
+      slug: string;
+      visibility: "public" | "private";
+    }) =>
+      request<{
+        community: CommunitySummary & { membership: CommunityMembership };
+      }>("/api/v1/communities", {
+        body: JSON.stringify(payload),
+        method: "POST",
+      }),
+
+    createChannel: (
+      slug: string,
+      payload: { description?: string | null; name: string; slug: string }
+    ) =>
+      request<{ channel: CommunityChannel }>(
+        `/api/v1/communities/${pathSegment(slug)}/channels`,
+        { body: JSON.stringify(payload), method: "POST" }
+      ),
+
     follow: (username: string) =>
       request<{ following: boolean }>(
         `/api/v1/profiles/${pathSegment(username)}/follow`,
@@ -267,12 +336,56 @@ export const api = {
         }
       ),
 
+    get: (slug: string) =>
+      request<{
+        channels: CommunityChannel[];
+        community: CommunitySummary;
+        membership: CommunityMembership | null;
+      }>(`/api/v1/communities/${pathSegment(slug)}`),
+
     getMe: () => request<{ user: CurrentUserWithProfile }>("/api/v1/me"),
+
+    getMessages: (
+      slug: string,
+      channelId: string,
+      params?: { cursor?: string; limit?: number }
+    ) => {
+      const search = new URLSearchParams();
+      if (params?.cursor) {
+        search.set("cursor", params.cursor);
+      }
+      if (params?.limit) {
+        search.set("limit", String(params.limit));
+      }
+      const query = search.toString();
+      return request<{
+        messages: CommunityMessage[];
+        nextCursor: string | null;
+      }>(
+        `/api/v1/communities/${pathSegment(slug)}/channels/${pathSegment(channelId)}/messages${query ? `?${query}` : ""}`
+      );
+    },
+
+    getMine: () =>
+      request<{
+        communities: (CommunitySummary & { membership: CommunityMembership })[];
+      }>("/api/v1/communities"),
+
+    getPublic: (limit = 50) =>
+      request<{ communities: CommunitySummary[] }>(
+        `/api/v1/communities/public?limit=${limit}`
+      ),
 
     getPublicProfile: (username: string) =>
       request<{ profile: PublicProfile }>(
         `/api/v1/profiles/${pathSegment(username)}`
       ),
+
+    join: (slug: string) =>
+      request<{
+        checkoutUrl?: string | null;
+        membership?: CommunityMembership;
+      }>(`/api/v1/communities/${pathSegment(slug)}/join`, { method: "POST" }),
 
     unfollow: (username: string) =>
       request<{ following: boolean }>(

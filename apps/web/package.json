@@ -20,6 +20,7 @@
     "@ppal/ui": "workspace:*",
     "@tailwindcss/vite": "^4.3.3",
     "@tanstack/intent": "^0.4.0",
+    "@tanstack/react-db": "^0.3.8",
     "@tanstack/react-form": "^1.33.5",
     "@tanstack/react-query": "^5.102.8",
     "@tanstack/react-router": "^1.170.18",

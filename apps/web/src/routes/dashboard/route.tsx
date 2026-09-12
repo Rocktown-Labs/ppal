@@ -9,6 +9,7 @@ import {
 import {
   Activity,
   Bell,
+  MessagesSquare,
   FileUp,
   LayoutDashboard,
   LogOut,
@@ -127,6 +128,11 @@ const DashboardLayoutContent = () => {
       label: "Notifications",
       badge: unreadCount > 0 ? String(Math.min(unreadCount, 99)) : undefined,
       to: "/dashboard/notifications",
+    },
+    {
+      icon: MessagesSquare,
+      label: "Communities",
+      to: "/dashboard/communities",
     },
     {
       icon: User,

@@ -1,6 +1,8 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, redirect } from "@tanstack/react-router";
 
 import { Auth } from "@/components/auth/auth";
+import { api } from "@/lib/api";
+import { authClient } from "@/lib/auth-client";
 
 const RouteComponent = () => (
   <main className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden bg-zinc-950 px-4 py-12 text-zinc-100">
@@ -25,5 +27,25 @@ const RouteComponent = () => (
 );
 
 export const Route = createFileRoute("/login")({
+  beforeLoad: async () => {
+    const session = await authClient.getSession();
+    if (!session.data) {
+      return;
+    }
+    let profile: Awaited<
+      ReturnType<typeof api.community.getMe>
+    >["user"]["profile"];
+    try {
+      const response = await api.community.getMe();
+      const { profile: currentProfile } = response.user;
+      profile = currentProfile;
+    } catch {
+      // If the API is briefly unavailable, leave the auth form usable.
+      return;
+    }
+    throw redirect({
+      to: profile?.username?.trim() ? "/dashboard" : "/dashboard/onboarding",
+    });
+  },
   component: RouteComponent,
 });

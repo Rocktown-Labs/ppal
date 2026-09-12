@@ -34,6 +34,8 @@ import {
   processSportsMessage,
 } from "./services/sports";
 
+export { CommunityChannelRoom } from "./durable-objects/community-channel-room";
+
 initLogger({ env: { service: "ppal-api" } });
 
 const SERVER_BUILD = env.SERVER_BUILD ?? "local";
@@ -127,6 +129,12 @@ app.use("/api/v1/*", async (c, next) => {
   } else if (isUploadMutation) {
     limiter = env.UPLOAD_RATE_LIMIT;
     bucket = "upload";
+  } else if (
+    c.req.path.startsWith("/api/v1/communities") &&
+    c.req.method !== "GET"
+  ) {
+    limiter = env.COMMUNITY_HTTP_RATE_LIMIT;
+    bucket = "community";
   }
   if (limiter?.limit) {
     const { success } = await limiter.limit({
