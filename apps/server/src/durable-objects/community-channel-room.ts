@@ -134,13 +134,7 @@ export class CommunityChannelRoom extends DurableObject<CommunityRoomEnv> {
     )
       .bind(attachment.communityId, attachment.userId)
       .first<{ role: string; status: string }>();
-    if (
-      !(
-        membership?.status === "active" ||
-        membership?.role === "owner" ||
-        membership?.role === "moderator"
-      )
-    ) {
+    if (membership?.status !== "active") {
       webSocket.send(
         json({
           code: "MEMBERSHIP_REQUIRED",
@@ -229,6 +223,8 @@ export class CommunityChannelRoom extends DurableObject<CommunityRoomEnv> {
         body: parsed.data.body,
         clientId: parsed.data.clientId,
         createdAt: new Date(createdAt).toISOString(),
+        deletedAt: null,
+        editedAt: null,
         id,
         mentions: resolvedMentions,
         replyToId: parsed.data.replyToId ?? null,

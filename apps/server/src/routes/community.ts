@@ -126,13 +126,11 @@ const canViewCommunity = (
   community: CommunityRow,
   membership: MembershipRow | null
 ): boolean =>
-  community.visibility === "public" ||
-  membership?.status === "active" ||
-  membership?.role === "owner" ||
-  membership?.role === "moderator";
+  community.visibility === "public" || membership?.status === "active";
 
 const isModerator = (membership: MembershipRow | null): boolean =>
-  membership?.role === "owner" || membership?.role === "moderator";
+  membership?.status === "active" &&
+  (membership.role === "owner" || membership.role === "moderator");
 
 const communityResponse = (community: CommunityRow) => ({
   access: community.access,
@@ -1256,11 +1254,7 @@ export const createCommunityRoutes = (auth: Auth) =>
         return c.json({ code: "NOT_FOUND", error: "Community not found" }, 404);
       }
       const membership = await getMembership(community.id, user.id);
-      if (
-        membership?.status !== "active" &&
-        membership?.role !== "owner" &&
-        membership?.role !== "moderator"
-      ) {
+      if (membership?.status !== "active") {
         return c.json(
           { code: "FORBIDDEN", error: "Join the community to chat" },
           403
@@ -1403,11 +1397,7 @@ export const createCommunityRoutes = (auth: Auth) =>
           );
         }
         const membership = await getMembership(community.id, user.id);
-        if (
-          membership?.status !== "active" &&
-          membership?.role !== "owner" &&
-          membership?.role !== "moderator"
-        ) {
+        if (membership?.status !== "active") {
           return c.json(
             {
               code: "FORBIDDEN",
