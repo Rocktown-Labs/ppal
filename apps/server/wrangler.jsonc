@@ -23,6 +23,20 @@
       "bucket_name": "ppal-uploads",
     },
   ],
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "SPORTRADAR_PRODUCT_BUDGET",
+        "class_name": "SportradarProductBudget",
+      },
+    ],
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["SportradarProductBudget"],
+    },
+  ],
   "queues": {
     "producers": [
       {

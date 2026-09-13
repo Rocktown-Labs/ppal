@@ -63,6 +63,8 @@ export const resultSources = [
 
 export const ingestionModes = ["live", "historical"] as const;
 
+export const notificationIntervalMinutes = [5, 10, 15] as const;
+
 export const ticketLegOperators = [
   "over",
   "under",
@@ -84,6 +86,11 @@ export const resolverStatusSchema = z.enum(resolverStatuses);
 export const verificationStatusSchema = z.enum(verificationStatuses);
 export const resultSourceSchema = z.enum(resultSources);
 export const ingestionModeSchema = z.enum(ingestionModes);
+export const notificationIntervalMinutesSchema = z.union([
+  z.literal(5),
+  z.literal(10),
+  z.literal(15),
+]);
 export const ticketLegOperatorSchema = z.enum(ticketLegOperators);
 
 export const ticketLegContractSchema = z.object({
@@ -118,6 +125,7 @@ export const ticketContractSchema = z.object({
   id: z.string().min(1),
   ingestionMode: ingestionModeSchema,
   legs: z.array(ticketLegContractSchema),
+  notificationIntervalMinutes: notificationIntervalMinutesSchema,
   resultSource: resultSourceSchema.nullable(),
   settledAt: z.string().datetime().nullable(),
   sourceName: z.string().nullable(),
@@ -147,9 +155,13 @@ export const reviewTicketLegSchema = z.object({
 
 export const reviewTicketRequestSchema = z.object({
   legs: z.array(reviewTicketLegSchema).min(1).max(50),
+  notificationIntervalMinutes: notificationIntervalMinutesSchema,
 });
 
 export type IngestionMode = z.infer<typeof ingestionModeSchema>;
+export type NotificationIntervalMinutes = z.infer<
+  typeof notificationIntervalMinutesSchema
+>;
 export type ResolverStatus = z.infer<typeof resolverStatusSchema>;
 export type ResultSource = z.infer<typeof resultSourceSchema>;
 export type SportsEventStatus = z.infer<typeof sportsEventStatusSchema>;

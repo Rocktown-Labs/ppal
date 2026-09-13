@@ -2,6 +2,12 @@
 
 import { marketDefinitions } from "@ppal/contracts/markets";
 
+import {
+  acquireSportradarProductBudget,
+  resolveSportradarAccessLevel,
+} from "./sports";
+import type { SportradarAccessLevel } from "./sports";
+
 const leagues = [
   ["nba", "NBA", "basketball"],
   ["wnba", "WNBA", "basketball"],
@@ -31,8 +37,12 @@ const marketNames = Object.fromEntries(
 );
 
 interface SchedulePlaybook {
-  followupPaths?: (payload: Record<string, unknown>, date: Date) => string[];
-  path: (date: Date) => string;
+  followupPaths?: (
+    payload: Record<string, unknown>,
+    date: Date,
+    accessLevel: SportradarAccessLevel
+  ) => string[];
+  path: (date: Date, accessLevel: SportradarAccessLevel) => string;
   rows: (payload: Record<string, unknown>) => Record<string, unknown>[];
 }
 
@@ -71,9 +81,9 @@ const dailyAmerican = (
   version: string,
   suffix = "schedule.json"
 ): SchedulePlaybook => ({
-  path: (date) => {
+  path: (date, accessLevel) => {
     const { day, month, year } = dateParts(date);
-    return `${league}/trial/${version}/en/games/${year}/${month}/${day}/${suffix}`;
+    return `${league}/${accessLevel}/${version}/en/games/${year}/${month}/${day}/${suffix}`;
   },
   rows: americanRows,
 });
@@ -92,7 +102,7 @@ const footballWeek = (date: Date): string => {
 
 const playbooks: Record<string, SchedulePlaybook> = {
   f1: {
-    followupPaths: (payload, date) =>
+    followupPaths: (payload, date, accessLevel) =>
       records(payload.seasons)
         .filter(
           (season) =>
@@ -101,69 +111,70 @@ const playbooks: Record<string, SchedulePlaybook> = {
         )
         .map(
           (season) =>
-            `formula1/trial/v2/en/seasons/${String(season.id)}/stages/schedule.json`
+            `formula1/${accessLevel}/v2/en/seasons/${String(season.id)}/stages/schedule.json`
         ),
-    path: () => "formula1/trial/v2/en/seasons.json",
+    path: (_date, accessLevel) => `formula1/${accessLevel}/v2/en/seasons.json`,
     rows: (payload) =>
       records(payload.stages).filter((stage) => stage.type === "race"),
   },
   global_american_football: {
-    path: (date) =>
-      `americanfootball/trial/v2/en/schedules/${dateParts(date).iso}/summaries.json`,
+    path: (date, accessLevel) =>
+      `americanfootball/${accessLevel}/v2/en/schedules/${dateParts(date).iso}/summaries.json`,
     rows: sportEventRows("summaries"),
   },
   global_baseball: {
-    path: (date) =>
-      `baseball/trial/v2/en/schedules/${dateParts(date).iso}/summaries.json?start=0&limit=100`,
+    path: (date, accessLevel) =>
+      `baseball/${accessLevel}/v2/en/schedules/${dateParts(date).iso}/summaries.json?start=0&limit=100`,
     rows: sportEventRows("summaries"),
   },
   global_basketball: {
-    path: (date) =>
-      `basketball/trial/v2/en/schedules/${dateParts(date).iso}/summaries.json`,
+    path: (date, accessLevel) =>
+      `basketball/${accessLevel}/v2/en/schedules/${dateParts(date).iso}/summaries.json`,
     rows: sportEventRows("summaries"),
   },
   global_ice_hockey: {
-    path: (date) =>
-      `icehockey/trial/v2/en/schedules/${dateParts(date).iso}/summaries.json`,
+    path: (date, accessLevel) =>
+      `icehockey/${accessLevel}/v2/en/schedules/${dateParts(date).iso}/summaries.json`,
     rows: sportEventRows("summaries"),
   },
   mlb: dailyAmerican("mlb", "v8"),
   nascar: {
-    path: (date) => `nascar-ot3/mc/${dateParts(date).year}/races/schedule.json`,
+    path: (date, accessLevel) =>
+      `nascar-${accessLevel === "trial" ? "ot3" : "t3"}/mc/${dateParts(date).year}/races/schedule.json`,
     rows: (payload) => records(payload.races),
   },
   nba: dailyAmerican("nba", "v8"),
   ncaafb: {
-    path: (date) =>
-      `ncaafb/trial/v7/en/games/${dateParts(date).year}/REG/${footballWeek(date)}/schedule.json`,
+    path: (date, accessLevel) =>
+      `ncaafb/${accessLevel}/v7/en/games/${dateParts(date).year}/REG/${footballWeek(date)}/schedule.json`,
     rows: americanRows,
   },
   ncaamb: dailyAmerican("ncaamb", "v8"),
   ncaawb: dailyAmerican("ncaawb", "v8"),
   nfl: {
-    path: (date) =>
-      `nfl/official/trial/v7/en/games/${dateParts(date).year}/REG/${footballWeek(date)}/schedule.json`,
+    path: (date, accessLevel) =>
+      `nfl/official/${accessLevel}/v7/en/games/${dateParts(date).year}/REG/${footballWeek(date)}/schedule.json`,
     rows: americanRows,
   },
   nhl: dailyAmerican("nhl", "v7"),
   pga: {
-    path: (date) =>
-      `golf/pga/trial/v3/en/${dateParts(date).year}/tournaments/schedule.json`,
+    path: (date, accessLevel) =>
+      `golf/${accessLevel}/pga/v3/en/${dateParts(date).year}/tournaments/schedule.json`,
     rows: (payload) => records(payload.tournaments),
   },
   soccer: {
-    path: (date) =>
-      `soccer-extended/trial/v4/en/schedules/${dateParts(date).iso}/schedules.json`,
+    path: (date, accessLevel) =>
+      `soccer-extended/${accessLevel}/v4/en/schedules/${dateParts(date).iso}/schedules.json`,
     rows: sportEventRows("schedules"),
   },
   tennis: {
-    path: (date) =>
-      `tennis/trial/v3/en/schedules/${dateParts(date).iso}/summaries.json`,
+    path: (date, accessLevel) =>
+      `tennis/${accessLevel}/v3/en/schedules/${dateParts(date).iso}/summaries.json`,
     rows: sportEventRows("summaries"),
   },
   ufc: {
-    path: (date) =>
-      `mma/trial/v2/en/schedules/${dateParts(date).iso}/summaries.json`,
+    path: (date, accessLevel) =>
+      `mma/${accessLevel}/v2/en/schedules/${dateParts(date).iso}/summaries.json`,
     rows: sportEventRows("summaries"),
   },
   wnba: dailyAmerican("wnba", "v8"),
@@ -332,15 +343,32 @@ export const synchronizeSportsCatalog = async (
       .run();
   }
   const dates = [new Date(), new Date(Date.now() + 24 * 60 * 60 * 1000)];
+  const accessLevel = resolveSportradarAccessLevel(
+    workerEnv.SPORTRADAR_ACCESS_LEVEL
+  );
   for (const [leagueSlug, , sportSlug] of leagues) {
     const playbook = playbooks[leagueSlug];
     if (!playbook) {
       continue;
     }
-    const paths = new Set(dates.map((date) => playbook.path(date)));
+    const paths = new Set(
+      dates.map((date) => playbook.path(date, accessLevel))
+    );
     for (const path of paths) {
       const pendingPaths = [path];
       for (const pendingPath of pendingPaths) {
+        const budget = await acquireSportradarProductBudget(
+          leagueSlug,
+          workerEnv
+        );
+        if (!budget.granted) {
+          workerEnv.ANALYTICS.writeDataPoint({
+            blobs: ["sportradar.schedule_deferred", leagueSlug],
+            doubles: [budget.retryAfterMs, budget.remaining],
+            indexes: [leagueSlug],
+          });
+          continue;
+        }
         const url = new URL(pendingPath, "https://api.sportradar.com/");
         url.searchParams.set("api_key", workerEnv.SPORTRADAR_API_KEY);
         const response = await fetch(url, {
@@ -359,7 +387,7 @@ export const synchronizeSportsCatalog = async (
         }
         const payload = (await response.json()) as Record<string, unknown>;
         pendingPaths.push(
-          ...(playbook.followupPaths?.(payload, new Date()) ?? [])
+          ...(playbook.followupPaths?.(payload, new Date(), accessLevel) ?? [])
         );
         for (const raw of playbook.rows(payload)) {
           await upsertScheduleEvent(raw, leagueSlug, sportSlug, workerEnv);

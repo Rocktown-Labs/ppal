@@ -31,6 +31,12 @@ export const tickets = sqliteTable(
     ),
     id: text("id").primaryKey(),
     ingestionMode: text("ingestion_mode").notNull().default("live"),
+    lastProgressNotifiedAt: integer("last_progress_notified_at", {
+      mode: "timestamp_ms",
+    }),
+    notificationIntervalMinutes: integer("notification_interval_minutes")
+      .notNull()
+      .default(10),
     resultSource: text("result_source"),
     settledAt: integer("settled_at", { mode: "timestamp_ms" }),
     sourceName: text("source_name"),
@@ -54,6 +60,10 @@ export const tickets = sqliteTable(
     check(
       "tickets_ingestion_mode_check",
       sql`${table.ingestionMode} in ('live', 'historical')`
+    ),
+    check(
+      "tickets_notification_interval_check",
+      sql`${table.notificationIntervalMinutes} in (5, 10, 15)`
     ),
     check(
       "tickets_result_source_check",
@@ -90,6 +100,7 @@ export const ticketLegs = sqliteTable(
       unknown
     > | null>(),
     id: text("id").primaryKey(),
+    lastNotifiedSnapshot: text("last_notified_snapshot"),
     leagueId: text("league_id").references(() => leagues.id, {
       onDelete: "set null",
     }),

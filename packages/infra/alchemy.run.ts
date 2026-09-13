@@ -8,6 +8,7 @@ import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 
 import type { CommunityChannelRoom } from "../../apps/server/src/durable-objects/community-channel-room";
+import type { SportradarProductBudget } from "../../apps/server/src/durable-objects/sportradar-product-budget";
 
 config({ path: "./.env" });
 config({ path: "../../apps/web/.env" });
@@ -139,6 +140,23 @@ export const server = Cloudflare.Worker("server", {
     REVENUECAT_WEBHOOK_SECRET: Config.redacted("REVENUECAT_WEBHOOK_SECRET"),
     SERVER_BUILD: Config.string("GITHUB_SHA").pipe(Config.withDefault("local")),
     SPORTRADAR_API_KEY: Config.redacted("SPORTRADAR_API_KEY"),
+    SPORTRADAR_ACCESS_LEVEL: Config.string("SPORTRADAR_ACCESS_LEVEL").pipe(
+      Config.withDefault("trial")
+    ),
+    SPORTRADAR_PRODUCT_BUDGET:
+      Cloudflare.DurableObject<SportradarProductBudget>(
+        "SPORTRADAR_PRODUCT_BUDGET",
+        { className: "SportradarProductBudget" }
+      ),
+    SPORTRADAR_QPS: Config.string("SPORTRADAR_QPS").pipe(
+      Config.withDefault("1")
+    ),
+    SPORTRADAR_ROLLING_QUOTA: Config.string("SPORTRADAR_ROLLING_QUOTA").pipe(
+      Config.withDefault("1000")
+    ),
+    SPORTRADAR_ROLLING_WINDOW_DAYS: Config.string(
+      "SPORTRADAR_ROLLING_WINDOW_DAYS"
+    ).pipe(Config.withDefault("30")),
     SPORTS_QUEUE: sportsQueue,
     UPLOAD_RATE_LIMIT: Cloudflare.RateLimit("upload-rate-limit", {
       namespaceId: rateLimitNamespaceOffset + 1002,

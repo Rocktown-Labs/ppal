@@ -3,6 +3,7 @@
 import { marketDefinitions } from "@ppal/contracts/markets";
 import { sportsPollQueueMessageSchema } from "@ppal/contracts/queues";
 import type {
+  NotificationIntervalMinutes,
   SportsEventStatus,
   TicketLegOperator,
   TicketLegStatus,
@@ -11,8 +12,14 @@ import type {
 import { evaluateLeg } from "@ppal/domain/tracking/evaluate-leg";
 import { evaluateTicket } from "@ppal/domain/tracking/evaluate-ticket";
 
+import type { ProductBudgetDecision } from "../durable-objects/sportradar-product-budget";
 import { refreshHistoricalBatch } from "./historical-imports";
 import { publishNotification } from "./notifications";
+import {
+  buildProgressLine,
+  isProgressNotificationDue,
+  pollingDelayMs,
+} from "./sports-progress";
 
 interface EventRow {
   away_participant_id: string | null;
@@ -38,6 +45,7 @@ interface TrackingRow {
   market_id: string;
   market_components: string | null;
   market_slug: string;
+  notification_interval_minutes: NotificationIntervalMinutes;
   operator: TicketLegOperator;
   participant_id: string | null;
   provider_participant_id: string | null;
@@ -45,32 +53,52 @@ interface TrackingRow {
   target_value: number | null;
   ticket_id: string;
   ticket_status: TicketStatus;
+  last_progress_notified_at: number | null;
   user_id: string;
   won_at: number | null;
 }
 
-const summaryPaths: Record<string, (event: EventRow) => string> = {
-  f1: () => "formula1/trial/v2/en/sport_events",
-  global_american_football: () => "americanfootball/trial/v2/en/sport_events",
-  global_baseball: () => "baseball/trial/v2/en/sport_events",
-  global_basketball: () => "basketball/trial/v2/en/sport_events",
-  global_ice_hockey: () => "icehockey/trial/v2/en/sport_events",
-  mlb: () => "mlb/trial/v8/en/games",
-  nascar: () => "nascar-ot3/mc/races",
-  nba: () => "nba/trial/v8/en/games",
-  ncaafb: () => "ncaafb/trial/v7/en/games",
-  ncaamb: () => "ncaamb/trial/v8/en/games",
-  ncaawb: () => "ncaawb/trial/v8/en/games",
-  nfl: () => "nfl/official/trial/v7/en/games",
-  nhl: () => "nhl/trial/v7/en/games",
-  pga: () => "golf/pga/trial/v3/en",
-  soccer: () => "soccer-extended/trial/v4/en/sport_events",
-  tennis: () => "tennis/trial/v3/en/sport_events",
-  ufc: () => "mma/trial/v2/en/sport_events",
-  wnba: () => "wnba/trial/v8/en/games",
+export type SportradarAccessLevel = "production" | "trial";
+type SummaryEvent = Pick<
+  EventRow,
+  "league_slug" | "provider_event_id" | "starts_at"
+>;
+
+export const resolveSportradarAccessLevel = (
+  configured: string | undefined
+): SportradarAccessLevel =>
+  configured === "production" ? "production" : "trial";
+
+const summaryPaths: Record<
+  string,
+  (event: SummaryEvent, accessLevel: SportradarAccessLevel) => string
+> = {
+  f1: (_event, accessLevel) => `formula1/${accessLevel}/v2/en/sport_events`,
+  global_american_football: (_event, accessLevel) =>
+    `americanfootball/${accessLevel}/v2/en/sport_events`,
+  global_baseball: (_event, accessLevel) =>
+    `baseball/${accessLevel}/v2/en/sport_events`,
+  global_basketball: (_event, accessLevel) =>
+    `basketball/${accessLevel}/v2/en/sport_events`,
+  global_ice_hockey: (_event, accessLevel) =>
+    `icehockey/${accessLevel}/v2/en/sport_events`,
+  mlb: (_event, accessLevel) => `mlb/${accessLevel}/v8/en/games`,
+  nba: (_event, accessLevel) => `nba/${accessLevel}/v8/en/games`,
+  ncaafb: (_event, accessLevel) => `ncaafb/${accessLevel}/v7/en/games`,
+  ncaamb: (_event, accessLevel) => `ncaamb/${accessLevel}/v8/en/games`,
+  ncaawb: (_event, accessLevel) => `ncaawb/${accessLevel}/v8/en/games`,
+  nfl: (_event, accessLevel) => `nfl/official/${accessLevel}/v7/en/games`,
+  nhl: (_event, accessLevel) => `nhl/${accessLevel}/v7/en/games`,
+  soccer: (_event, accessLevel) =>
+    `soccer-extended/${accessLevel}/v4/en/sport_events`,
+  tennis: (_event, accessLevel) => `tennis/${accessLevel}/v3/en/sport_events`,
+  ufc: (_event, accessLevel) => `mma/${accessLevel}/v2/en/sport_events`,
+  wnba: (_event, accessLevel) => `wnba/${accessLevel}/v8/en/games`,
 };
 
 const boxscoreLeagues = new Set([
+  "mlb",
+  "nba",
   "ncaafb",
   "ncaamb",
   "ncaawb",
@@ -245,26 +273,43 @@ const upsertObservedParticipants = async (
   }
 };
 
-const fetchSummary = async (
-  event: EventRow,
-  apiKey: string
-): Promise<{ payload: Record<string, unknown>; sequence: string }> => {
+export const buildSportradarSummaryPath = (
+  event: SummaryEvent,
+  accessLevel: SportradarAccessLevel
+): string => {
   const basePath = summaryPaths[event.league_slug];
+  if (
+    !(basePath || event.league_slug === "nascar" || event.league_slug === "pga")
+  ) {
+    throw new Error(`Unsupported Sportradar league: ${event.league_slug}`);
+  }
+  if (event.league_slug === "nascar") {
+    const tier = accessLevel === "trial" ? "ot3" : "t3";
+    return `nascar-${tier}/mc/races/${encodeURIComponent(event.provider_event_id)}/results.json`;
+  }
+  if (event.league_slug === "pga") {
+    const year = new Date(event.starts_at).getUTCFullYear();
+    return `golf/${accessLevel}/pga/v3/en/${year}/tournaments/${encodeURIComponent(event.provider_event_id)}/leaderboard.json`;
+  }
   if (!basePath) {
     throw new Error(`Unsupported Sportradar league: ${event.league_slug}`);
   }
   const suffix = boxscoreLeagues.has(event.league_slug)
     ? "boxscore.json"
     : "summary.json";
-  let requestPath = `${basePath(event)}/${encodeURIComponent(event.provider_event_id)}/${suffix}`;
-  if (event.league_slug === "nascar") {
-    requestPath = `nascar-ot3/mc/races/${encodeURIComponent(event.provider_event_id)}/results.json`;
-  } else if (event.league_slug === "pga") {
-    const year = new Date(event.starts_at).getUTCFullYear();
-    requestPath = `golf/pga/trial/v3/en/${year}/tournaments/${encodeURIComponent(event.provider_event_id)}/leaderboard.json`;
-  }
+  return `${basePath(event, accessLevel)}/${encodeURIComponent(event.provider_event_id)}/${suffix}`;
+};
+
+const fetchSummary = async (
+  event: EventRow,
+  workerEnv: Env
+): Promise<{ payload: Record<string, unknown>; sequence: string }> => {
+  const accessLevel = resolveSportradarAccessLevel(
+    workerEnv.SPORTRADAR_ACCESS_LEVEL
+  );
+  const requestPath = buildSportradarSummaryPath(event, accessLevel);
   const url = new URL(requestPath, "https://api.sportradar.com/");
-  url.searchParams.set("api_key", apiKey);
+  url.searchParams.set("api_key", workerEnv.SPORTRADAR_API_KEY);
   const response = await fetch(url, {
     headers: { accept: "application/json" },
   });
@@ -276,6 +321,176 @@ const fetchSummary = async (
     payload: JSON.parse(text) as Record<string, unknown>,
     sequence: await sha256Hex(text),
   };
+};
+
+const positiveNumber = (
+  value: string | undefined,
+  fallback: number
+): number => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+};
+
+export const acquireSportradarProductBudget = async (
+  leagueSlug: string,
+  workerEnv: Env
+): Promise<ProductBudgetDecision> => {
+  const namespace = workerEnv.SPORTRADAR_PRODUCT_BUDGET;
+  const stub = namespace.get(namespace.idFromName(leagueSlug));
+  return await stub.acquire({
+    qps: positiveNumber(workerEnv.SPORTRADAR_QPS, 1),
+    rollingQuota: Math.floor(
+      positiveNumber(workerEnv.SPORTRADAR_ROLLING_QUOTA, 1000)
+    ),
+    rollingWindowMs:
+      positiveNumber(workerEnv.SPORTRADAR_ROLLING_WINDOW_DAYS, 30) *
+      24 *
+      60 *
+      60 *
+      1000,
+  });
+};
+
+const releaseEventLease = async (
+  eventId: string,
+  leaseToken: number,
+  workerEnv: Env
+): Promise<void> => {
+  await workerEnv.DB.prepare(
+    "UPDATE sports_events SET poll_lease_until = NULL WHERE id = ? AND poll_lease_until = ?"
+  )
+    .bind(eventId, leaseToken)
+    .run();
+};
+
+interface ProgressLegRow {
+  away_name: string | null;
+  away_score: number | null;
+  current_value: number | null;
+  home_name: string | null;
+  home_score: number | null;
+  id: string;
+  last_notified_snapshot: string | null;
+  market_slug: string;
+  status: TicketLegStatus;
+  subject_name: string;
+  target_value: number | null;
+}
+
+const terminalTicketStatuses = new Set<TicketStatus>([
+  "lost",
+  "partially_void",
+  "push",
+  "settled",
+  "void",
+  "won",
+]);
+
+const publishTicketProgress = async ({
+  eventId,
+  sequence,
+  status,
+  ticketId,
+  ticketState,
+  workerEnv,
+}: {
+  eventId: string;
+  sequence: string;
+  status: TicketStatus;
+  ticketId: string;
+  ticketState: {
+    lastProgressNotifiedAt: number | null;
+    notificationIntervalMinutes: NotificationIntervalMinutes;
+    userId: string;
+  };
+  workerEnv: Env;
+}): Promise<void> => {
+  const now = Date.now();
+  const terminal = terminalTicketStatuses.has(status);
+  if (
+    !terminal &&
+    !isProgressNotificationDue({
+      interval: ticketState.notificationIntervalMinutes,
+      lastNotifiedAt: ticketState.lastProgressNotifiedAt,
+      now,
+    })
+  ) {
+    return;
+  }
+  const legs = await workerEnv.DB.prepare(
+    `SELECT away.name AS away_name, e.away_score, l.current_value,
+      home.name AS home_name, e.home_score, l.id, l.last_notified_snapshot,
+      m.slug AS market_slug, l.status, l.subject_name, l.target_value
+     FROM ticket_legs l
+     JOIN markets m ON m.id = l.market_id
+     LEFT JOIN sports_events e ON e.id = l.sports_event_id
+     LEFT JOIN participants away ON away.id = e.away_participant_id
+     LEFT JOIN participants home ON home.id = e.home_participant_id
+     WHERE l.ticket_id = ? ORDER BY l.created_at, l.id`
+  )
+    .bind(ticketId)
+    .all<ProgressLegRow>();
+  const lines = legs.results
+    .map((leg) =>
+      buildProgressLine({
+        awayName: leg.away_name,
+        awayScore: leg.away_score,
+        currentValue: leg.current_value,
+        homeName: leg.home_name,
+        homeScore: leg.home_score,
+        id: leg.id,
+        lastNotifiedSnapshot: leg.last_notified_snapshot,
+        marketSlug: leg.market_slug,
+        status: leg.status,
+        subjectName: leg.subject_name,
+        targetValue: leg.target_value,
+      })
+    )
+    .filter((line) => line !== null);
+  if (lines.length === 0 && !terminal) {
+    return;
+  }
+
+  const cutoff = now - pollingDelayMs(ticketState.notificationIntervalMinutes);
+  const claim = await workerEnv.DB.prepare(
+    terminal
+      ? "UPDATE tickets SET last_progress_notified_at = ? WHERE id = ?"
+      : `UPDATE tickets SET last_progress_notified_at = ? WHERE id = ?
+         AND (last_progress_notified_at IS NULL OR last_progress_notified_at <= ?)`
+  )
+    .bind(...(terminal ? [now, ticketId] : [now, ticketId, cutoff]))
+    .run();
+  if (claim.meta.changes === 0) {
+    return;
+  }
+
+  const visibleLines = lines.slice(0, 4).map(({ text }) => text);
+  if (lines.length > visibleLines.length) {
+    visibleLines.push(`+${lines.length - visibleLines.length} more changes`);
+  }
+  if (terminal) {
+    visibleLines.push(`Ticket settled ${status}.`);
+  }
+  await publishNotification({
+    body: visibleLines.join(" • "),
+    milestoneKey: terminal
+      ? `${ticketId}:${status}`
+      : `${ticketId}:progress:${eventId}:${sequence}`,
+    ticketId,
+    title: terminal ? `Ticket ${status}` : "Ticket progress update",
+    type: terminal ? `ticket.${status}` : "ticket.progress",
+    userId: ticketState.userId,
+    workerEnv,
+  });
+  if (lines.length > 0) {
+    await workerEnv.DB.batch(
+      lines.map((line) =>
+        workerEnv.DB.prepare(
+          "UPDATE ticket_legs SET last_notified_snapshot = ? WHERE id = ?"
+        ).bind(line.snapshot, line.legId)
+      )
+    );
+  }
 };
 
 // The orchestration is intentionally linear: claim, observe, evaluate, settle.
@@ -297,17 +512,43 @@ export const processSportsMessage = async (
   if (!event) {
     return;
   }
-  const { payload, sequence } = await fetchSummary(
-    event,
-    workerEnv.SPORTRADAR_API_KEY
+  const cadence = await workerEnv.DB.prepare(
+    `SELECT MIN(t.notification_interval_minutes) AS minutes
+     FROM tracking_subscriptions s
+     JOIN ticket_legs l ON l.id = s.ticket_leg_id
+     JOIN tickets t ON t.id = l.ticket_id
+     WHERE s.sports_event_id = ? AND s.status = 'active'`
+  )
+    .bind(event.id)
+    .first<{ minutes: NotificationIntervalMinutes | null }>();
+  if (cadence?.minutes === null || cadence?.minutes === undefined) {
+    await workerEnv.DB.batch([
+      workerEnv.DB.prepare(
+        "UPDATE sports_events SET next_poll_at = NULL, poll_lease_until = NULL, updated_at = ? WHERE id = ? AND poll_lease_until = ?"
+      ).bind(Date.now(), event.id, Number(message.leaseToken)),
+    ]);
+    return;
+  }
+  const budget = await acquireSportradarProductBudget(
+    event.league_slug,
+    workerEnv
   );
+  if (!budget.granted) {
+    const retryAt = Date.now() + budget.retryAfterMs;
+    await workerEnv.DB.prepare(
+      `UPDATE sports_events SET next_poll_at = ?, poll_lease_until = NULL,
+       updated_at = ? WHERE id = ? AND poll_lease_until = ?`
+    )
+      .bind(retryAt, Date.now(), event.id, Number(message.leaseToken))
+      .run();
+    return;
+  }
+  const { payload, sequence } = await fetchSummary(event, workerEnv);
   const status = normalizeStatus(payload, event.status);
   const scores = summaryScores(payload, event);
   let nextPollDelay: number | null = null;
-  if (status === "live") {
-    nextPollDelay = 30_000;
-  } else if (status === "scheduled") {
-    nextPollDelay = 300_000;
+  if (status === "live" || status === "scheduled") {
+    nextPollDelay = pollingDelayMs(cadence.minutes);
   }
   await workerEnv.DB.prepare(
     `UPDATE sports_events SET away_score = ?, home_score = ?, last_synced_at = ?,
@@ -331,6 +572,7 @@ export const processSportsMessage = async (
       l.market_components, l.participant_id, l.settled_at, l.status AS leg_status, l.target_value,
       l.ticket_id, l.won_at, m.id AS market_id, m.slug AS market_slug,
       p.provider_participant_id, t.historical_import_batch_id, t.ingestion_mode,
+      t.last_progress_notified_at, t.notification_interval_minutes,
       t.status AS ticket_status, t.user_id
      FROM tracking_subscriptions s
      JOIN ticket_legs l ON l.id = s.ticket_leg_id
@@ -349,6 +591,8 @@ export const processSportsMessage = async (
     {
       historicalImportBatchId: string | null;
       ingestionMode: "historical" | "single";
+      lastProgressNotifiedAt: number | null;
+      notificationIntervalMinutes: NotificationIntervalMinutes;
       status: TicketStatus;
       userId: string;
     }
@@ -368,6 +612,8 @@ export const processSportsMessage = async (
       affectedTickets.set(trackedLeg.ticket_id, {
         historicalImportBatchId: trackedLeg.historical_import_batch_id,
         ingestionMode: trackedLeg.ingestion_mode,
+        lastProgressNotifiedAt: trackedLeg.last_progress_notified_at,
+        notificationIntervalMinutes: trackedLeg.notification_interval_minutes,
         status: trackedLeg.ticket_status,
         userId: trackedLeg.user_id,
       });
@@ -495,23 +741,11 @@ export const processSportsMessage = async (
     affectedTickets.set(trackedLeg.ticket_id, {
       historicalImportBatchId: trackedLeg.historical_import_batch_id,
       ingestionMode: trackedLeg.ingestion_mode,
+      lastProgressNotifiedAt: trackedLeg.last_progress_notified_at,
+      notificationIntervalMinutes: trackedLeg.notification_interval_minutes,
       status: trackedLeg.ticket_status,
       userId: trackedLeg.user_id,
     });
-    if (
-      evaluation.changed &&
-      (evaluation.status === "won" || evaluation.status === "lost")
-    ) {
-      await publishNotification({
-        body: `A leg on your ticket is now ${evaluation.status}.`,
-        milestoneKey: `${trackedLeg.leg_id}:${evaluation.status}:${sequence}`,
-        ticketId: trackedLeg.ticket_id,
-        title: `Leg ${evaluation.status}`,
-        type: `leg.${evaluation.status}`,
-        userId: trackedLeg.user_id,
-        workerEnv,
-      });
-    }
   }
 
   for (const [ticketId, ticketState] of affectedTickets) {
@@ -525,53 +759,45 @@ export const processSportsMessage = async (
       settledAt: null,
       status: ticketState.status,
     });
-    if (!result.changed) {
-      continue;
-    }
-    const providerVerified =
-      ticketState.ingestionMode === "historical" &&
-      (result.status === "won" ||
-        result.status === "lost" ||
-        result.status === "void");
-    await workerEnv.DB.prepare(
-      `UPDATE tickets SET result_source = CASE WHEN ? THEN 'historical_provider' ELSE result_source END,
-       settled_at = ?, status = ?, updated_at = ?, verification_status = CASE WHEN ? THEN 'verified' ELSE verification_status END,
-       verified_at = CASE WHEN ? THEN ? ELSE verified_at END, version = version + 1 WHERE id = ?`
-    )
-      .bind(
-        Number(providerVerified),
-        result.settledAt?.getTime() ?? null,
-        result.status,
-        Date.now(),
-        Number(providerVerified),
-        Number(providerVerified),
-        providerVerified ? Date.now() : null,
-        ticketId
+    if (result.changed) {
+      const providerVerified =
+        ticketState.ingestionMode === "historical" &&
+        (result.status === "won" ||
+          result.status === "lost" ||
+          result.status === "void");
+      await workerEnv.DB.prepare(
+        `UPDATE tickets SET result_source = CASE WHEN ? THEN 'historical_provider' ELSE result_source END,
+         settled_at = ?, status = ?, updated_at = ?, verification_status = CASE WHEN ? THEN 'verified' ELSE verification_status END,
+         verified_at = CASE WHEN ? THEN ? ELSE verified_at END, version = version + 1 WHERE id = ?`
       )
-      .run();
-    if (ticketState.historicalImportBatchId) {
-      await refreshHistoricalBatch(
-        workerEnv.DB,
-        ticketState.historicalImportBatchId
-      );
+        .bind(
+          Number(providerVerified),
+          result.settledAt?.getTime() ?? null,
+          result.status,
+          Date.now(),
+          Number(providerVerified),
+          Number(providerVerified),
+          providerVerified ? Date.now() : null,
+          ticketId
+        )
+        .run();
+      if (ticketState.historicalImportBatchId) {
+        await refreshHistoricalBatch(
+          workerEnv.DB,
+          ticketState.historicalImportBatchId
+        );
+      }
     }
-    if (result.status === "won" || result.status === "lost") {
-      await publishNotification({
-        body: `Your ticket has settled as ${result.status}.`,
-        milestoneKey: `${ticketId}:${result.status}:${sequence}`,
-        ticketId,
-        title: `Ticket ${result.status}`,
-        type: `ticket.${result.status}`,
-        userId: ticketState.userId,
-        workerEnv,
-      });
-    }
+    await publishTicketProgress({
+      eventId: event.id,
+      sequence,
+      status: result.status,
+      ticketId,
+      ticketState,
+      workerEnv,
+    });
   }
-  await workerEnv.DB.prepare(
-    "UPDATE sports_events SET poll_lease_until = NULL WHERE id = ? AND poll_lease_until = ?"
-  )
-    .bind(event.id, Number(message.leaseToken))
-    .run();
+  await releaseEventLease(event.id, Number(message.leaseToken), workerEnv);
 };
 
 export const enqueueDueSportsEvents = async (workerEnv: Env): Promise<void> => {

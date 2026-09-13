@@ -35,6 +35,7 @@ import {
 } from "./services/sports";
 
 export { CommunityChannelRoom } from "./durable-objects/community-channel-room";
+export { SportradarProductBudget } from "./durable-objects/sportradar-product-budget";
 
 initLogger({ env: { service: "ppal-api" } });
 

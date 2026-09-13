@@ -1,4 +1,5 @@
 import type {
+  NotificationIntervalMinutes,
   TicketContract,
   TicketLegOperator,
 } from "@ppal/contracts/tickets";
@@ -65,6 +66,8 @@ const TicketReviewComponent = () => {
 
   const [ticket, setTicket] = useState<TicketContract | null>(null);
   const [legs, setLegs] = useState<EditableLeg[]>([]);
+  const [notificationInterval, setNotificationInterval] =
+    useState<NotificationIntervalMinutes>(10);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [isConfirming, setIsConfirming] = useState(false);
@@ -91,6 +94,7 @@ const TicketReviewComponent = () => {
           return;
         }
         setTicket(res.ticket);
+        setNotificationInterval(res.ticket.notificationIntervalMinutes);
         const mappedLegs: EditableLeg[] = res.ticket.legs.map((l) => ({
           displayDescription: l.displayDescription || l.rawDescription,
           id: l.id,
@@ -196,7 +200,10 @@ const TicketReviewComponent = () => {
   const handleSaveCorrections = async () => {
     setIsSaving(true);
     try {
-      await api.tickets.review(ticketId, { legs });
+      await api.tickets.review(ticketId, {
+        legs,
+        notificationIntervalMinutes: notificationInterval,
+      });
       toast.success("Ticket legs updated successfully");
       setIsSaving(false);
     } catch (error) {
@@ -210,7 +217,10 @@ const TicketReviewComponent = () => {
   const handleConfirmAndStartTracking = async () => {
     setIsConfirming(true);
     try {
-      await api.tickets.review(ticketId, { legs });
+      await api.tickets.review(ticketId, {
+        legs,
+        notificationIntervalMinutes: notificationInterval,
+      });
       await api.tickets.confirm(ticketId);
       toast.success("Slip confirmed! Live tracking is now active.");
       navigate({
@@ -420,6 +430,33 @@ const TicketReviewComponent = () => {
           </span>
         </div>
       </div>
+
+      <fieldset className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-4">
+        <legend className="px-1 text-xs font-bold text-white">
+          Live update interval
+        </legend>
+        <p className="mb-3 text-[11px] text-zinc-400">
+          We’ll combine every player, team, and score change into one ticket
+          update at this cadence.
+        </p>
+        <div className="grid grid-cols-3 gap-2">
+          {([5, 10, 15] as const).map((minutes) => (
+            <button
+              key={minutes}
+              type="button"
+              aria-pressed={notificationInterval === minutes}
+              onClick={() => setNotificationInterval(minutes)}
+              className={`rounded-xl border px-3 py-2 text-xs font-bold transition ${
+                notificationInterval === minutes
+                  ? "border-emerald-400 bg-emerald-500/15 text-emerald-300"
+                  : "border-zinc-700 bg-zinc-800/70 text-zinc-300 hover:border-zinc-600"
+              }`}
+            >
+              Every {minutes} min
+            </button>
+          ))}
+        </div>
+      </fieldset>
 
       {/* Legs List */}
       <div className="space-y-4">

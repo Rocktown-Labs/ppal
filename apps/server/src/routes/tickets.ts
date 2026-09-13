@@ -21,6 +21,7 @@ interface TicketRow {
   displayed_result: "won" | "lost" | "push" | "void" | null;
   id: string;
   ingestion_mode: TicketContract["ingestionMode"];
+  notification_interval_minutes: TicketContract["notificationIntervalMinutes"];
   result_source: TicketContract["resultSource"];
   settled_at: number | null;
   source_name: string | null;
@@ -90,7 +91,8 @@ const mapLeg = (leg: TicketLegRow): TicketLegContract => ({
 
 const getTicket = async (ticketId: string, userId: string) => {
   const ticket = await env.DB.prepare(
-    `SELECT confirmed_at, created_at, displayed_result, id, ingestion_mode, result_source,
+    `SELECT confirmed_at, created_at, displayed_result, id, ingestion_mode,
+      notification_interval_minutes, result_source,
       settled_at, source_name, source_upload_id, status, ticket_type,
       tracking_started_at, updated_at, verification_status, verified_at
      FROM tickets WHERE id = ? AND user_id = ?`
@@ -117,6 +119,7 @@ const getTicket = async (ticketId: string, userId: string) => {
     id: ticket.id,
     ingestionMode: ticket.ingestion_mode,
     legs: legs.results.map(mapLeg),
+    notificationIntervalMinutes: ticket.notification_interval_minutes,
     resultSource: ticket.result_source,
     settledAt: dateString(ticket.settled_at),
     sourceName: ticket.source_name,
@@ -304,13 +307,17 @@ export const createTicketRoutes = (auth: Auth) =>
         await env.DB.batch([
           ...updates,
           env.DB.prepare(
-            "UPDATE tickets SET updated_at = ?, version = version + 1 WHERE id = ? AND user_id = ?"
-          ).bind(now, ticketId, user.id),
+            `UPDATE tickets SET notification_interval_minutes = ?, updated_at = ?,
+              version = version + 1 WHERE id = ? AND user_id = ?`
+          ).bind(input.notificationIntervalMinutes, now, ticketId, user.id),
         ]);
         await writeAuditEvent({
           action: "ticket.review",
           actorUserId: user.id,
-          metadata: { legCount: input.legs.length },
+          metadata: {
+            legCount: input.legs.length,
+            notificationIntervalMinutes: input.notificationIntervalMinutes,
+          },
           outcome: "success",
           request: c.req.raw,
           targetId: ticketId,
@@ -358,11 +365,11 @@ export const createTicketRoutes = (auth: Auth) =>
       }
       const now = Date.now();
       const confirmation = await env.DB.prepare(
-        `UPDATE tickets SET confirmed_at = ?, status = 'scheduled',
+        `UPDATE tickets SET confirmed_at = ?, last_progress_notified_at = ?, status = 'scheduled',
           tracking_started_at = ?, updated_at = ?, version = version + 1
          WHERE id = ? AND user_id = ? AND status IN ('draft', 'needs_review')`
       )
-        .bind(now, now, now, ticketId, user.id)
+        .bind(now, now, now, now, ticketId, user.id)
         .run();
       if (confirmation.meta.changes === 0) {
         return c.json(

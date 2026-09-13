@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
 import {
+  buildSportradarSummaryPath,
   collectRecords,
   findNumber,
   normalizeStatus,
@@ -77,5 +78,63 @@ describe("Sportradar provider normalization", () => {
         0
       )
     ).toBe(39);
+  });
+
+  test("switches every supported summary feed between trial and production", () => {
+    const leagueSlugs = [
+      "f1",
+      "global_american_football",
+      "global_baseball",
+      "global_basketball",
+      "global_ice_hockey",
+      "mlb",
+      "nascar",
+      "nba",
+      "ncaafb",
+      "ncaamb",
+      "ncaawb",
+      "nfl",
+      "nhl",
+      "pga",
+      "soccer",
+      "tennis",
+      "ufc",
+      "wnba",
+    ];
+    for (const leagueSlug of leagueSlugs) {
+      const path = buildSportradarSummaryPath(
+        {
+          league_slug: leagueSlug,
+          provider_event_id: "event/id",
+          starts_at: Date.UTC(2026, 8, 12),
+        },
+        "production"
+      );
+      expect(path).not.toContain("/trial/");
+      expect(path).toContain("event%2Fid");
+    }
+  });
+
+  test("uses football boxscores and the official NFL path", () => {
+    expect(
+      buildSportradarSummaryPath(
+        {
+          league_slug: "nfl",
+          provider_event_id: "game-id",
+          starts_at: Date.UTC(2026, 8, 12),
+        },
+        "trial"
+      )
+    ).toBe("nfl/official/trial/v7/en/games/game-id/boxscore.json");
+    expect(
+      buildSportradarSummaryPath(
+        {
+          league_slug: "ncaafb",
+          provider_event_id: "game-id",
+          starts_at: Date.UTC(2026, 8, 12),
+        },
+        "trial"
+      )
+    ).toBe("ncaafb/trial/v7/en/games/game-id/boxscore.json");
   });
 });
