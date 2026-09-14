@@ -1,6 +1,8 @@
 import { communityChatMessageSchema } from "@ppal/contracts/community";
 import { DurableObject } from "cloudflare:workers";
 
+import { publishNotification } from "../services/notifications";
+
 interface RoomAttachment {
   channelId: string;
   communityId: string;
@@ -9,13 +11,6 @@ interface RoomAttachment {
 }
 
 const MAX_FRAME_BYTES = 64 * 1024;
-
-interface CommunityRoomEnv {
-  COMMUNITY_CHAT_RATE_LIMIT?: {
-    limit: (input: { key: string }) => Promise<{ success: boolean }>;
-  };
-  DB: D1Database;
-}
 
 const parseMentions = (body: string): string[] =>
   [
@@ -28,12 +23,22 @@ const parseMentions = (body: string): string[] =>
 
 const json = (value: unknown): string => JSON.stringify(value);
 
+const sendErrorFrame = (
+  webSocket: WebSocket,
+  frame: {
+    clientId?: string;
+    code: string;
+    error: string;
+    retryAfterSeconds?: number;
+  }
+): void => webSocket.send(json({ ...frame, type: "error" }));
+
 /**
  * One hibernatable object is allocated per channel. D1 is the source of truth;
  * this object only coordinates connected clients and applies per-user chat
  * rate limits, which keeps hot communities sharded instead of global.
  */
-export class CommunityChannelRoom extends DurableObject<CommunityRoomEnv> {
+export class CommunityChannelRoom extends DurableObject<Env> {
   async fetch(request: Request): Promise<Response> {
     if (
       request.method === "POST" &&
@@ -80,47 +85,43 @@ export class CommunityChannelRoom extends DurableObject<CommunityRoomEnv> {
     message: string | ArrayBuffer
   ): Promise<void> {
     if (typeof message !== "string") {
-      webSocket.send(
-        json({
-          code: "INVALID_MESSAGE",
-          error: "Text messages are required",
-          type: "error",
-        })
-      );
+      sendErrorFrame(webSocket, {
+        code: "INVALID_MESSAGE",
+        error: "Text messages are required",
+      });
       return;
     }
     if (new TextEncoder().encode(message).byteLength > MAX_FRAME_BYTES) {
-      webSocket.send(
-        json({
-          code: "MESSAGE_TOO_LARGE",
-          error: "Message is too large",
-          type: "error",
-        })
-      );
+      sendErrorFrame(webSocket, {
+        code: "MESSAGE_TOO_LARGE",
+        error: "Message is too large",
+      });
       return;
     }
     let payload: unknown;
     try {
       payload = JSON.parse(message);
     } catch {
-      webSocket.send(
-        json({
-          code: "INVALID_MESSAGE",
-          error: "Malformed JSON",
-          type: "error",
-        })
-      );
+      sendErrorFrame(webSocket, {
+        code: "INVALID_MESSAGE",
+        error: "Malformed JSON",
+      });
       return;
     }
     const parsed = communityChatMessageSchema.safeParse(payload);
     if (!parsed.success) {
-      webSocket.send(
-        json({
-          code: "INVALID_MESSAGE",
-          error: "Message must include a body and client id",
-          type: "error",
-        })
-      );
+      const clientId =
+        typeof payload === "object" &&
+        payload !== null &&
+        "clientId" in payload &&
+        typeof payload.clientId === "string"
+          ? payload.clientId.slice(0, 100)
+          : undefined;
+      sendErrorFrame(webSocket, {
+        clientId,
+        code: "INVALID_MESSAGE",
+        error: "Message must include a body and client id",
+      });
       return;
     }
     const attachment =
@@ -135,13 +136,11 @@ export class CommunityChannelRoom extends DurableObject<CommunityRoomEnv> {
       .bind(attachment.communityId, attachment.userId)
       .first<{ role: string; status: string }>();
     if (membership?.status !== "active") {
-      webSocket.send(
-        json({
-          code: "MEMBERSHIP_REQUIRED",
-          error: "Join the community to chat",
-          type: "error",
-        })
-      );
+      sendErrorFrame(webSocket, {
+        clientId: parsed.data.clientId,
+        code: "MEMBERSHIP_REQUIRED",
+        error: "Join the community to chat",
+      });
       return;
     }
     const limiter = this.env.COMMUNITY_CHAT_RATE_LIMIT;
@@ -150,14 +149,12 @@ export class CommunityChannelRoom extends DurableObject<CommunityRoomEnv> {
         key: `${attachment.communityId}:${attachment.userId}`,
       });
       if (!rate.success) {
-        webSocket.send(
-          json({
-            code: "RATE_LIMITED",
-            error: "You are sending messages too quickly",
-            retryAfterSeconds: 60,
-            type: "error",
-          })
-        );
+        sendErrorFrame(webSocket, {
+          clientId: parsed.data.clientId,
+          code: "RATE_LIMITED",
+          error: "You are sending messages too quickly",
+          retryAfterSeconds: 60,
+        });
         return;
       }
     }
@@ -167,13 +164,11 @@ export class CommunityChannelRoom extends DurableObject<CommunityRoomEnv> {
       .bind(attachment.channelId, attachment.communityId)
       .first<{ present: number }>();
     if (!channel) {
-      webSocket.send(
-        json({
-          code: "CHANNEL_ARCHIVED",
-          error: "This channel is no longer available",
-          type: "error",
-        })
-      );
+      sendErrorFrame(webSocket, {
+        clientId: parsed.data.clientId,
+        code: "CHANNEL_ARCHIVED",
+        error: "This channel is no longer available",
+      });
       return;
     }
 
@@ -234,21 +229,15 @@ export class CommunityChannelRoom extends DurableObject<CommunityRoomEnv> {
     this.broadcast(outgoing);
     for (const profile of mentionedProfiles.results) {
       this.ctx.waitUntil(
-        (async () => {
-          await this.env.DB.prepare(
-            `INSERT INTO notifications
-               (body, id, in_app_visible, milestone_key, title, type, user_id)
-             VALUES (?, ?, 1, ?, 'You were mentioned', 'community.mention', ?)
-             ON CONFLICT(milestone_key) DO NOTHING`
-          )
-            .bind(
-              `${author?.name ?? "Someone"} mentioned you in a community channel.`,
-              crypto.randomUUID(),
-              `community:${id}:mention:${profile.user_id}`,
-              profile.user_id
-            )
-            .run();
-        })()
+        publishNotification({
+          body: `${author?.name ?? "Someone"} mentioned you in a community channel.`,
+          milestoneKey: `community:${id}:mention:${profile.user_id}`,
+          ticketId: null,
+          title: "You were mentioned",
+          type: "community.mention",
+          userId: profile.user_id,
+          workerEnv: this.env,
+        })
       );
     }
   }

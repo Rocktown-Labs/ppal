@@ -4,6 +4,7 @@ import {
   communityChatMessageSchema,
   createCommunityRequestSchema,
   moderateCommunityMemberRequestSchema,
+  updateCommunityRequestSchema,
 } from "@ppal/contracts/community";
 
 describe("community contracts", () => {
@@ -43,5 +44,15 @@ describe("community contracts", () => {
     expect(() =>
       moderateCommunityMemberRequestSchema.parse({ role: "owner" })
     ).toThrow();
+  });
+
+  test("does not apply create defaults to partial community updates", () => {
+    expect(updateCommunityRequestSchema.parse({})).toEqual({});
+    expect(updateCommunityRequestSchema.parse({ name: "New name" })).toEqual({
+      name: "New name",
+    });
+    expect(updateCommunityRequestSchema.parse({ priceCents: 2500 })).toEqual({
+      priceCents: 2500,
+    });
   });
 });

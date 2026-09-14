@@ -22,6 +22,12 @@ import { absoluteUrl, noIndexMeta, SITE_NAME, socialMeta } from "@/lib/seo";
 
 type CommunityPageData = Awaited<ReturnType<typeof api.community.get>>;
 
+const CHAT_RECONNECT_BASE_MS = 1000;
+const CHAT_RECONNECT_MAX_MS = 10_000;
+
+const reconnectDelayMs = (attempt: number): number =>
+  Math.min(CHAT_RECONNECT_BASE_MS * 2 ** attempt, CHAT_RECONNECT_MAX_MS);
+
 const loadPublicCommunity = async (
   slug: string
 ): Promise<CommunityPageData | null> => {
@@ -57,7 +63,10 @@ const ChannelMessages = ({
   communitySlug: string;
 }) => {
   const [body, setBody] = useState("");
+  const [chatError, setChatError] = useState<string | null>(null);
   const [connected, setConnected] = useState(false);
+  const [loadingOlder, setLoadingOlder] = useState(false);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
   const socketRef = useRef<WebSocket | null>(null);
   const { data = [] } = useLiveQuery(communityMessageCollection);
   const messages = useMemo(
@@ -83,6 +92,7 @@ const ChannelMessages = ({
         for (const message of response.messages) {
           upsertCommunityMessage(messageToRow(channel.id, message));
         }
+        setNextCursor(response.nextCursor);
       } catch {
         // Public history can be unavailable for a private channel.
       }
@@ -93,50 +103,111 @@ const ChannelMessages = ({
     };
   }, [channel.id, communitySlug]);
 
+  const loadOlderMessages = async (): Promise<void> => {
+    if (!(nextCursor && !loadingOlder)) {
+      return;
+    }
+    setLoadingOlder(true);
+    setChatError(null);
+    try {
+      const response = await api.community.getMessages(
+        communitySlug,
+        channel.id,
+        { cursor: nextCursor, limit: 100 }
+      );
+      for (const message of response.messages) {
+        upsertCommunityMessage(messageToRow(channel.id, message));
+      }
+      setNextCursor(response.nextCursor);
+    } catch (error) {
+      setChatError(
+        error instanceof Error ? error.message : "Could not load older messages"
+      );
+    }
+    setLoadingOlder(false);
+  };
+
   useEffect(() => {
     if (!canChat) {
       return;
     }
-    const socketUrl = new URL(
-      `/api/v1/communities/${encodeURIComponent(communitySlug)}/channels/${encodeURIComponent(channel.id)}/ws`,
-      API_BASE_URL
-    );
-    socketUrl.protocol = socketUrl.protocol === "https:" ? "wss:" : "ws:";
-    const socket = new WebSocket(socketUrl);
-    socketRef.current = socket;
-    const handleOpen = () => setConnected(true);
-    const handleClose = () => setConnected(false);
-    const handleError = () => setConnected(false);
-    const handleMessage = (event: MessageEvent<string>) => {
-      try {
-        const payload = JSON.parse(event.data) as {
-          message?: CommunityMessage;
-          messageId?: string;
-          type?: string;
-        };
-        if (payload.type === "delete" && payload.messageId) {
-          removeCommunityMessage(payload.messageId);
+    let active = true;
+    let reconnectAttempt = 0;
+    let reconnectTimer: number | null = null;
+
+    const connect = (): void => {
+      const socketUrl = new URL(
+        `/api/v1/communities/${encodeURIComponent(communitySlug)}/channels/${encodeURIComponent(channel.id)}/ws`,
+        API_BASE_URL
+      );
+      socketUrl.protocol = socketUrl.protocol === "https:" ? "wss:" : "ws:";
+      const socket = new WebSocket(socketUrl);
+      socketRef.current = socket;
+
+      socket.addEventListener("open", () => {
+        reconnectAttempt = 0;
+        setChatError(null);
+        setConnected(true);
+      });
+      socket.addEventListener("close", (event) => {
+        if (socketRef.current === socket) {
+          socketRef.current = null;
         }
-        if (payload.type === "message" && payload.message) {
-          if (payload.message.clientId) {
-            removeCommunityMessage(payload.message.clientId);
+        setConnected(false);
+        if (!active) {
+          return;
+        }
+        if (event.code === 1008) {
+          setChatError(event.reason || "Chat access is no longer available");
+          return;
+        }
+        const delay = reconnectDelayMs(reconnectAttempt);
+        reconnectAttempt += 1;
+        setChatError("Connection interrupted. Reconnecting…");
+        reconnectTimer = window.setTimeout(connect, delay);
+      });
+      socket.addEventListener("error", () => {
+        setConnected(false);
+        socket.close();
+      });
+      socket.addEventListener("message", (event: MessageEvent<string>) => {
+        try {
+          const payload = JSON.parse(event.data) as {
+            clientId?: string;
+            error?: string;
+            message?: CommunityMessage;
+            messageId?: string;
+            type?: string;
+          };
+          if (payload.type === "error") {
+            if (payload.clientId) {
+              removeCommunityMessage(payload.clientId);
+            }
+            setChatError(payload.error ?? "Message could not be sent");
+            return;
           }
-          upsertCommunityMessage(messageToRow(channel.id, payload.message));
+          if (payload.type === "delete" && payload.messageId) {
+            removeCommunityMessage(payload.messageId);
+          }
+          if (payload.type === "message" && payload.message) {
+            if (payload.message.clientId) {
+              removeCommunityMessage(payload.message.clientId);
+            }
+            upsertCommunityMessage(messageToRow(channel.id, payload.message));
+          }
+        } catch {
+          // Ignore malformed frames from a disconnected peer.
         }
-      } catch {
-        // Ignore malformed frames from a disconnected peer.
-      }
+      });
     };
-    socket.addEventListener("open", handleOpen);
-    socket.addEventListener("close", handleClose);
-    socket.addEventListener("error", handleError);
-    socket.addEventListener("message", handleMessage);
+    connect();
+
     return () => {
-      socket.removeEventListener("open", handleOpen);
-      socket.removeEventListener("close", handleClose);
-      socket.removeEventListener("error", handleError);
-      socket.removeEventListener("message", handleMessage);
-      socket.close();
+      active = false;
+      if (reconnectTimer !== null) {
+        window.clearTimeout(reconnectTimer);
+      }
+      socketRef.current?.close();
       socketRef.current = null;
       setConnected(false);
     };
@@ -161,6 +232,7 @@ const ChannelMessages = ({
       replyToId: null,
     };
     upsertCommunityMessage(messageToRow(channel.id, optimistic));
+    setChatError(null);
     socketRef.current.send(
       JSON.stringify({ body: trimmed, clientId, type: "message" })
     );
@@ -184,7 +256,27 @@ const ChannelMessages = ({
           </span>
         ) : null}
       </header>
+      {chatError ? (
+        <p
+          className="border-b border-amber-400/20 bg-amber-400/5 px-5 py-2 text-xs text-amber-300"
+          role="alert"
+        >
+          {chatError}
+        </p>
+      ) : null}
       <div className="flex-1 space-y-3 overflow-y-auto p-5">
+        {nextCursor ? (
+          <div className="text-center">
+            <button
+              className="text-xs font-medium text-emerald-400 hover:text-emerald-300 disabled:text-zinc-600"
+              disabled={loadingOlder}
+              onClick={loadOlderMessages}
+              type="button"
+            >
+              {loadingOlder ? "Loading…" : "Load earlier messages"}
+            </button>
+          </div>
+        ) : null}
         {messages.length === 0 ? (
           <div className="flex h-full min-h-48 flex-col items-center justify-center text-center text-zinc-500">
             <MessageCircle className="mb-2 size-8" />
@@ -418,6 +510,7 @@ const CommunityPage = () => {
             canChat={canChat}
             channel={activeChannel}
             communitySlug={slug}
+            key={activeChannel.id}
           />
         ) : (
           <div className="flex-1 rounded-2xl border border-dashed border-zinc-800 p-10 text-center text-zinc-500">

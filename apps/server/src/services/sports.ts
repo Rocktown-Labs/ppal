@@ -17,6 +17,7 @@ import { refreshHistoricalBatch } from "./historical-imports";
 import { publishNotification } from "./notifications";
 import {
   buildProgressLine,
+  firstPregamePollAt,
   isProgressNotificationDue,
   pollingDelayMs,
 } from "./sports-progress";
@@ -529,6 +530,21 @@ export const processSportsMessage = async (
     ]);
     return;
   }
+  const now = Date.now();
+  const firstPollAt = firstPregamePollAt({
+    interval: cadence.minutes,
+    now,
+    startsAt: event.starts_at,
+  });
+  if (event.status === "scheduled" && firstPollAt > now) {
+    await workerEnv.DB.prepare(
+      `UPDATE sports_events SET next_poll_at = ?, poll_lease_until = NULL,
+       updated_at = ? WHERE id = ? AND poll_lease_until = ?`
+    )
+      .bind(firstPollAt, now, event.id, Number(message.leaseToken))
+      .run();
+    return;
+  }
   const budget = await acquireSportradarProductBudget(
     event.league_slug,
     workerEnv
@@ -546,9 +562,15 @@ export const processSportsMessage = async (
   const { payload, sequence } = await fetchSummary(event, workerEnv);
   const status = normalizeStatus(payload, event.status);
   const scores = summaryScores(payload, event);
-  let nextPollDelay: number | null = null;
-  if (status === "live" || status === "scheduled") {
-    nextPollDelay = pollingDelayMs(cadence.minutes);
+  const syncedAt = Date.now();
+  let nextPollAt: number | null = null;
+  if (status === "live") {
+    nextPollAt = syncedAt + pollingDelayMs(cadence.minutes);
+  } else if (status === "scheduled") {
+    nextPollAt = Math.max(
+      syncedAt + pollingDelayMs(cadence.minutes),
+      event.starts_at
+    );
   }
   await workerEnv.DB.prepare(
     `UPDATE sports_events SET away_score = ?, home_score = ?, last_synced_at = ?,
@@ -558,11 +580,11 @@ export const processSportsMessage = async (
     .bind(
       scores.away,
       scores.home,
-      Date.now(),
-      nextPollDelay ? Date.now() + nextPollDelay : null,
+      syncedAt,
+      nextPollAt,
       JSON.stringify(payload),
       status,
-      Date.now(),
+      syncedAt,
       event.id
     )
     .run();

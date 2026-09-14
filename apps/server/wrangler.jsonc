@@ -26,6 +26,10 @@
   "durable_objects": {
     "bindings": [
       {
+        "name": "COMMUNITY_CHANNEL_ROOMS",
+        "class_name": "CommunityChannelRoom",
+      },
+      {
         "name": "SPORTRADAR_PRODUCT_BUDGET",
         "class_name": "SportradarProductBudget",
       },
@@ -35,6 +39,22 @@
     {
       "tag": "v1",
       "new_sqlite_classes": ["SportradarProductBudget"],
+    },
+    {
+      "tag": "v2",
+      "new_sqlite_classes": ["CommunityChannelRoom"],
+    },
+  ],
+  "ratelimits": [
+    {
+      "name": "COMMUNITY_HTTP_RATE_LIMIT",
+      "namespace_id": "1006",
+      "simple": { "limit": 120, "period": 60 },
+    },
+    {
+      "name": "COMMUNITY_CHAT_RATE_LIMIT",
+      "namespace_id": "1007",
+      "simple": { "limit": 60, "period": 60 },
     },
   ],
   "queues": {

@@ -35,6 +35,16 @@ const marketName = (slug: string): string => {
 export const pollingDelayMs = (interval: NotificationIntervalMinutes): number =>
   interval * 60_000;
 
+export const firstPregamePollAt = ({
+  interval,
+  now,
+  startsAt,
+}: {
+  interval: NotificationIntervalMinutes;
+  now: number;
+  startsAt: number;
+}): number => Math.max(now, startsAt - pollingDelayMs(interval));
+
 export const isProgressNotificationDue = ({
   interval,
   lastNotifiedAt,

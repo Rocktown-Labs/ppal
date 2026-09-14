@@ -1099,11 +1099,16 @@ export const createCommunityRoutes = (auth: Auth) =>
         );
       }
       const session = await stripe.checkout.sessions.retrieve(body.sessionId);
+      const paidAmount =
+        env.STRIPE_TAX_ENABLED === "true"
+          ? session.amount_subtotal
+          : session.amount_total;
       if (
         session.payment_status !== "paid" ||
         session.status !== "complete" ||
         session.metadata?.communityId !== community.id ||
-        session.metadata?.userId !== user.id
+        session.metadata?.userId !== user.id ||
+        paidAmount === null
       ) {
         return c.json(
           {
@@ -1113,20 +1118,24 @@ export const createCommunityRoutes = (auth: Auth) =>
           402
         );
       }
-      await env.DB.prepare(
+      const now = Date.now();
+      const activation = await env.DB.prepare(
         `INSERT INTO community_members (community_id, joined_at, paid_at, payment_reference, role, status, updated_at, user_id)
-         VALUES (?, ?, ?, ?, 'member', 'active', ?, ?)
+         SELECT id, ?, ?, ?, 'member', 'active', ?, ? FROM communities
+         WHERE id = ? AND archived_at IS NULL AND access = 'paid' AND price_cents = ?
          ON CONFLICT(community_id, user_id) DO UPDATE SET paid_at = excluded.paid_at, payment_reference = excluded.payment_reference, status = 'active', updated_at = excluded.updated_at`
       )
-        .bind(
-          community.id,
-          Date.now(),
-          Date.now(),
-          session.id,
-          Date.now(),
-          user.id
-        )
+        .bind(now, now, session.id, now, user.id, community.id, paidAmount)
         .run();
+      if (activation.meta.changes === 0) {
+        return c.json(
+          {
+            code: "PRICE_CHANGED",
+            error: "The community price changed. Start a new checkout to join.",
+          },
+          409
+        );
+      }
       return c.json({ membership: { role: "member", status: "active" } });
     })
     .delete("/communities/:slug/membership", async (c) => {

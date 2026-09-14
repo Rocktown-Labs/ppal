@@ -171,12 +171,29 @@ const markDeliveryDelivered = async (
     .run();
 };
 
+const markDeliveryFailed = async (
+  deliveryId: string,
+  errorMessage: string,
+  workerEnv: Env
+): Promise<void> => {
+  await workerEnv.DB.prepare(
+    "UPDATE notification_deliveries SET status = 'failed', error_message = ?, updated_at = ? WHERE id = ?"
+  )
+    .bind(errorMessage, Date.now(), deliveryId)
+    .run();
+};
+
 const processWebPushDelivery = async (
   delivery: DeliveryRow,
   workerEnv: Env
 ): Promise<void> => {
   if (!delivery.p256dh || !delivery.auth) {
-    throw new Error("Web push subscription is no longer registered");
+    await markDeliveryFailed(
+      delivery.id,
+      "Web push subscription is no longer registered",
+      workerEnv
+    );
+    return;
   }
   const subscription: PushSubscriptionData = {
     endpoint: delivery.destination,
@@ -315,17 +332,13 @@ export const processNotificationMessage = async (
     );
     await markDeliveryDelivered(delivery, workerEnv, providerReceiptId);
   } catch (error) {
-    await workerEnv.DB.prepare(
-      "UPDATE notification_deliveries SET status = 'failed', error_message = ?, updated_at = ? WHERE id = ?"
-    )
-      .bind(
-        error instanceof Error
-          ? error.message.slice(0, 1000)
-          : "Unknown delivery error",
-        Date.now(),
-        delivery.id
-      )
-      .run();
+    await markDeliveryFailed(
+      delivery.id,
+      error instanceof Error
+        ? error.message.slice(0, 1000)
+        : "Unknown delivery error",
+      workerEnv
+    );
     if (
       error instanceof WebPushError &&
       error.statusCode >= 400 &&

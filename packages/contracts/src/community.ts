@@ -66,8 +66,16 @@ export const createCommunityRequestSchema = z.object({
   visibility: communityVisibilitySchema.default("public"),
 });
 
-export const updateCommunityRequestSchema = createCommunityRequestSchema
-  .partial()
+export const updateCommunityRequestSchema = z
+  .object({
+    access: communityAccessSchema.optional(),
+    description: z.string().trim().max(2000).nullable().optional(),
+    name: z.string().trim().min(2).max(80).optional(),
+    priceCents: z.number().int().min(100).max(100_000).nullable().optional(),
+    rules: z.string().trim().max(4000).nullable().optional(),
+    slug: communitySlugSchema.optional(),
+    visibility: communityVisibilitySchema.optional(),
+  })
   .superRefine((value, ctx) => {
     if (
       value.access === "free" &&

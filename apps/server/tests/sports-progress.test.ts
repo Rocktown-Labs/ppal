@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 
 import {
   buildProgressLine,
+  firstPregamePollAt,
   isProgressNotificationDue,
   pollingDelayMs,
 } from "../src/services/sports-progress";
@@ -23,6 +24,16 @@ describe("sports progress notifications", () => {
         now: 900_000,
       })
     ).toBe(true);
+  });
+
+  test("defers the first provider poll until one cadence before the event", () => {
+    const startsAt = 2_000_000;
+    expect(firstPregamePollAt({ interval: 15, now: 100_000, startsAt })).toBe(
+      1_100_000
+    );
+    expect(firstPregamePollAt({ interval: 15, now: startsAt, startsAt })).toBe(
+      startsAt
+    );
   });
 
   test("formats a player combo as progress toward its target", () => {

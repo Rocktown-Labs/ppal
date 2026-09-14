@@ -13,6 +13,7 @@ import { getAuthUser } from "../lib/auth";
 import { safeJsonParse } from "../lib/database";
 import { writeAuditEvent } from "../services/audit";
 import { refreshHistoricalBatch } from "../services/historical-imports";
+import { firstPregamePollAt } from "../services/sports-progress";
 import { qualifyReferral } from "./referrals";
 
 interface TicketRow {
@@ -381,18 +382,21 @@ export const createTicketRoutes = (auth: Auth) =>
         );
       }
       const legs = await env.DB.prepare(
-        `SELECT id, market_id, participant_id, sports_event_id
+        `SELECT l.id, l.market_id, l.participant_id, l.sports_event_id,
+          e.starts_at, t.notification_interval_minutes
          FROM ticket_legs l
-         WHERE ticket_id = ? AND EXISTS (
-           SELECT 1 FROM tickets t WHERE t.id = l.ticket_id AND t.user_id = ?
-         )`
+         JOIN tickets t ON t.id = l.ticket_id
+         JOIN sports_events e ON e.id = l.sports_event_id
+         WHERE l.ticket_id = ? AND t.user_id = ?`
       )
         .bind(ticketId, user.id)
         .all<{
           id: string;
           market_id: string;
+          notification_interval_minutes: TicketContract["notificationIntervalMinutes"];
           participant_id: string | null;
           sports_event_id: string;
+          starts_at: number;
         }>();
       const trackingStatements = legs.results.map((leg) =>
         env.DB.prepare(
@@ -411,12 +415,22 @@ export const createTicketRoutes = (auth: Auth) =>
           now
         )
       );
-      const eventStatements = [
-        ...new Set(legs.results.map((leg) => leg.sports_event_id)),
-      ].map((eventId) =>
+      const eventPollTimes = new Map<string, number>();
+      for (const leg of legs.results) {
+        const pollAt = firstPregamePollAt({
+          interval: leg.notification_interval_minutes,
+          now,
+          startsAt: leg.starts_at,
+        });
+        const existingPollAt = eventPollTimes.get(leg.sports_event_id);
+        if (existingPollAt === undefined || pollAt < existingPollAt) {
+          eventPollTimes.set(leg.sports_event_id, pollAt);
+        }
+      }
+      const eventStatements = [...eventPollTimes].map(([eventId, pollAt]) =>
         env.DB.prepare(
           "UPDATE sports_events SET next_poll_at = MIN(COALESCE(next_poll_at, ?), ?), updated_at = ? WHERE id = ?"
-        ).bind(now, now, now, eventId)
+        ).bind(pollAt, pollAt, now, eventId)
       );
       await env.DB.batch([...trackingStatements, ...eventStatements]);
       await writeAuditEvent({
