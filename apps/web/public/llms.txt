@@ -1,0 +1,29 @@
+# ParlayPal
+
+ParlayPal is a sportsbook-independent live bet companion for sports bettors. It reads bet-slip screenshots, normalizes straight bets and multi-leg player props, tracks game data, and builds a transparent personal betting record.
+
+## Product
+
+- Upload a screenshot from FanDuel, DraftKings, BetMGM, PrizePicks, or another sportsbook.
+- Review extracted legs before tracking begins.
+- Follow player, team, and market progress as games happen.
+- Receive milestone notifications through the dashboard and supported push channels.
+- Compare performance by player, team, sport, market, and ticket size.
+- Join public or private creator communities to discuss picks and live tickets.
+
+## Public pages
+
+- [ParlayPal home](https://myparlaypal.com/): product overview, supported sports, workflow, features, and pricing.
+- [Pricing](https://myparlaypal.com/#pricing): current Free, Pro, and Creator plans.
+- Public scorecards: `https://myparlaypal.com/u/{username}` when a bettor has enabled a public profile.
+- Public communities: `https://myparlaypal.com/communities/{slug}` when a creator publishes a public community.
+
+## Trust and scope
+
+ParlayPal tracks bets but is not a sportsbook or gambling operator. Public scorecards use verified ticket outcomes; private records and uploaded screenshots are not public. Users should follow local laws and gamble responsibly.
+
+## Machine-readable resources
+
+- [Pricing data](https://myparlaypal.com/pricing.md)
+- [XML sitemap](https://myparlaypal.com/sitemap.xml)
+- [Robots rules](https://myparlaypal.com/robots.txt)

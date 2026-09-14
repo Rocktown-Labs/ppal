@@ -2,6 +2,7 @@ import { DbProvider, useLiveQuery } from "@tanstack/react-db";
 import {
   createFileRoute,
   Link,
+  useLoaderData,
   useNavigate,
   useParams,
 } from "@tanstack/react-router";
@@ -17,6 +18,29 @@ import {
   removeCommunityMessage,
   upsertCommunityMessage,
 } from "@/lib/community-db";
+import { absoluteUrl, noIndexMeta, SITE_NAME, socialMeta } from "@/lib/seo";
+
+type CommunityPageData = Awaited<ReturnType<typeof api.community.get>>;
+
+const loadPublicCommunity = async (
+  slug: string
+): Promise<CommunityPageData | null> => {
+  try {
+    const response = await fetch(
+      `${API_BASE_URL}/api/v1/communities/${encodeURIComponent(slug)}`,
+      { headers: { Accept: "application/json" } }
+    );
+    if (!response.ok) {
+      return null;
+    }
+    const payload = (await response.json()) as CommunityPageData;
+    return payload.community && Array.isArray(payload.channels)
+      ? payload
+      : null;
+  } catch {
+    return null;
+  }
+};
 
 const messageToRow = (channelId: string, message: CommunityMessage) => ({
   ...message,
@@ -219,13 +243,15 @@ const ChannelMessages = ({
   );
 };
 
+// oxlint-disable-next-line complexity -- The route coordinates loading, auth, checkout, and live channel state.
 const CommunityPage = () => {
   const { slug } = useParams({ from: "/communities/$slug" });
+  const initialState = useLoaderData({ from: "/communities/$slug" });
   const navigate = useNavigate();
-  const [state, setState] = useState<Awaited<
-    ReturnType<typeof api.community.get>
-  > | null>(null);
-  const [activeChannelId, setActiveChannelId] = useState<string | null>(null);
+  const [state, setState] = useState<CommunityPageData | null>(initialState);
+  const [activeChannelId, setActiveChannelId] = useState<string | null>(
+    initialState?.channels[0]?.id ?? null
+  );
   const [error, setError] = useState<string | null>(null);
   const [joining, setJoining] = useState(false);
 
@@ -293,10 +319,7 @@ const CommunityPage = () => {
   const activeChannel =
     state.channels.find((channel) => channel.id === activeChannelId) ??
     state.channels[0];
-  const canChat =
-    state.membership?.status === "active" ||
-    state.membership?.role === "owner" ||
-    state.membership?.role === "moderator";
+  const canChat = state.membership?.status === "active";
   let joinLabel = "Join community";
   if (state.membership?.status === "pending") {
     joinLabel = "Request pending";
@@ -407,6 +430,48 @@ const CommunityPage = () => {
 };
 
 export const Route = createFileRoute("/communities/$slug")({
-  ssr: false,
+  loader: ({ params }) => loadPublicCommunity(params.slug),
+  head: ({ loaderData, params }) => {
+    const communityName =
+      loaderData?.community.name ??
+      params.slug
+        .split("-")
+        .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+        .join(" ");
+    const title = `${communityName} Betting Community | ${SITE_NAME}`;
+    const description =
+      loaderData?.community.description ??
+      `Join the ${communityName} betting community on ParlayPal to share picks, discuss live legs, and follow verified bet tracking.`;
+    const url = absoluteUrl(`/communities/${encodeURIComponent(params.slug)}`);
+    return {
+      links: [{ href: url, rel: "canonical" }],
+      meta: [
+        { title },
+        { content: description, name: "description" },
+        ...socialMeta({ description, title, url }),
+        ...(loaderData ? [] : [noIndexMeta]),
+      ],
+      scripts: loaderData
+        ? [
+            {
+              children: JSON.stringify({
+                "@context": "https://schema.org",
+                "@type": "DiscussionForumPosting",
+                about: loaderData.community.name,
+                description,
+                headline: loaderData.community.name,
+                isPartOf: {
+                  "@type": "WebSite",
+                  name: SITE_NAME,
+                  url: "https://myparlaypal.com",
+                },
+                url,
+              }),
+              type: "application/ld+json",
+            },
+          ]
+        : [],
+    };
+  },
   component: CommunityPage,
 });

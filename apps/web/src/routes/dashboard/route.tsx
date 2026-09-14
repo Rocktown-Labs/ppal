@@ -29,6 +29,7 @@ import {
 import { api } from "@/lib/api";
 import type { CurrentUserWithProfile } from "@/lib/api";
 import { authClient } from "@/lib/auth-client";
+import { noIndexMeta } from "@/lib/seo";
 
 interface NavItem {
   badge?: string;
@@ -308,6 +309,7 @@ const DashboardLayout = () => (
 
 export const Route = createFileRoute("/dashboard")({
   ssr: false,
+  head: () => ({ meta: [noIndexMeta] }),
   beforeLoad: async ({ location }) => {
     const session = await authClient.getSession();
     if (!session.data) {

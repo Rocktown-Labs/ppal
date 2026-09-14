@@ -3,6 +3,7 @@ import { createFileRoute, Link, redirect } from "@tanstack/react-router";
 import { Auth } from "@/components/auth/auth";
 import { api } from "@/lib/api";
 import { authClient } from "@/lib/auth-client";
+import { noIndexMeta } from "@/lib/seo";
 
 const RouteComponent = () => (
   <main className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden bg-zinc-950 px-4 py-12 text-zinc-100">
@@ -47,5 +48,6 @@ export const Route = createFileRoute("/login")({
       to: profile?.username?.trim() ? "/dashboard" : "/dashboard/onboarding",
     });
   },
+  head: () => ({ meta: [noIndexMeta] }),
   component: RouteComponent,
 });

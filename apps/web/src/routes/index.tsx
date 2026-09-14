@@ -3,6 +3,12 @@ import { Check } from "lucide-react";
 
 import { UserButton } from "@/components/auth/user/user-button";
 import { authClient } from "@/lib/auth-client";
+import {
+  SITE_DESCRIPTION,
+  SITE_LOGO_URL,
+  SITE_ORIGIN,
+  socialMeta,
+} from "@/lib/seo";
 
 const COVERED_SPORTS = [
   { detail: "NBA · WNBA · NCAA · Global", emoji: "🏀", name: "Basketball" },
@@ -37,7 +43,7 @@ const HOW_IT_WORKS_STEPS = [
   },
   {
     description:
-      "Build an honest record of the players and markets you actually hit with most.",
+      "Build an honest record of the players and markets you win with most.",
     step: "04",
     title: "Know Your Hit Rate",
   },
@@ -82,6 +88,29 @@ const FEATURES = [
   },
 ] as const;
 
+const FAQ_ITEMS = [
+  {
+    answer:
+      "ParlayPal reads screenshots from FanDuel, DraftKings, BetMGM, PrizePicks, and other sportsbooks. It extracts straight bets, player props, and multi-leg combinations so you can review every selection before tracking.",
+    question: "What sportsbooks and bet types does ParlayPal support?",
+  },
+  {
+    answer:
+      "After you confirm an uploaded slip, ParlayPal matches its teams, players, markets, and lines to live sports data. The dashboard shows progress on each leg and sends milestone notifications as the game changes.",
+    question: "How does live parlay tracking work?",
+  },
+  {
+    answer:
+      "No. ParlayPal is a tracking companion, not a sportsbook or gambling operator. It does not accept wagers, hold funds, or store your dollar stakes. Always follow local laws and gamble responsibly.",
+    question: "Is ParlayPal a sportsbook?",
+  },
+  {
+    answer:
+      "Your public scorecard includes only verified outcomes you choose to share. Uploaded slip images, account details, and private records stay private to your account.",
+    question: "Can I keep my betting record private?",
+  },
+] as const;
+
 const HomeComponent = () => {
   const { data: session } = authClient.useSession();
   const isAuthenticated = Boolean(session?.user);
@@ -117,6 +146,9 @@ const HomeComponent = () => {
             </a>
             <a href="#pricing" className="transition-colors hover:text-white">
               Pricing
+            </a>
+            <a href="#faq" className="transition-colors hover:text-white">
+              FAQ
             </a>
           </nav>
 
@@ -798,6 +830,37 @@ const HomeComponent = () => {
         </div>
       </section>
 
+      {/* FAQ Section */}
+      <section id="faq" className="border-t border-zinc-800/80 py-20">
+        <div className="mx-auto max-w-3xl space-y-10 px-4 sm:px-6 lg:px-8">
+          <div className="space-y-3 text-center">
+            <span className="rounded-full border border-emerald-500/20 bg-emerald-500/10 px-3 py-1 text-xs font-bold tracking-wider text-emerald-400 uppercase">
+              FAQ
+            </span>
+            <h2 className="text-3xl font-extrabold tracking-tight text-white sm:text-4xl">
+              Questions before your first upload?
+            </h2>
+            <p className="text-sm text-zinc-400">
+              Clear answers about supported bets, live tracking, privacy, and
+              what ParlayPal does (and does not) do.
+            </p>
+          </div>
+
+          <div className="divide-y divide-zinc-800 rounded-2xl border border-zinc-800 bg-zinc-900/40 px-6">
+            {FAQ_ITEMS.map((item) => (
+              <details className="group py-5" key={item.question}>
+                <summary className="cursor-pointer list-none pr-8 text-sm font-semibold text-white marker:hidden">
+                  {item.question}
+                </summary>
+                <p className="mt-3 text-sm leading-relaxed text-zinc-400">
+                  {item.answer}
+                </p>
+              </details>
+            ))}
+          </div>
+        </div>
+      </section>
+
       {/* Final Call to Action */}
       <section className="border-t border-zinc-800 bg-gradient-to-b from-zinc-950 to-zinc-900 py-20">
         <div className="mx-auto max-w-4xl space-y-6 px-4 text-center">
@@ -874,6 +937,12 @@ const HomeComponent = () => {
                 >
                   Pricing
                 </a>
+                <a
+                  href="#faq"
+                  className="transition-colors hover:text-emerald-400"
+                >
+                  FAQ
+                </a>
               </nav>
             </div>
 
@@ -912,5 +981,69 @@ const HomeComponent = () => {
 };
 
 export const Route = createFileRoute("/")({
+  head: () => ({
+    links: [{ href: `${SITE_ORIGIN}/`, rel: "canonical" }],
+    meta: [
+      {
+        title: "Live Parlay Tracker & Bet Slip Analyzer | ParlayPal",
+      },
+      { content: SITE_DESCRIPTION, name: "description" },
+      ...socialMeta({
+        description: SITE_DESCRIPTION,
+        title: "Live Parlay Tracker & Bet Slip Analyzer | ParlayPal",
+        url: `${SITE_ORIGIN}/`,
+      }),
+    ],
+    scripts: [
+      {
+        children: JSON.stringify({
+          "@context": "https://schema.org",
+          "@type": "SoftwareApplication",
+          applicationCategory: "SportsApplication",
+          description: SITE_DESCRIPTION,
+          image: SITE_LOGO_URL,
+          name: "ParlayPal",
+          offers: [
+            {
+              "@type": "Offer",
+              name: "ParlayPal Free",
+              price: "0",
+              priceCurrency: "USD",
+            },
+            {
+              "@type": "Offer",
+              name: "ParlayPal Pro",
+              price: "12.99",
+              priceCurrency: "USD",
+            },
+            {
+              "@type": "Offer",
+              name: "ParlayPal Creator",
+              price: "24.99",
+              priceCurrency: "USD",
+            },
+          ],
+          operatingSystem: "Web",
+          url: `${SITE_ORIGIN}/`,
+        }),
+        type: "application/ld+json",
+      },
+      {
+        children: JSON.stringify({
+          "@context": "https://schema.org",
+          "@type": "FAQPage",
+          mainEntity: FAQ_ITEMS.map((item) => ({
+            "@type": "Question",
+            acceptedAnswer: {
+              "@type": "Answer",
+              text: item.answer,
+            },
+            name: item.question,
+          })),
+        }),
+        type: "application/ld+json",
+      },
+    ],
+  }),
   component: HomeComponent,
 });

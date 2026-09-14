@@ -1,4 +1,9 @@
-import { Link, createFileRoute, useParams } from "@tanstack/react-router";
+import {
+  Link,
+  createFileRoute,
+  useLoaderData,
+  useParams,
+} from "@tanstack/react-router";
 import {
   CheckCircle2,
   Lock,
@@ -14,20 +19,40 @@ import {
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
-import { api, resolveApiAsset } from "@/lib/api";
+import { API_BASE_URL, api, resolveApiAsset } from "@/lib/api";
 import type { PublicProfile } from "@/lib/api";
 import { authClient } from "@/lib/auth-client";
+import { absoluteUrl, noIndexMeta, SITE_NAME, socialMeta } from "@/lib/seo";
 
 const copyProfileLink = () => {
   navigator.clipboard.writeText(window.location.href);
   toast.success("Profile link copied!");
 };
 
+const loadPublicProfile = async (
+  username: string
+): Promise<PublicProfile | null> => {
+  try {
+    const response = await fetch(
+      `${API_BASE_URL}/api/v1/profiles/${encodeURIComponent(username)}`,
+      { headers: { Accept: "application/json" } }
+    );
+    if (!response.ok) {
+      return null;
+    }
+    const payload = (await response.json()) as { profile?: PublicProfile };
+    return payload.profile ?? null;
+  } catch {
+    return null;
+  }
+};
+
 const PublicProfileComponent = () => {
   const { username } = useParams({ from: "/u/$username" });
+  const initialProfile = useLoaderData({ from: "/u/$username" });
 
-  const [profile, setProfile] = useState<PublicProfile | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [profile, setProfile] = useState<PublicProfile | null>(initialProfile);
+  const [isLoading, setIsLoading] = useState(false);
   const [isFollowing, setIsFollowing] = useState(false);
   const [isFollowLoading, setIsFollowLoading] = useState(false);
   const [session, setSession] = useState<unknown>(null);
@@ -46,26 +71,18 @@ const PublicProfileComponent = () => {
         // session not found
       }
 
-      try {
-        const res = await api.community.getPublicProfile(username);
-        if (active) {
-          setProfile(res.profile);
-        }
-      } catch {
-        // User not found or private
-      }
-
       if (active) {
+        setProfile(initialProfile);
         setIsLoading(false);
       }
     };
 
-    loadData();
+    void loadData();
 
     return () => {
       active = false;
     };
-  }, [username]);
+  }, [initialProfile]);
 
   const handleToggleFollow = async () => {
     if (!session) {
@@ -352,5 +369,40 @@ const PublicProfileComponent = () => {
 };
 
 export const Route = createFileRoute("/u/$username")({
+  loader: ({ params }) => loadPublicProfile(params.username),
+  head: ({ loaderData, params }) => {
+    const displayName = loaderData?.name ?? `@${params.username}`;
+    const title = `${displayName} Betting Record & Hit Rate | ${SITE_NAME}`;
+    const description = loaderData
+      ? `${displayName}'s verified ParlayPal scorecard: ${loaderData.wins} wins, ${loaderData.losses} losses, and transparent player hit-rate history.`
+      : `View ${displayName}'s transparent betting record, verified wins, losses, and player hit rates on ParlayPal.`;
+    const url = absoluteUrl(`/u/${encodeURIComponent(params.username)}`);
+    return {
+      links: [{ href: url, rel: "canonical" }],
+      meta: [
+        { title },
+        { content: description, name: "description" },
+        ...socialMeta({ description, title, url }),
+        ...(loaderData ? [] : [noIndexMeta]),
+      ],
+      scripts: loaderData
+        ? [
+            {
+              children: JSON.stringify({
+                "@context": "https://schema.org",
+                "@type": "ProfilePage",
+                mainEntity: {
+                  "@type": "Person",
+                  description: loaderData.bio ?? undefined,
+                  name: loaderData.name,
+                  url,
+                },
+              }),
+              type: "application/ld+json",
+            },
+          ]
+        : [],
+    };
+  },
   component: PublicProfileComponent,
 });

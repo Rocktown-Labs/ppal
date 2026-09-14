@@ -1,6 +1,7 @@
 import { createFileRoute, Link, useParams } from "@tanstack/react-router";
 
 import { Auth } from "@/components/auth/auth";
+import { noIndexMeta } from "@/lib/seo";
 
 const AuthRouteComponent = () => {
   const { path } = useParams({ from: "/auth/$path" });
@@ -29,5 +30,6 @@ const AuthRouteComponent = () => {
 };
 
 export const Route = createFileRoute("/auth/$path")({
+  head: () => ({ meta: [noIndexMeta] }),
   component: AuthRouteComponent,
 });

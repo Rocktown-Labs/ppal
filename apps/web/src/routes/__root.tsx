@@ -13,6 +13,12 @@ import { evlogErrorHandler } from "evlog/nitro/v3";
 
 import { AuthProvider } from "@/components/auth/auth-provider";
 import { authClient } from "@/lib/auth-client";
+import {
+  SITE_DESCRIPTION,
+  SITE_LOGO_URL,
+  SITE_NAME,
+  SITE_ORIGIN,
+} from "@/lib/seo";
 
 import appCss from "../index.css?url";
 
@@ -91,9 +97,38 @@ export const Route = createRootRouteWithContext<RouterAppContext>()({
         title: "ParlayPal — Sportsbook-Independent Live Bet Companion",
       },
       {
-        content:
-          "ParlayPal tracks every leg of your sports parlays live, independently of any sportsbook. Upload your slip, follow stat progress in real time, and build your personal hit-rate history.",
+        content: SITE_DESCRIPTION,
         name: "description",
+      },
+      {
+        content: "#09090b",
+        name: "theme-color",
+      },
+    ],
+    scripts: [
+      {
+        children: JSON.stringify({
+          "@context": "https://schema.org",
+          "@graph": [
+            {
+              "@type": "Organization",
+              "@id": `${SITE_ORIGIN}/#organization`,
+              description: SITE_DESCRIPTION,
+              logo: SITE_LOGO_URL,
+              name: SITE_NAME,
+              url: SITE_ORIGIN,
+            },
+            {
+              "@type": "WebSite",
+              "@id": `${SITE_ORIGIN}/#website`,
+              description: SITE_DESCRIPTION,
+              name: SITE_NAME,
+              publisher: { "@id": `${SITE_ORIGIN}/#organization` },
+              url: SITE_ORIGIN,
+            },
+          ],
+        }),
+        type: "application/ld+json",
       },
     ],
   }),
