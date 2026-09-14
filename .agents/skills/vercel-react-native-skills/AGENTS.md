@@ -86,8 +86,7 @@ Comprehensive performance optimization guide for React Native applications, desi
 
 **Impact: CRITICAL**
 
-Fundamental React Native rendering rules. Violations cause
-runtime crashes or broken UI.
+Fundamental React Native rendering rules. Violations cause runtime crashes or broken UI.
 
 ### 1.1 Never Use && with Potentially Falsy Values
 
@@ -203,8 +202,7 @@ function Greeting({ name }: { name: string }) {
 
 **Impact: HIGH**
 
-Optimizing virtualized lists (FlatList, LegendList, FlashList)
-for smooth scrolling and fast updates.
+Optimizing virtualized lists (FlatList, LegendList, FlashList) for smooth scrolling and fast updates.
 
 ### 2.1 Avoid Inline Objects in renderItem
 
@@ -364,7 +362,10 @@ function ProductRow({ id }: { id: string }) {
   const user = useContext(UserContext);
   const cart = useContext(CartContext);
   // Bad: expensive computation
-  const recommendations = useMemo(() => computeRecommendations(product), [product]);
+  const recommendations = useMemo(
+    () => computeRecommendations(product),
+    [product]
+  );
 
   return <View>{/* ... */}</View>;
 }
@@ -716,7 +717,10 @@ function ProductItem({ product }: { product: Product }) {
   return (
     <View>
       {/* 4000x3000 image loaded for a 100x100 thumbnail */}
-      <Image source={{ uri: product.imageUrl }} style={{ width: 100, height: 100 }} />
+      <Image
+        source={{ uri: product.imageUrl }}
+        style={{ width: 100, height: 100 }}
+      />
       <Text>{product.name}</Text>
     </View>
   );
@@ -766,7 +770,12 @@ image component.
 **Incorrect: single component with conditionals**
 
 ```tsx
-type Item = { id: string; text?: string; imageUrl?: string; isHeader?: boolean };
+type Item = {
+  id: string;
+  text?: string;
+  imageUrl?: string;
+  isHeader?: boolean;
+};
 
 function ListItem({ item }: { item: Item }) {
   if (item.isHeader) {
@@ -780,7 +789,11 @@ function ListItem({ item }: { item: Item }) {
 
 function Feed({ items }: { items: Item[] }) {
   return (
-    <LegendList data={items} renderItem={({ item }) => <ListItem item={item} />} recycleItems />
+    <LegendList
+      data={items}
+      renderItem={({ item }) => <ListItem item={item} />}
+      recycleItems
+    />
   );
 }
 ```
@@ -857,8 +870,7 @@ function Feed({ items }: { items: FeedItem[] }) {
 
 **Impact: HIGH**
 
-GPU-accelerated animations, Reanimated patterns, and avoiding
-render thrashing during gestures.
+GPU-accelerated animations, Reanimated patterns, and avoiding render thrashing during gestures.
 
 ### 3.1 Animate Transform and Opacity Instead of Layout Properties
 
@@ -869,7 +881,10 @@ Avoid animating `width`, `height`, `top`, `left`, `margin`, or `padding`. These 
 **Incorrect: animates height, triggers layout every frame**
 
 ```tsx
-import Animated, { useAnimatedStyle, withTiming } from "react-native-reanimated";
+import Animated, {
+  useAnimatedStyle,
+  withTiming,
+} from "react-native-reanimated";
 
 function CollapsiblePanel({ expanded }: { expanded: boolean }) {
   const animatedStyle = useAnimatedStyle(() => ({
@@ -884,7 +899,10 @@ function CollapsiblePanel({ expanded }: { expanded: boolean }) {
 **Correct: animates scaleY, GPU-accelerated**
 
 ```tsx
-import Animated, { useAnimatedStyle, withTiming } from "react-native-reanimated";
+import Animated, {
+  useAnimatedStyle,
+  withTiming,
+} from "react-native-reanimated";
 
 function CollapsiblePanel({ expanded }: { expanded: boolean }) {
   const animatedStyle = useAnimatedStyle(() => ({
@@ -893,7 +911,9 @@ function CollapsiblePanel({ expanded }: { expanded: boolean }) {
   }));
 
   return (
-    <Animated.View style={[{ height: 200, transformOrigin: "top" }, animatedStyle]}>
+    <Animated.View
+      style={[{ height: 200, transformOrigin: "top" }, animatedStyle]}
+    >
       {children}
     </Animated.View>
   );
@@ -903,7 +923,10 @@ function CollapsiblePanel({ expanded }: { expanded: boolean }) {
 **Correct: animates translateY for slide animations**
 
 ```tsx
-import Animated, { useAnimatedStyle, withTiming } from "react-native-reanimated";
+import Animated, {
+  useAnimatedStyle,
+  withTiming,
+} from "react-native-reanimated";
 
 function SlideIn({ visible }: { visible: boolean }) {
   const animatedStyle = useAnimatedStyle(() => ({
@@ -944,7 +967,7 @@ function MyComponent() {
     () => progress.value,
     (current) => {
       opacity.value = 1 - current;
-    },
+    }
   );
 
   // ...
@@ -987,7 +1010,11 @@ JS thread round-trip for press animations.
 
 ```tsx
 import { Pressable } from "react-native";
-import Animated, { useSharedValue, useAnimatedStyle, withTiming } from "react-native-reanimated";
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withTiming,
+} from "react-native-reanimated";
 
 function AnimatedButton({ onPress }: { onPress: () => void }) {
   const scale = useSharedValue(1);
@@ -1039,7 +1066,9 @@ function AnimatedButton({ onPress }: { onPress: () => void }) {
 
   // Derive visual values from the state
   const animatedStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: interpolate(withTiming(pressed.get()), [0, 1], [1, 0.95]) }],
+    transform: [
+      { scale: interpolate(withTiming(pressed.get()), [0, 1], [1, 0.95]) },
+    ],
   }));
 
   return (
@@ -1080,7 +1109,11 @@ for animations or a ref for non-reactive tracking.
 
 ```tsx
 import { useState } from "react";
-import { ScrollView, NativeSyntheticEvent, NativeScrollEvent } from "react-native";
+import {
+  ScrollView,
+  NativeSyntheticEvent,
+  NativeScrollEvent,
+} from "react-native";
 
 function Feed() {
   const [scrollY, setScrollY] = useState(0);
@@ -1096,7 +1129,10 @@ function Feed() {
 **Correct: Reanimated for animations**
 
 ```tsx
-import Animated, { useSharedValue, useAnimatedScrollHandler } from "react-native-reanimated";
+import Animated, {
+  useSharedValue,
+  useAnimatedScrollHandler,
+} from "react-native-reanimated";
 
 function Feed() {
   const scrollY = useSharedValue(0);
@@ -1122,7 +1158,11 @@ function Feed() {
 
 ```tsx
 import { useRef } from "react";
-import { ScrollView, NativeSyntheticEvent, NativeScrollEvent } from "react-native";
+import {
+  ScrollView,
+  NativeSyntheticEvent,
+  NativeScrollEvent,
+} from "react-native";
 
 function Feed() {
   const scrollY = useRef(0);
@@ -1141,8 +1181,7 @@ function Feed() {
 
 **Impact: HIGH**
 
-Using native navigators for stack and tab navigation instead of
-JS-based alternatives.
+Using native navigators for stack and tab navigation instead of JS-based alternatives.
 
 ### 5.1 Use Native Navigators for Navigation
 
@@ -1339,8 +1378,7 @@ safe area handling automatically.
 
 **Impact: MEDIUM**
 
-Patterns for managing React state to avoid stale closures and
-unnecessary re-renders.
+Patterns for managing React state to avoid stale closures and unnecessary re-renders.
 
 ### 6.1 Minimize State Variables and Derive Values
 
@@ -1650,8 +1688,7 @@ State is the minimal truth. Everything else is derived.
 
 **Impact: MEDIUM**
 
-Compatibility patterns for React Compiler with React Native and
-Reanimated.
+Compatibility patterns for React Compiler with React Native and Reanimated.
 
 ### 8.1 Destructure Functions Early in Render (React Compiler)
 
@@ -1755,8 +1792,7 @@ for more.
 
 **Impact: MEDIUM**
 
-Native UI patterns for images, menus, modals, styling, and
-platform-consistent interfaces.
+Native UI patterns for images, menus, modals, styling, and platform-consistent interfaces.
 
 ### 9.1 Measuring View Dimensions
 
@@ -1928,7 +1964,9 @@ scroll area without re-rendering content.
 ```tsx
 function Feed({ bottomOffset }: { bottomOffset: number }) {
   return (
-    <ScrollView contentContainerStyle={{ paddingBottom: bottomOffset }}>{children}</ScrollView>
+    <ScrollView contentContainerStyle={{ paddingBottom: bottomOffset }}>
+      {children}
+    </ScrollView>
   );
 }
 // Changing bottomOffset triggers full layout recalculation
@@ -2056,7 +2094,12 @@ function Avatar({ url }: { url: string }) {
 **With priority and caching:**
 
 ```tsx
-<Image source={{ uri: url }} priority="high" cachePolicy="memory-disk" style={styles.hero} />
+<Image
+  source={{ uri: url }}
+  priority="high"
+  cachePolicy="memory-disk"
+  style={styles.hero}
+/>
 ```
 
 **Key props:**
@@ -2237,7 +2280,11 @@ function MyMenu() {
           <DropdownMenu.ItemTitle>Edit</DropdownMenu.ItemTitle>
         </DropdownMenu.Item>
 
-        <DropdownMenu.Item key="delete" destructive onSelect={() => console.log("delete")}>
+        <DropdownMenu.Item
+          key="delete"
+          destructive
+          onSelect={() => console.log("delete")}
+        >
           <DropdownMenu.ItemTitle>Delete</DropdownMenu.ItemTitle>
         </DropdownMenu.Item>
       </DropdownMenu.Content>
@@ -2492,8 +2539,7 @@ with Reanimated shared values instead of Pressable's style callback. See the
 
 **Impact: MEDIUM**
 
-Architecture patterns for building maintainable component
-libraries.
+Architecture patterns for building maintainable component libraries.
 
 ### 10.1 Use Compound Components Over Polymorphic Children
 
@@ -2567,8 +2613,7 @@ function ButtonIcon({ children }: { children: React.ReactNode }) {
 
 **Impact: LOW**
 
-Dependency management and native module configuration in
-monorepos.
+Dependency management and native module configuration in monorepos.
 
 ### 11.1 Install Native Dependencies in App Directory
 
@@ -2676,8 +2721,7 @@ the root. When adding dependencies, specify exact versions without `^` or `~`.
 
 **Impact: LOW**
 
-Wrapping and re-exporting third-party dependencies for
-maintainability.
+Wrapping and re-exporting third-party dependencies for maintainability.
 
 ### 12.1 Import from Design System Folder
 
@@ -2770,7 +2814,7 @@ function Price({ amount }: { amount: number }) {
 ```tsx
 const dateFormatter = useMemo(
   () => new Intl.DateTimeFormat(locale, { dateStyle: "medium" }),
-  [locale],
+  [locale]
 );
 ```
 

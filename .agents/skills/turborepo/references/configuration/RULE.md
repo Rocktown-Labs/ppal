@@ -185,7 +185,12 @@ By default, array fields in Package Configurations **replace** root values. Use 
   "tasks": {
     "build": {
       // Inherits "dist/**" from root, adds ".next/**"
-      "outputs": ["$TURBO_EXTENDS$", ".next/**", "!.next/cache/**", "!.next/dev/**"]
+      "outputs": [
+        "$TURBO_EXTENDS$",
+        ".next/**",
+        "!.next/cache/**",
+        "!.next/dev/**"
+      ]
     }
   }
 }

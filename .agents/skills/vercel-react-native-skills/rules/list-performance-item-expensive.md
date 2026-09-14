@@ -7,9 +7,7 @@ tags: lists, performance, virtualization, hooks
 
 ## Keep List Items Lightweight
 
-List items should be as inexpensive as possible to render. Minimize hooks, avoid
-queries, and limit React Context access. Virtualized lists render many items
-during scroll—expensive items cause jank.
+List items should be as inexpensive as possible to render. Minimize hooks, avoid queries, and limit React Context access. Virtualized lists render many items during scroll—expensive items cause jank.
 
 **Incorrect (heavy list item):**
 
@@ -22,7 +20,10 @@ function ProductRow({ id }: { id: string }) {
   const user = useContext(UserContext);
   const cart = useContext(CartContext);
   // Bad: expensive computation
-  const recommendations = useMemo(() => computeRecommendations(product), [product]);
+  const recommendations = useMemo(
+    () => computeRecommendations(product),
+    [product]
+  );
 
   return <View>{/* ... */}</View>;
 }
@@ -87,5 +88,4 @@ function ProductRow({ id, name }: Props) {
 - Minimize useState/useEffect hooks
 - Pass pre-computed values as props
 
-The goal: list items should be simple rendering functions that take props and
-return JSX.
+The goal: list items should be simple rendering functions that take props and return JSX.

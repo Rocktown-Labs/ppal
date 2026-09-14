@@ -114,14 +114,14 @@ export default function Layout() {
 
 ## Key Options
 
-| Option                | Type       | Description                                                 |
-| --------------------- | ---------- | ----------------------------------------------------------- |
-| `presentation`        | `string`   | Set to `'formSheet'` for sheet presentation                 |
-| `sheetGrabberVisible` | `boolean`  | Shows the drag handle at the top of the sheet               |
+| Option | Type | Description |
+| --- | --- | --- |
+| `presentation` | `string` | Set to `'formSheet'` for sheet presentation |
+| `sheetGrabberVisible` | `boolean` | Shows the drag handle at the top of the sheet |
 | `sheetAllowedDetents` | `number[]` | Array of detent heights (0-1 range, e.g., `[0.25]` for 25%) |
-| `headerTransparent`   | `boolean`  | Makes header background transparent                         |
-| `contentStyle`        | `object`   | Style object for the screen content container               |
-| `title`               | `string`   | Screen title (set to `''` for no title)                     |
+| `headerTransparent` | `boolean` | Makes header background transparent |
+| `contentStyle` | `object` | Style object for the screen content container |
+| `title` | `string` | Screen title (set to `''` for no title) |
 
 ## Common Detent Values
 
@@ -170,7 +170,9 @@ export default function ConfirmSheet() {
     <View style={styles.container}>
       <View style={styles.content}>
         <Text style={styles.title}>Confirm Action</Text>
-        <Text style={styles.description}>Are you sure you want to proceed?</Text>
+        <Text style={styles.description}>
+          Are you sure you want to proceed?
+        </Text>
       </View>
 
       <View style={styles.footer}>

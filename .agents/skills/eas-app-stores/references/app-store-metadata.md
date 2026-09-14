@@ -255,8 +255,7 @@ Localize metadata for each target market. Keywords should be researched per loca
 }
 ```
 
-**Supported Locales:**
-`ar-SA`, `ca`, `cs`, `da`, `de-DE`, `el`, `en-AU`, `en-CA`, `en-GB`, `en-US`, `es-ES`, `es-MX`, `fi`, `fr-CA`, `fr-FR`, `he`, `hi`, `hr`, `hu`, `id`, `it`, `ja`, `ko`, `ms`, `nl-NL`, `no`, `pl`, `pt-BR`, `pt-PT`, `ro`, `ru`, `sk`, `sv`, `th`, `tr`, `uk`, `vi`, `zh-Hans`, `zh-Hant`
+**Supported Locales:** `ar-SA`, `ca`, `cs`, `da`, `de-DE`, `el`, `en-AU`, `en-CA`, `en-GB`, `en-US`, `es-ES`, `es-MX`, `fi`, `fr-CA`, `fr-FR`, `he`, `hi`, `hr`, `hu`, `id`, `it`, `ja`, `ko`, `ms`, `nl-NL`, `no`, `pl`, `pt-BR`, `pt-PT`, `ro`, `ru`, `sk`, `sv`, `th`, `tr`, `uk`, `vi`, `zh-Hans`, `zh-Hant`
 
 ## Dynamic Configuration
 
@@ -287,7 +286,9 @@ module.exports = async () => {
   const baseConfig = require("./store.config.json");
 
   // Fetch translations from CMS/localization service
-  const translations = await fetch("https://api.example.com/app-store-copy").then((r) => r.json());
+  const translations = await fetch(
+    "https://api.example.com/app-store-copy"
+  ).then((r) => r.json());
 
   return {
     ...baseConfig,

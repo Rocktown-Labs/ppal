@@ -1,3 +1,10 @@
 # https://www.robotstxt.org/robotstxt.html
 User-agent: *
-Disallow:
+Allow: /
+Disallow: /api/
+Disallow: /auth/
+Disallow: /dashboard
+Disallow: /login
+Disallow: /r/
+
+Sitemap: https://myparlaypal.com/sitemap.xml

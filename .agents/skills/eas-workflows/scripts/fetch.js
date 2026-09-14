@@ -11,7 +11,7 @@ const DEFAULT_TTL_SECONDS = 15 * 60; // 15 minutes
 export async function fetchCached(url) {
   await mkdir(CACHE_DIRECTORY, { recursive: true });
 
-  const cacheFile = resolve(CACHE_DIRECTORY, hashUrl(url) + ".json");
+  const cacheFile = resolve(CACHE_DIRECTORY, `${hashUrl(url)  }.json`);
   const cached = await loadCacheEntry(cacheFile);
   if (cached && cached.expires > Math.floor(Date.now() / 1000)) {
     return cached.data;
@@ -41,7 +41,7 @@ export async function fetchCached(url) {
   const data = await response.text();
   const expires = getExpires(response.headers);
 
-  await saveCacheEntry(cacheFile, { url, etag, expires, data });
+  await saveCacheEntry(cacheFile, { data, etag, expires, url });
 
   return data;
 }
@@ -89,7 +89,7 @@ function parseMaxAge(cacheControl) {
     return null;
   }
   const match = cacheControl.match(/max-age=(\d+)/i);
-  return match ? parseInt(match[1], 10) : null;
+  return match ? Number.parseInt(match[1], 10) : null;
 }
 
 if (import.meta.main) {

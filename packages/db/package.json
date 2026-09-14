@@ -10,8 +10,7 @@
     }
   },
   "scripts": {
-    "db:generate": "drizzle-kit generate",
-    "db:migrate:deploy": "drizzle-kit migrate"
+    "check-types": "tsc --noEmit"
   },
   "dependencies": {
     "@libsql/client": "0.17.4",
@@ -23,7 +22,6 @@
   },
   "devDependencies": {
     "@ppal/config": "workspace:*",
-    "drizzle-kit": "^0.31.10",
     "typescript": "^6.0.3"
   }
 }
