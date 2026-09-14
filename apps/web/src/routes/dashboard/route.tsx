@@ -149,9 +149,9 @@ const DashboardLayoutContent = () => {
   const username = profile?.profile?.username;
 
   return (
-    <div className="flex min-h-screen bg-zinc-950 text-zinc-100">
+    <div className="flex min-h-screen bg-zinc-950 text-zinc-100 lg:h-dvh lg:min-h-0 lg:overflow-hidden">
       {/* Desktop Sidebar */}
-      <aside className="hidden w-64 flex-col border-r border-zinc-800/80 bg-zinc-900/50 p-4 lg:flex">
+      <aside className="hidden h-full w-64 shrink-0 flex-col overflow-y-auto border-r border-zinc-800/80 bg-zinc-900/50 p-4 lg:flex">
         <div className="flex h-12 items-center px-2">
           <Link to="/dashboard" className="flex items-center gap-2">
             <img
@@ -218,7 +218,7 @@ const DashboardLayoutContent = () => {
       </aside>
 
       {/* Main Content Area */}
-      <div className="flex min-w-0 flex-1 flex-col">
+      <div className="flex min-h-screen min-w-0 flex-1 flex-col lg:h-full lg:min-h-0">
         {/* Mobile Top Header */}
         <header className="flex h-16 items-center justify-between border-b border-zinc-800/80 bg-zinc-950/80 px-4 backdrop-blur-md lg:hidden">
           <Link to="/dashboard">
@@ -292,7 +292,7 @@ const DashboardLayoutContent = () => {
         ) : null}
 
         {/* Page View Slot */}
-        <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
+        <main className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4 sm:p-6 lg:p-8">
           <Outlet />
         </main>
       </div>
