@@ -2,6 +2,16 @@ import type { PushPayload, PushSubscriptionData } from "@mmmike/web-push";
 import { sendPushNotification, WebPushError } from "@mmmike/web-push/send";
 import { notificationQueueMessageSchema } from "@ppal/contracts/queues";
 
+export interface NotificationServiceEnv {
+  DB: D1Database;
+  NOTIFICATION_QUEUE: Queue;
+  RESEND_API_KEY: string;
+  RESEND_FROM_EMAIL: string;
+  WEB_PUSH_VAPID_PRIVATE_KEY: string;
+  WEB_PUSH_VAPID_PUBLIC_KEY: string;
+  WEB_PUSH_VAPID_SUBJECT: string;
+}
+
 const escapeHtml = (value: string): string =>
   value
     .replaceAll("&", "&amp;")
@@ -25,7 +35,7 @@ const getPreferenceColumn = (notificationType: string): string | null => {
   return null;
 };
 
-const isWebPushConfigured = (workerEnv: Env): boolean =>
+const isWebPushConfigured = (workerEnv: NotificationServiceEnv): boolean =>
   Boolean(
     workerEnv.WEB_PUSH_VAPID_PUBLIC_KEY &&
     workerEnv.WEB_PUSH_VAPID_PRIVATE_KEY &&
@@ -47,7 +57,7 @@ export const publishNotification = async ({
   title: string;
   type: string;
   userId: string;
-  workerEnv: Env;
+  workerEnv: NotificationServiceEnv;
 }): Promise<void> => {
   const notificationId = crypto.randomUUID();
   const preferences = await workerEnv.DB.prepare(
@@ -157,7 +167,7 @@ interface ExpoPushResponse {
 
 const markDeliveryDelivered = async (
   delivery: DeliveryRow,
-  workerEnv: Env,
+  workerEnv: NotificationServiceEnv,
   providerReceiptId: string | null = null
 ): Promise<void> => {
   const now = Date.now();
@@ -174,7 +184,7 @@ const markDeliveryDelivered = async (
 const markDeliveryFailed = async (
   deliveryId: string,
   errorMessage: string,
-  workerEnv: Env
+  workerEnv: NotificationServiceEnv
 ): Promise<void> => {
   await workerEnv.DB.prepare(
     "UPDATE notification_deliveries SET status = 'failed', error_message = ?, updated_at = ? WHERE id = ?"
@@ -185,7 +195,7 @@ const markDeliveryFailed = async (
 
 const processWebPushDelivery = async (
   delivery: DeliveryRow,
-  workerEnv: Env
+  workerEnv: NotificationServiceEnv
 ): Promise<void> => {
   if (!delivery.p256dh || !delivery.auth) {
     await markDeliveryFailed(
@@ -233,7 +243,7 @@ const processWebPushDelivery = async (
 
 const sendEmailOrExpoDelivery = async (
   delivery: DeliveryRow,
-  workerEnv: Env
+  workerEnv: NotificationServiceEnv
 ): Promise<string | null> => {
   const response =
     delivery.channel === "email"
@@ -294,7 +304,7 @@ const sendEmailOrExpoDelivery = async (
 
 export const processNotificationMessage = async (
   body: unknown,
-  workerEnv: Env
+  workerEnv: NotificationServiceEnv
 ): Promise<void> => {
   const { deliveryId } = notificationQueueMessageSchema.parse(body);
   const claim = await workerEnv.DB.prepare(
@@ -352,7 +362,7 @@ export const processNotificationMessage = async (
 };
 
 export const processExpoPushReceipts = async (
-  workerEnv: Env
+  workerEnv: NotificationServiceEnv
 ): Promise<void> => {
   const oneDayAgo = Date.now() - 24 * 60 * 60 * 1000;
   const recentDeliveries = await workerEnv.DB.prepare(

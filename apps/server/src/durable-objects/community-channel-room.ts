@@ -2,6 +2,7 @@ import { communityChatMessageSchema } from "@ppal/contracts/community";
 import { DurableObject } from "cloudflare:workers";
 
 import { publishNotification } from "../services/notifications";
+import type { NotificationServiceEnv } from "../services/notifications";
 
 interface RoomAttachment {
   channelId: string;
@@ -11,6 +12,12 @@ interface RoomAttachment {
 }
 
 const MAX_FRAME_BYTES = 64 * 1024;
+
+interface CommunityRoomEnv extends NotificationServiceEnv {
+  COMMUNITY_CHAT_RATE_LIMIT?: {
+    limit: (input: { key: string }) => Promise<{ success: boolean }>;
+  };
+}
 
 const parseMentions = (body: string): string[] =>
   [
@@ -38,7 +45,7 @@ const sendErrorFrame = (
  * this object only coordinates connected clients and applies per-user chat
  * rate limits, which keeps hot communities sharded instead of global.
  */
-export class CommunityChannelRoom extends DurableObject<Env> {
+export class CommunityChannelRoom extends DurableObject<CommunityRoomEnv> {
   async fetch(request: Request): Promise<Response> {
     if (
       request.method === "POST" &&
