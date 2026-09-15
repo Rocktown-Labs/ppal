@@ -29,10 +29,24 @@ jobs:
       - name: Verify Cloudflare deployment scope
         working-directory: packages/infra
         run: |
-          auth="$(bunx wrangler whoami --json)"
-          printf '%s' "$auth" | jq '{loggedIn, authType, accounts: [.accounts[] | {id, name}], tokenPermissions}'
-          if ! printf '%s' "$auth" | jq -e '.tokenPermissions | index("workers_routes:write") != null' >/dev/null; then
-            echo "CLOUDFLARE_API_TOKEN must include workers_routes:write for myparlaypal.com zone routes." >&2
+          zone_response="$(curl -sS \
+            -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+            -H "Content-Type: application/json" \
+            'https://api.cloudflare.com/client/v4/zones?name=myparlaypal.com&status=active')"
+          zone_id="$(printf '%s' "$zone_response" | jq -r '.result[0].id // empty')"
+          if [ -z "$zone_id" ]; then
+            printf '%s' "$zone_response" | jq '{success, errors}'
+            echo "CLOUDFLARE_API_TOKEN cannot read the myparlaypal.com zone." >&2
+            exit 1
+          fi
+
+          route_response="$(curl -sS \
+            -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+            -H "Content-Type: application/json" \
+            "https://api.cloudflare.com/client/v4/zones/$zone_id/workers/routes")"
+          printf '%s' "$route_response" | jq '{success, errors}'
+          if ! printf '%s' "$route_response" | jq -e '.success == true' >/dev/null; then
+            echo "CLOUDFLARE_API_TOKEN must be allowed to manage Workers Routes on myparlaypal.com." >&2
             exit 1
           fi
         env:
