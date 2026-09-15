@@ -26,6 +26,18 @@ jobs:
         with:
           bun-version: 1.3.10
       - run: bun install --frozen-lockfile
+      - name: Verify Cloudflare deployment scope
+        working-directory: packages/infra
+        run: |
+          auth="$(bunx wrangler whoami --json)"
+          printf '%s' "$auth" | jq '{loggedIn, authType, accounts: [.accounts[] | {id, name}], tokenPermissions}'
+          if ! printf '%s' "$auth" | jq -e '.tokenPermissions | index("workers_routes:write") != null' >/dev/null; then
+            echo "CLOUDFLARE_API_TOKEN must include workers_routes:write for myparlaypal.com zone routes." >&2
+            exit 1
+          fi
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID || vars.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       - run: bun run check-types
       - run: bun test packages/domain apps/server/tests
       - name: Deploy Cloudflare stack
