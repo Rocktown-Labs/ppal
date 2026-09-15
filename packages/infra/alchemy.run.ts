@@ -123,6 +123,12 @@ export const server = Cloudflare.Worker("server", {
         ),
     DB: db,
     EXTRACTION_QUEUE: extractionQueue,
+    FACEBOOK_CLIENT_ID: Config.string("FACEBOOK_CLIENT_ID").pipe(
+      Config.withDefault("")
+    ),
+    FACEBOOK_CLIENT_SECRET: Config.redacted("FACEBOOK_CLIENT_SECRET").pipe(
+      Config.withDefault(Redacted.make(""))
+    ),
     GEMINI_API_KEY: Config.redacted("GEMINI_API_KEY"),
     GOOGLE_CLIENT_ID: Config.string("GOOGLE_CLIENT_ID").pipe(
       Config.withDefault("")
@@ -142,6 +148,9 @@ export const server = Cloudflare.Worker("server", {
       Config.withDefault(Redacted.make(""))
     ),
     RESEND_FROM_EMAIL: Config.string("RESEND_FROM_EMAIL").pipe(
+      Config.withDefault("noreply@support.myparlaypal.com")
+    ),
+    RESEND_REPLY_TO_EMAIL: Config.string("RESEND_REPLY_TO_EMAIL").pipe(
       Config.withDefault("support@myparlaypal.com")
     ),
     REVENUECAT_WEBHOOK_SECRET: Config.redacted("REVENUECAT_WEBHOOK_SECRET"),
@@ -176,7 +185,7 @@ export const server = Cloudflare.Worker("server", {
       Config.withDefault("")
     ),
     WEB_PUSH_VAPID_SUBJECT: Config.string("WEB_PUSH_VAPID_SUBJECT").pipe(
-      Config.withDefault("mailto:support@myparlaypal.com")
+      Config.withDefault("mailto:noreply@support.myparlaypal.com")
     ),
     WEBHOOK_RATE_LIMIT: Cloudflare.RateLimit("webhook-rate-limit", {
       namespaceId: rateLimitNamespaceOffset + 1004,

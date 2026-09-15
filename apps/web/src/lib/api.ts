@@ -59,8 +59,10 @@ export interface UserProfile {
 export interface CurrentUserWithProfile {
   email: string;
   id: string;
+  image?: string | null;
   name: string;
   profile: UserProfile | null;
+  role?: string;
 }
 
 export interface PublicProfile {

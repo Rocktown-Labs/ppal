@@ -1,3 +1,4 @@
+import { useSession } from "@better-auth-ui/react";
 import { unsubscribe } from "@mmmike/web-push/client";
 import {
   Link,
@@ -15,6 +16,7 @@ import {
   LogOut,
   Menu,
   Settings,
+  ShieldCheck,
   Ticket,
   User,
   X,
@@ -72,6 +74,7 @@ const handleSignOut = async () => {
 
 const DashboardLayoutContent = () => {
   const { unreadCount } = useNotificationFeed();
+  const { data: session } = useSession(authClient);
   const routerState = useRouterState();
   const currentPath = routerState.location.pathname;
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -145,6 +148,15 @@ const DashboardLayoutContent = () => {
       label: "Settings",
       to: "/dashboard/settings",
     },
+    ...(session?.user.role === "admin" || profile?.role === "admin"
+      ? [
+          {
+            icon: ShieldCheck,
+            label: "Admin",
+            to: "/dashboard/admin",
+          },
+        ]
+      : []),
   ];
 
   const username = profile?.profile?.username;

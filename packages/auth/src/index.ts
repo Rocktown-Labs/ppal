@@ -11,7 +11,7 @@ import { compare } from "bcryptjs";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { hashPassword, verifyPassword } from "better-auth/crypto";
-import { twoFactor } from "better-auth/plugins";
+import { admin, twoFactor } from "better-auth/plugins";
 import { Resend } from "resend";
 import StripeSdk from "stripe";
 
@@ -37,7 +37,7 @@ const sendVerificationEmail = async ({
     return;
   }
   await resend.emails.send({
-    from: env.RESEND_FROM_EMAIL || "support@myparlaypal.com",
+    from: env.RESEND_FROM_EMAIL || "noreply@support.myparlaypal.com",
     html: `<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 560px; margin: 0 auto; padding: 24px; background-color: #0d1117; color: #f3f4f6; border-radius: 12px; border: 1px solid #2d3748;">
       <h2 style="color: #10b981; margin-top: 0; font-size: 24px;">Welcome to ParlayPal</h2>
       <p style="font-size: 15px; line-height: 1.6; color: #d1d5db;">Please confirm your email address by clicking the link below to activate your account and start tracking your slips.</p>
@@ -48,6 +48,9 @@ const sendVerificationEmail = async ({
     </div>`,
     subject: "Verify your email - ParlayPal",
     to: email,
+    ...(env.RESEND_REPLY_TO_EMAIL
+      ? { replyTo: env.RESEND_REPLY_TO_EMAIL }
+      : {}),
   });
 };
 
@@ -63,7 +66,7 @@ const sendResetPasswordEmail = async ({
     return;
   }
   await resend.emails.send({
-    from: env.RESEND_FROM_EMAIL || "support@myparlaypal.com",
+    from: env.RESEND_FROM_EMAIL || "noreply@support.myparlaypal.com",
     html: `<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 560px; margin: 0 auto; padding: 24px; background-color: #0d1117; color: #f3f4f6; border-radius: 12px; border: 1px solid #2d3748;">
       <h2 style="color: #10b981; margin-top: 0; font-size: 24px;">Reset Your Password</h2>
       <p style="font-size: 15px; line-height: 1.6; color: #d1d5db;">We received a request to reset your ParlayPal password. Click the button below to choose a new password:</p>
@@ -74,6 +77,9 @@ const sendResetPasswordEmail = async ({
     </div>`,
     subject: "Reset your password - ParlayPal",
     to: email,
+    ...(env.RESEND_REPLY_TO_EMAIL
+      ? { replyTo: env.RESEND_REPLY_TO_EMAIL }
+      : {}),
   });
 };
 
@@ -239,6 +245,14 @@ export const createAuth = () => {
             },
           }
         : {}),
+      ...(env.FACEBOOK_CLIENT_ID && env.FACEBOOK_CLIENT_SECRET
+        ? {
+            facebook: {
+              clientId: env.FACEBOOK_CLIENT_ID,
+              clientSecret: env.FACEBOOK_CLIENT_SECRET,
+            },
+          }
+        : {}),
     },
     rateLimit: {
       customRules: {
@@ -279,6 +293,10 @@ export const createAuth = () => {
     },
     plugins: [
       expo(),
+      admin({
+        adminRoles: ["admin"],
+        defaultRole: "user",
+      }),
       twoFactor({
         issuer: "ParlayPal",
       }),

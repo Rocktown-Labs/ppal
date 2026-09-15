@@ -3,7 +3,9 @@ import type { Auth } from "@ppal/auth";
 export interface AuthUser {
   email: string;
   id: string;
+  image?: string | null;
   name: string;
+  role?: string;
 }
 
 interface AuthSession {
@@ -17,6 +19,11 @@ export interface AuthUserOptions {
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null;
+
+const getOptionalUserFields = (user: Record<string, unknown>) => ({
+  ...(typeof user.image === "string" ? { image: user.image } : {}),
+  ...(typeof user.role === "string" ? { role: user.role } : {}),
+});
 
 const getConfiguredOrigin = (auth: Auth): string | null => {
   const configuredBaseUrl = auth.options.baseURL;
@@ -90,7 +97,9 @@ const getSessionFromHandler = async (
       typeof id === "string" &&
       typeof name === "string"
     ) {
-      return { user: { email, id, name } };
+      return {
+        user: { email, id, name, ...getOptionalUserFields(payload.user) },
+      };
     }
   }
 
@@ -121,7 +130,14 @@ const getSessionFromHandler = async (
   ) {
     return null;
   }
-  return { user: { email, id, name } };
+  return {
+    user: {
+      email,
+      id,
+      name,
+      ...getOptionalUserFields(responsePayload.user),
+    },
+  };
 };
 
 export const getAuthUser = async (
@@ -145,7 +161,7 @@ export const getAuthUser = async (
         typeof id === "string" &&
         typeof name === "string"
       ) {
-        return { email, id, name };
+        return { email, id, name, ...getOptionalUserFields(session.user) };
       }
     }
   } catch {

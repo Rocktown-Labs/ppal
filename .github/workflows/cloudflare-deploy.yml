@@ -64,13 +64,16 @@ jobs:
           BETTER_AUTH_SECRET: ${{ secrets.BETTER_AUTH_SECRET }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID || vars.CLOUDFLARE_ACCOUNT_ID }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          FACEBOOK_CLIENT_ID: ${{ secrets.FACEBOOK_CLIENT_ID }}
+          FACEBOOK_CLIENT_SECRET: ${{ secrets.FACEBOOK_CLIENT_SECRET }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
           GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
           OPERATIONS_API_TOKEN: ${{ secrets.OPERATIONS_API_TOKEN }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
-          RESEND_FROM_EMAIL: ${{ vars.RESEND_FROM_EMAIL || 'support@myparlaypal.com' }}
+          RESEND_FROM_EMAIL: ${{ vars.RESEND_FROM_EMAIL || 'noreply@support.myparlaypal.com' }}
+          RESEND_REPLY_TO_EMAIL: ${{ vars.RESEND_REPLY_TO_EMAIL || 'support@myparlaypal.com' }}
           REVENUECAT_WEBHOOK_SECRET: ${{ secrets.REVENUECAT_WEBHOOK_SECRET }}
           SPORTRADAR_API_KEY: ${{ secrets.SPORTRADAR_API_KEY }}
           STRIPE_CREATOR_PRICE_ID: ${{ secrets.STRIPE_CREATOR_PRICE_ID }}
@@ -82,7 +85,7 @@ jobs:
           STRIPE_WEBHOOK_SECRET: ${{ secrets.STRIPE_WEBHOOK_SECRET }}
           WEB_PUSH_VAPID_PRIVATE_KEY: ${{ secrets.WEB_PUSH_VAPID_PRIVATE_KEY }}
           WEB_PUSH_VAPID_PUBLIC_KEY: ${{ vars.WEB_PUSH_VAPID_PUBLIC_KEY || '' }}
-          WEB_PUSH_VAPID_SUBJECT: ${{ vars.WEB_PUSH_VAPID_SUBJECT || 'mailto:support@myparlaypal.com' }}
+          WEB_PUSH_VAPID_SUBJECT: ${{ vars.WEB_PUSH_VAPID_SUBJECT || 'mailto:noreply@support.myparlaypal.com' }}
 
   destroy-preview:
     if: >-
@@ -107,13 +110,16 @@ jobs:
           BETTER_AUTH_SECRET: ${{ secrets.BETTER_AUTH_SECRET }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID || vars.CLOUDFLARE_ACCOUNT_ID }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          FACEBOOK_CLIENT_ID: ${{ secrets.FACEBOOK_CLIENT_ID }}
+          FACEBOOK_CLIENT_SECRET: ${{ secrets.FACEBOOK_CLIENT_SECRET }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
           GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
           OPERATIONS_API_TOKEN: ${{ secrets.OPERATIONS_API_TOKEN }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
-          RESEND_FROM_EMAIL: ${{ vars.RESEND_FROM_EMAIL || 'support@myparlaypal.com' }}
+          RESEND_FROM_EMAIL: ${{ vars.RESEND_FROM_EMAIL || 'noreply@support.myparlaypal.com' }}
+          RESEND_REPLY_TO_EMAIL: ${{ vars.RESEND_REPLY_TO_EMAIL || 'support@myparlaypal.com' }}
           REVENUECAT_WEBHOOK_SECRET: ${{ secrets.REVENUECAT_WEBHOOK_SECRET }}
           SPORTRADAR_API_KEY: ${{ secrets.SPORTRADAR_API_KEY }}
           STRIPE_CREATOR_PRICE_ID: ${{ secrets.STRIPE_CREATOR_PRICE_ID }}
@@ -125,4 +131,4 @@ jobs:
           STRIPE_WEBHOOK_SECRET: ${{ secrets.STRIPE_WEBHOOK_SECRET }}
           WEB_PUSH_VAPID_PRIVATE_KEY: ${{ secrets.WEB_PUSH_VAPID_PRIVATE_KEY }}
           WEB_PUSH_VAPID_PUBLIC_KEY: ${{ vars.WEB_PUSH_VAPID_PUBLIC_KEY || '' }}
-          WEB_PUSH_VAPID_SUBJECT: ${{ vars.WEB_PUSH_VAPID_SUBJECT || 'mailto:support@myparlaypal.com' }}
+          WEB_PUSH_VAPID_SUBJECT: ${{ vars.WEB_PUSH_VAPID_SUBJECT || 'mailto:noreply@support.myparlaypal.com' }}
