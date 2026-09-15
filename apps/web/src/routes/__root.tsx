@@ -19,6 +19,7 @@ import {
   SITE_LOGO_URL,
   SITE_NAME,
   SITE_ORIGIN,
+  SITE_TITLE,
 } from "@/lib/seo";
 
 import appCss from "../index.css?url";
@@ -98,7 +99,7 @@ export const Route = createRootRouteWithContext<RouterAppContext>()({
         name: "viewport",
       },
       {
-        title: "ParlayPal — Sportsbook-Independent Live Bet Companion",
+        title: SITE_TITLE,
       },
       {
         content: SITE_DESCRIPTION,

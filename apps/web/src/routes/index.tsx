@@ -2,25 +2,15 @@ import { Link, createFileRoute } from "@tanstack/react-router";
 import { Check } from "lucide-react";
 
 import { UserButton } from "@/components/auth/user/user-button";
+import { SPORT_PAGES } from "@/data/sports";
 import { authClient } from "@/lib/auth-client";
 import {
   SITE_DESCRIPTION,
-  SITE_LOGO_URL,
+  SITE_OG_IMAGE_URL,
   SITE_ORIGIN,
+  SITE_TITLE,
   socialMeta,
 } from "@/lib/seo";
-
-const COVERED_SPORTS = [
-  { detail: "NBA · WNBA · NCAA · Global", emoji: "🏀", name: "Basketball" },
-  { detail: "NFL · NCAA · Global", emoji: "🏈", name: "Football" },
-  { detail: "MLB · Global", emoji: "⚾", name: "Baseball" },
-  { detail: "NHL · Global", emoji: "🏒", name: "Hockey" },
-  { detail: "International Leagues", emoji: "⚽", name: "Soccer" },
-  { detail: "UFC", emoji: "🥊", name: "MMA" },
-  { detail: "ATP · WTA", emoji: "🎾", name: "Tennis" },
-  { detail: "NASCAR · Formula 1", emoji: "🏎️", name: "Racing" },
-  { detail: "PGA · LIV", emoji: "⛳", name: "Golf" },
-] as const;
 
 const HOW_IT_WORKS_STEPS = [
   {
@@ -209,8 +199,8 @@ const HomeComponent = () => {
 
               <p className="mx-auto max-w-xl text-base text-zinc-400 sm:text-lg lg:mx-0">
                 Upload a slip from FanDuel, DraftKings, BetMGM, or PrizePicks.
-                ParlayPal reads every leg, tracks in-game stats as they happen,
-                and turns your betting history into a hit-rate scorecard you can
+                ParlayPal reads every leg, follows player and team progress, and
+                turns your betting history into a hit-rate scorecard you can
                 actually use.
               </p>
 
@@ -435,15 +425,17 @@ const HomeComponent = () => {
           </div>
 
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
-            {COVERED_SPORTS.map((sport) => (
-              <div
+            {SPORT_PAGES.map((sport) => (
+              <Link
                 key={sport.name}
                 className="space-y-1.5 rounded-2xl border border-zinc-800 bg-zinc-900/60 p-5 text-center transition hover:border-zinc-700"
+                params={{ sport: sport.slug }}
+                to="/sports/$sport"
               >
                 <span className="text-3xl">{sport.emoji}</span>
                 <h3 className="text-sm font-bold text-white">{sport.name}</h3>
-                <p className="text-[11px] text-zinc-500">{sport.detail}</p>
-              </div>
+                <p className="text-[11px] text-zinc-500">{sport.cardDetail}</p>
+              </Link>
             ))}
           </div>
         </div>
@@ -626,8 +618,8 @@ const HomeComponent = () => {
               Start free. Upgrade when you&apos;re ready.
             </h2>
             <p className="text-sm text-zinc-400">
-              From single parlays to complete historical archives — transparent
-              pricing built for every sports bettor.
+              From a first slip to a complete historical archive — transparent
+              pricing for every sports bettor.
             </p>
           </div>
 
@@ -701,7 +693,7 @@ const HomeComponent = () => {
                     ParlayPal Pro
                   </h3>
                   <p className="mt-1 text-xs text-zinc-400">
-                    Unlimited tracking and the full picture.
+                    More tracking volume and the full picture.
                   </p>
                 </div>
 
@@ -985,12 +977,12 @@ export const Route = createFileRoute("/")({
     links: [{ href: `${SITE_ORIGIN}/`, rel: "canonical" }],
     meta: [
       {
-        title: "Live Parlay Tracker & Bet Slip Analyzer | ParlayPal",
+        title: SITE_TITLE,
       },
       { content: SITE_DESCRIPTION, name: "description" },
       ...socialMeta({
         description: SITE_DESCRIPTION,
-        title: "Live Parlay Tracker & Bet Slip Analyzer | ParlayPal",
+        title: SITE_TITLE,
         url: `${SITE_ORIGIN}/`,
       }),
     ],
@@ -1001,7 +993,7 @@ export const Route = createFileRoute("/")({
           "@type": "SoftwareApplication",
           applicationCategory: "SportsApplication",
           description: SITE_DESCRIPTION,
-          image: SITE_LOGO_URL,
+          image: SITE_OG_IMAGE_URL,
           name: "ParlayPal",
           offers: [
             {

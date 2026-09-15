@@ -1,7 +1,7 @@
 {
   "name": "ParlayPal — Live Parlay Tracker",
   "short_name": "ParlayPal",
-  "description": "Track every parlay leg live from any sportsbook.",
+  "description": "Upload a bet slip from any sportsbook, follow every player and team leg live, and get scheduled updates as your parlay moves.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
