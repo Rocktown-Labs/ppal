@@ -11,7 +11,7 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
 import { api, resolveAvatarSource } from "@/lib/api";
-import { authClient } from "@/lib/auth-client";
+import { startWebSubscriptionCheckout } from "@/lib/billing";
 import { consumeReferralIntent } from "@/lib/referral-intent";
 
 const SPORTS_LIST = [
@@ -209,17 +209,12 @@ const OnboardingWizardComponent = () => {
     }
     setIsSubmitting(true);
     try {
-      const { origin } = window.location;
-      const checkout = await authClient.subscription.upgrade({
-        annual: form.getFieldValue("billingPeriod") === "yearly",
-        cancelUrl: `${origin}/dashboard/onboarding`,
+      await startWebSubscriptionCheckout({
+        billingPeriod: form.getFieldValue("billingPeriod"),
+        cancelPath: "/dashboard/onboarding",
         plan,
-        successUrl: `${origin}/dashboard`,
+        successPath: "/dashboard",
       });
-      if (checkout.error) {
-        toast.error(checkout.error.message ?? "Checkout could not be started");
-        setIsSubmitting(false);
-      }
     } catch (error) {
       toast.error(
         error instanceof Error ? error.message : "Checkout could not be started"

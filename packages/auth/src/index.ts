@@ -4,6 +4,7 @@ import { expo } from "@better-auth/expo";
 import { passkey } from "@better-auth/passkey";
 import { stripe } from "@better-auth/stripe";
 import type { Subscription } from "@better-auth/stripe";
+import { webSubscriptionPlans } from "@ppal/contracts/billing";
 import { createDb } from "@ppal/db";
 import * as schema from "@ppal/db/schema/auth";
 import { env } from "@ppal/env/server";
@@ -138,9 +139,7 @@ const createStripePlugin = () => {
   const stripeWebhookSecret = env.STRIPE_WEBHOOK_SECRET?.trim();
   const proPriceId = env.STRIPE_PRO_PRICE_ID?.trim();
   const creatorPriceId = env.STRIPE_CREATOR_PRICE_ID?.trim();
-  if (
-    !(stripeSecretKey && stripeWebhookSecret && proPriceId && creatorPriceId)
-  ) {
+  if (!(stripeSecretKey && stripeWebhookSecret)) {
     return null;
   }
   const stripeClient = new StripeSdk(stripeSecretKey);
@@ -163,26 +162,36 @@ const createStripePlugin = () => {
       },
       plans: [
         {
-          annualDiscountPriceId: env.STRIPE_PRO_ANNUAL_PRICE_ID,
-          limits: { monthlyUploads: 500 },
+          annualDiscountLookupKey: webSubscriptionPlans.pro.annualLookupKey,
+          annualDiscountPriceId:
+            env.STRIPE_PRO_ANNUAL_PRICE_ID?.trim() || undefined,
+          limits: { monthlyUploads: webSubscriptionPlans.pro.monthlyUploads },
           name: "pro",
-          priceId: proPriceId,
+          lookupKey: webSubscriptionPlans.pro.lookupKey,
+          priceId: proPriceId || undefined,
         },
         {
-          annualDiscountPriceId: env.STRIPE_CREATOR_ANNUAL_PRICE_ID,
-          limits: { monthlyUploads: 1000 },
+          annualDiscountLookupKey: webSubscriptionPlans.creator.annualLookupKey,
+          annualDiscountPriceId:
+            env.STRIPE_CREATOR_ANNUAL_PRICE_ID?.trim() || undefined,
+          limits: {
+            monthlyUploads: webSubscriptionPlans.creator.monthlyUploads,
+          },
           name: "creator",
-          priceId: creatorPriceId,
+          lookupKey: webSubscriptionPlans.creator.lookupKey,
+          priceId: creatorPriceId || undefined,
         },
       ],
       getCheckoutSessionParams: () => ({
-        params:
-          env.STRIPE_TAX_ENABLED === "true"
+        params: {
+          integration_identifier: `parlaypal_web_${crypto.randomUUID().replaceAll("-", "").slice(0, 8)}`,
+          ...(env.STRIPE_TAX_ENABLED === "true"
             ? {
                 automatic_tax: { enabled: true },
                 customer_update: { address: "auto" },
               }
-            : {},
+            : {}),
+        },
       }),
     },
   });

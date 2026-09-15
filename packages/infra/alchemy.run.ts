@@ -193,10 +193,16 @@ export const server = Cloudflare.Worker("server", {
     }),
     STRIPE_CREATOR_ANNUAL_PRICE_ID: Config.string(
       "STRIPE_PRICE_CREATOR_YEARLY"
+    ).pipe(Config.withDefault("")),
+    STRIPE_CREATOR_PRICE_ID: Config.string("STRIPE_CREATOR_PRICE_ID").pipe(
+      Config.withDefault("")
     ),
-    STRIPE_CREATOR_PRICE_ID: Config.string("STRIPE_CREATOR_PRICE_ID"),
-    STRIPE_PRO_PRICE_ID: Config.string("STRIPE_PRO_PRICE_ID"),
-    STRIPE_PRO_ANNUAL_PRICE_ID: Config.string("STRIPE_PRICE_PRO_YEARLY"),
+    STRIPE_PRO_PRICE_ID: Config.string("STRIPE_PRO_PRICE_ID").pipe(
+      Config.withDefault("")
+    ),
+    STRIPE_PRO_ANNUAL_PRICE_ID: Config.string("STRIPE_PRICE_PRO_YEARLY").pipe(
+      Config.withDefault("")
+    ),
     STRIPE_TAX_ENABLED: Config.string("STRIPE_TAX_ENABLED").pipe(
       Config.withDefault("false")
     ),

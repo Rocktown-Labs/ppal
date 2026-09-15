@@ -16,13 +16,20 @@ import {
 } from "@ppal/ui/components/card";
 import { createFileRoute } from "@tanstack/react-router";
 import {
+  CheckCircle2,
+  CircleAlert,
+  ExternalLink,
+  RefreshCw,
   ShieldCheck,
   UserRound,
   UserRoundCheck,
   UserRoundX,
 } from "lucide-react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
+import { api } from "@/lib/api";
+import type { StripeCatalog, StripeCatalogPrice } from "@/lib/api";
 import { authClient } from "@/lib/auth-client";
 import { noIndexMeta } from "@/lib/seo";
 
@@ -32,6 +39,191 @@ const formatDate = (value: Date | string): string =>
   new Intl.DateTimeFormat("en-US", {
     dateStyle: "medium",
   }).format(new Date(value));
+
+const formatPrice = (price: StripeCatalogPrice): string => {
+  if (price.amountCents === null || price.currency === null) {
+    return "Not configured";
+  }
+  return new Intl.NumberFormat("en-US", {
+    currency: price.currency.toUpperCase(),
+    style: "currency",
+  }).format(price.amountCents / 100);
+};
+
+const statusLabel = (status: StripeCatalogPrice["status"]): string => {
+  if (status === "ready") {
+    return "Ready";
+  }
+  if (status === "needs_sync") {
+    return "Needs sync";
+  }
+  return "Missing";
+};
+
+const statusClass = (status: StripeCatalogPrice["status"]): string => {
+  if (status === "ready") {
+    return "text-emerald-300";
+  }
+  if (status === "needs_sync") {
+    return "text-amber-300";
+  }
+  return "text-rose-300";
+};
+
+const StripeCatalogCard = () => {
+  const [stripeCatalog, setStripeCatalog] = useState<StripeCatalog | null>(
+    null
+  );
+  const [stripeCatalogError, setStripeCatalogError] = useState<string | null>(
+    null
+  );
+  const [isStripeCatalogSyncing, setIsStripeCatalogSyncing] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    const loadStripeCatalog = async () => {
+      try {
+        const catalog = await api.billing.getStripeCatalog();
+        if (active) {
+          setStripeCatalog(catalog);
+          setStripeCatalogError(null);
+        }
+      } catch (error) {
+        if (active) {
+          setStripeCatalogError(
+            error instanceof Error
+              ? error.message
+              : "Unable to read Stripe catalog"
+          );
+        }
+      }
+    };
+    void loadStripeCatalog();
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const handleStripeCatalogSync = async (): Promise<void> => {
+    setIsStripeCatalogSyncing(true);
+    try {
+      const catalog = await api.billing.syncStripeCatalog();
+      setStripeCatalog(catalog);
+      setStripeCatalogError(null);
+      toast.success("Stripe catalog synced");
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Stripe catalog sync failed";
+      setStripeCatalogError(message);
+      toast.error(message);
+      setIsStripeCatalogSyncing(false);
+      return;
+    }
+    setIsStripeCatalogSyncing(false);
+  };
+
+  return (
+    <Card className="border-white/10 bg-zinc-900/40">
+      <CardHeader>
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <CardTitle>Stripe catalog</CardTitle>
+            <CardDescription>
+              Sync the live web subscription products and prices from the
+              configured Stripe account. Existing matching prices are reused and
+              missing catalog entries are created once.
+            </CardDescription>
+          </div>
+          <Button
+            type="button"
+            size="sm"
+            disabled={isStripeCatalogSyncing}
+            onClick={async () => {
+              await handleStripeCatalogSync();
+            }}
+          >
+            <RefreshCw
+              className={isStripeCatalogSyncing ? "animate-spin" : ""}
+            />
+            {isStripeCatalogSyncing ? "Syncing…" : "Sync Stripe"}
+          </Button>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-5">
+        {stripeCatalogError ? (
+          <div className="flex items-start gap-3 rounded-xl border border-rose-500/20 bg-rose-500/5 p-4 text-sm text-rose-200">
+            <CircleAlert className="mt-0.5 size-4 shrink-0" />
+            <p>{stripeCatalogError}</p>
+          </div>
+        ) : null}
+
+        <div className="grid gap-3 sm:grid-cols-2">
+          {stripeCatalog?.plans.map((catalogPlan) => (
+            <div
+              key={catalogPlan.plan}
+              className="rounded-xl border border-white/10 bg-zinc-950/50 p-4"
+            >
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="font-semibold text-white capitalize">
+                    {catalogPlan.plan}
+                  </p>
+                  <p className="mt-1 text-xs text-zinc-500">
+                    {catalogPlan.product?.name ?? "Product not found"}
+                  </p>
+                </div>
+                <span
+                  className={`text-xs font-semibold ${statusClass(catalogPlan.monthly.status)}`}
+                >
+                  {statusLabel(catalogPlan.monthly.status)}
+                </span>
+              </div>
+              <div className="mt-4 grid grid-cols-2 gap-3 text-xs">
+                {[catalogPlan.monthly, catalogPlan.annual].map((price) => (
+                  <div key={price.interval}>
+                    <p className="text-zinc-500 capitalize">{price.interval}</p>
+                    <p className="mt-1 font-semibold text-zinc-200">
+                      {formatPrice(price)}
+                    </p>
+                    <p className={`mt-1 ${statusClass(price.status)}`}>
+                      {statusLabel(price.status)}
+                    </p>
+                    {price.id ? (
+                      <p className="mt-1 truncate font-mono text-[10px] text-zinc-600">
+                        {price.id}
+                      </p>
+                    ) : null}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )) ?? (
+            <p className="text-sm text-zinc-500">Checking Stripe catalog…</p>
+          )}
+        </div>
+
+        {stripeCatalog ? (
+          <div className="flex flex-col gap-2 border-t border-white/10 pt-4 text-xs text-zinc-400 sm:flex-row sm:items-center sm:justify-between">
+            <span>
+              Secret key:{" "}
+              {stripeCatalog.secretConfigured ? "configured" : "missing"}
+              {" · "}
+              Webhook secret:{" "}
+              {stripeCatalog.webhookConfigured ? "configured" : "missing"}
+            </span>
+            <span className="inline-flex items-center gap-1 font-mono text-[10px] text-zinc-500">
+              <ExternalLink className="size-3" />
+              {stripeCatalog.webhookUrl}
+              {stripeCatalog.webhookConfigured ? (
+                <CheckCircle2 className="ml-1 size-3 text-emerald-400" />
+              ) : null}
+            </span>
+          </div>
+        ) : null}
+      </CardContent>
+    </Card>
+  );
+};
 
 const AdminPage = () => {
   const { data: session, isPending: isSessionPending } = useSession(authClient);
@@ -127,6 +319,8 @@ const AdminPage = () => {
           </div>
         </CardContent>
       </Card>
+
+      <StripeCatalogCard />
 
       <Card className="border-white/10 bg-zinc-900/40">
         <CardHeader>

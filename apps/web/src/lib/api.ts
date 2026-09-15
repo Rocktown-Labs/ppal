@@ -135,6 +135,30 @@ export interface BillingEntitlement {
   status: string;
 }
 
+export interface StripeCatalogPrice {
+  amountCents: number | null;
+  currency: string | null;
+  id: string | null;
+  interval: "month" | "year";
+  lookupKey: string;
+  status: "missing" | "needs_sync" | "ready";
+}
+
+export interface StripeCatalogPlan {
+  annual: StripeCatalogPrice;
+  monthly: StripeCatalogPrice;
+  plan: "creator" | "pro";
+  product: { id: string; name: string } | null;
+  productStatus: "missing" | "needs_sync" | "ready";
+}
+
+export interface StripeCatalog {
+  plans: StripeCatalogPlan[];
+  secretConfigured: boolean;
+  webhookConfigured: boolean;
+  webhookUrl: string;
+}
+
 export interface ReferralItem {
   claimedAt: string | null;
   code: string;
@@ -287,6 +311,12 @@ export const api = {
       request<{ entitlement: BillingEntitlement }>(
         "/api/v1/billing/entitlements"
       ),
+    getStripeCatalog: () =>
+      request<StripeCatalog>("/api/v1/admin/stripe/catalog"),
+    syncStripeCatalog: () =>
+      request<StripeCatalog>("/api/v1/admin/stripe/catalog/sync", {
+        method: "POST",
+      }),
   },
 
   catalog: {

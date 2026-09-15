@@ -9,6 +9,7 @@ import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { secureHeaders } from "hono/secure-headers";
 
+import { createAdminBillingRoutes } from "./routes/admin-billing";
 import { createAnalyticsRoutes } from "./routes/analytics";
 import { createBillingRoutes } from "./routes/billing";
 import { createCatalogRoutes } from "./routes/catalog";
@@ -167,6 +168,7 @@ const routes = app
   .route("/api/v1", createHistoricalImportRoutes(auth))
   .route("/api/v1", createReferralRoutes(auth))
   .route("/api/v1", createOperationRoutes())
+  .route("/api/v1", createAdminBillingRoutes(auth))
   .route("/api/v1", createBillingRoutes(auth))
   .route("/api/v1", createCommunityRoutes(auth))
   .route("/api/v1", createNotificationRoutes(auth))
