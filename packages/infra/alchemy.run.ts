@@ -27,6 +27,7 @@ const webDomain = isPullRequest
   ? `pr-${pullRequestNumber}.myparlaypal.com`
   : "myparlaypal.com";
 const publicServerUrl = `https://${apiDomain}`;
+const publicWebUrl = `https://${webDomain}`;
 
 export const db = Cloudflare.D1.Database("database", {
   migrations: "../../packages/db/src/migrations",
@@ -257,7 +258,7 @@ export default Alchemy.Stack(
       },
     });
 
-    const webWorker = yield* Cloudflare.Website.Vite("web", {
+    yield* Cloudflare.Website.Vite("web", {
       compatibility: {
         date: "2026-09-10",
         flags: ["nodejs_compat"],
@@ -279,8 +280,8 @@ export default Alchemy.Stack(
     });
 
     return {
-      server: serverWorker.url,
-      web: webWorker.url,
+      server: publicServerUrl,
+      web: publicWebUrl,
     };
   })
 );
