@@ -15,6 +15,7 @@ import { AuthProvider } from "@/components/auth/auth-provider";
 import { authClient } from "@/lib/auth-client";
 import {
   SITE_DESCRIPTION,
+  SITE_LOGO_ICON_URL,
   SITE_LOGO_URL,
   SITE_NAME,
   SITE_ORIGIN,
@@ -71,18 +72,17 @@ export const Route = createRootRouteWithContext<RouterAppContext>()({
         rel: "stylesheet",
       },
       {
-        href: "/favicon.ico",
+        href: SITE_LOGO_ICON_URL,
         rel: "icon",
-        sizes: "any",
-      },
-      {
-        href: "/favicon.svg",
-        rel: "icon",
-        type: "image/svg+xml",
+        type: "image/png",
       },
       {
         href: "/apple-touch-icon.png",
         rel: "apple-touch-icon",
+      },
+      {
+        href: "/site.webmanifest",
+        rel: "manifest",
       },
     ],
     meta: [
