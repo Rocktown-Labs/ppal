@@ -7,4 +7,23 @@ Disallow: /dashboard
 Disallow: /login
 Disallow: /r/
 
+# Keep search-and-cite crawlers eligible to discover the public product pages.
+User-agent: GPTBot
+Allow: /
+
+User-agent: ChatGPT-User
+Allow: /
+
+User-agent: PerplexityBot
+Allow: /
+
+User-agent: ClaudeBot
+Allow: /
+
+User-agent: Google-Extended
+Allow: /
+
+User-agent: Bingbot
+Allow: /
+
 Sitemap: https://myparlaypal.com/sitemap.xml

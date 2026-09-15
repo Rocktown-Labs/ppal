@@ -4,6 +4,7 @@ import { expo } from "@better-auth/expo";
 import { passkey } from "@better-auth/passkey";
 import { stripe } from "@better-auth/stripe";
 import type { Subscription } from "@better-auth/stripe";
+import { webSubscriptionPlans } from "@ppal/contracts/billing";
 import { createDb } from "@ppal/db";
 import * as schema from "@ppal/db/schema/auth";
 import { env } from "@ppal/env/server";
@@ -11,7 +12,7 @@ import { compare } from "bcryptjs";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { hashPassword, verifyPassword } from "better-auth/crypto";
-import { twoFactor } from "better-auth/plugins";
+import { admin, twoFactor } from "better-auth/plugins";
 import { Resend } from "resend";
 import StripeSdk from "stripe";
 
@@ -37,7 +38,7 @@ const sendVerificationEmail = async ({
     return;
   }
   await resend.emails.send({
-    from: env.RESEND_FROM_EMAIL || "support@myparlaypal.com",
+    from: env.RESEND_FROM_EMAIL || "noreply@support.myparlaypal.com",
     html: `<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 560px; margin: 0 auto; padding: 24px; background-color: #0d1117; color: #f3f4f6; border-radius: 12px; border: 1px solid #2d3748;">
       <h2 style="color: #10b981; margin-top: 0; font-size: 24px;">Welcome to ParlayPal</h2>
       <p style="font-size: 15px; line-height: 1.6; color: #d1d5db;">Please confirm your email address by clicking the link below to activate your account and start tracking your slips.</p>
@@ -48,6 +49,9 @@ const sendVerificationEmail = async ({
     </div>`,
     subject: "Verify your email - ParlayPal",
     to: email,
+    ...(env.RESEND_REPLY_TO_EMAIL
+      ? { replyTo: env.RESEND_REPLY_TO_EMAIL }
+      : {}),
   });
 };
 
@@ -63,7 +67,7 @@ const sendResetPasswordEmail = async ({
     return;
   }
   await resend.emails.send({
-    from: env.RESEND_FROM_EMAIL || "support@myparlaypal.com",
+    from: env.RESEND_FROM_EMAIL || "noreply@support.myparlaypal.com",
     html: `<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 560px; margin: 0 auto; padding: 24px; background-color: #0d1117; color: #f3f4f6; border-radius: 12px; border: 1px solid #2d3748;">
       <h2 style="color: #10b981; margin-top: 0; font-size: 24px;">Reset Your Password</h2>
       <p style="font-size: 15px; line-height: 1.6; color: #d1d5db;">We received a request to reset your ParlayPal password. Click the button below to choose a new password:</p>
@@ -74,6 +78,9 @@ const sendResetPasswordEmail = async ({
     </div>`,
     subject: "Reset your password - ParlayPal",
     to: email,
+    ...(env.RESEND_REPLY_TO_EMAIL
+      ? { replyTo: env.RESEND_REPLY_TO_EMAIL }
+      : {}),
   });
 };
 
@@ -132,9 +139,7 @@ const createStripePlugin = () => {
   const stripeWebhookSecret = env.STRIPE_WEBHOOK_SECRET?.trim();
   const proPriceId = env.STRIPE_PRO_PRICE_ID?.trim();
   const creatorPriceId = env.STRIPE_CREATOR_PRICE_ID?.trim();
-  if (
-    !(stripeSecretKey && stripeWebhookSecret && proPriceId && creatorPriceId)
-  ) {
+  if (!(stripeSecretKey && stripeWebhookSecret)) {
     return null;
   }
   const stripeClient = new StripeSdk(stripeSecretKey);
@@ -157,26 +162,36 @@ const createStripePlugin = () => {
       },
       plans: [
         {
-          annualDiscountPriceId: env.STRIPE_PRO_ANNUAL_PRICE_ID,
-          limits: { monthlyUploads: 500 },
+          annualDiscountLookupKey: webSubscriptionPlans.pro.annualLookupKey,
+          annualDiscountPriceId:
+            env.STRIPE_PRO_ANNUAL_PRICE_ID?.trim() || undefined,
+          limits: { monthlyUploads: webSubscriptionPlans.pro.monthlyUploads },
           name: "pro",
-          priceId: proPriceId,
+          lookupKey: webSubscriptionPlans.pro.lookupKey,
+          priceId: proPriceId || undefined,
         },
         {
-          annualDiscountPriceId: env.STRIPE_CREATOR_ANNUAL_PRICE_ID,
-          limits: { monthlyUploads: 1000 },
+          annualDiscountLookupKey: webSubscriptionPlans.creator.annualLookupKey,
+          annualDiscountPriceId:
+            env.STRIPE_CREATOR_ANNUAL_PRICE_ID?.trim() || undefined,
+          limits: {
+            monthlyUploads: webSubscriptionPlans.creator.monthlyUploads,
+          },
           name: "creator",
-          priceId: creatorPriceId,
+          lookupKey: webSubscriptionPlans.creator.lookupKey,
+          priceId: creatorPriceId || undefined,
         },
       ],
       getCheckoutSessionParams: () => ({
-        params:
-          env.STRIPE_TAX_ENABLED === "true"
+        params: {
+          integration_identifier: `parlaypal_web_${crypto.randomUUID().replaceAll("-", "").slice(0, 8)}`,
+          ...(env.STRIPE_TAX_ENABLED === "true"
             ? {
                 automatic_tax: { enabled: true },
                 customer_update: { address: "auto" },
               }
-            : {},
+            : {}),
+        },
       }),
     },
   });
@@ -239,6 +254,14 @@ export const createAuth = () => {
             },
           }
         : {}),
+      ...(env.FACEBOOK_CLIENT_ID && env.FACEBOOK_CLIENT_SECRET
+        ? {
+            facebook: {
+              clientId: env.FACEBOOK_CLIENT_ID,
+              clientSecret: env.FACEBOOK_CLIENT_SECRET,
+            },
+          }
+        : {}),
     },
     rateLimit: {
       customRules: {
@@ -279,6 +302,10 @@ export const createAuth = () => {
     },
     plugins: [
       expo(),
+      admin({
+        adminRoles: ["admin"],
+        defaultRole: "user",
+      }),
       twoFactor({
         issuer: "ParlayPal",
       }),

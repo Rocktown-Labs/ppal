@@ -110,6 +110,8 @@ Configure provider webhooks after the first production deployment:
 
 Use the Better Auth subscription endpoints under `/api/auth/subscription/*` for Checkout and the Stripe billing portal. Configure RevenueCat to use the Better Auth user ID as its App User ID; anonymous RevenueCat IDs are deliberately not trusted for server entitlements.
 
+The web subscription catalog is managed from Dashboard → Admin → Stripe catalog. The Sync Stripe action reuses matching products/prices and creates missing Pro and Creator monthly/yearly prices with stable lookup keys, so price IDs do not need to be hard-coded into the web bundle. The Stripe secret and webhook signing secret still need to be configured in the production Worker environment.
+
 Deploys are staged and default to a personal `dev_<username>` stage. For production, run the deploy with an explicit stage from `packages/infra`:
 
 ```bash

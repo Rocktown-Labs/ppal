@@ -15,6 +15,15 @@ ParlayPal is a sportsbook-independent live bet companion for sports bettors. It 
 
 - [ParlayPal home](https://myparlaypal.com/): product overview, supported sports, workflow, features, and pricing.
 - [Pricing](https://myparlaypal.com/#pricing): current Free, Pro, and Creator plans.
+- [Football bet tracking](https://myparlaypal.com/sports/football): NFL and NCAA football markets, score updates, and player props.
+- [Basketball bet tracking](https://myparlaypal.com/sports/basketball): NBA, WNBA, and NCAA basketball markets and player progress.
+- [Baseball bet tracking](https://myparlaypal.com/sports/baseball): MLB scores, innings, run lines, totals, and supported props.
+- [Hockey bet tracking](https://myparlaypal.com/sports/hockey): NHL scores, periods, puck lines, totals, and supported props.
+- [Soccer bet tracking](https://myparlaypal.com/sports/soccer): match scores, minutes, result markets, totals, and supported props.
+- [MMA bet tracking](https://myparlaypal.com/sports/mma): UFC and supported fight moneylines, methods, and round markets.
+- [Tennis bet tracking](https://myparlaypal.com/sports/tennis): ATP, WTA, match scores, handicaps, totals, and supported props.
+- [Racing bet tracking](https://myparlaypal.com/sports/racing): NASCAR, Formula 1, positions, laps, and finish markets.
+- [Golf bet tracking](https://myparlaypal.com/sports/golf): PGA, LIV, LPGA, leaderboard, finish, and matchup markets.
 - Public scorecards: `https://myparlaypal.com/u/{username}` when a bettor has enabled a public profile.
 - Public communities: `https://myparlaypal.com/communities/{slug}` when a creator publishes a public community.
 
@@ -27,3 +36,4 @@ ParlayPal tracks bets but is not a sportsbook or gambling operator. Public score
 - [Pricing data](https://myparlaypal.com/pricing.md)
 - [XML sitemap](https://myparlaypal.com/sitemap.xml)
 - [Robots rules](https://myparlaypal.com/robots.txt)
+- [Full product context](https://myparlaypal.com/llms-full.txt)

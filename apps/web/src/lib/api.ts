@@ -59,8 +59,10 @@ export interface UserProfile {
 export interface CurrentUserWithProfile {
   email: string;
   id: string;
+  image?: string | null;
   name: string;
   profile: UserProfile | null;
+  role?: string;
 }
 
 export interface PublicProfile {
@@ -131,6 +133,30 @@ export interface BillingEntitlement {
   plan: "free" | "pro" | "creator";
   source: string | null;
   status: string;
+}
+
+export interface StripeCatalogPrice {
+  amountCents: number | null;
+  currency: string | null;
+  id: string | null;
+  interval: "month" | "year";
+  lookupKey: string;
+  status: "missing" | "needs_sync" | "ready";
+}
+
+export interface StripeCatalogPlan {
+  annual: StripeCatalogPrice;
+  monthly: StripeCatalogPrice;
+  plan: "creator" | "pro";
+  product: { id: string; name: string } | null;
+  productStatus: "missing" | "needs_sync" | "ready";
+}
+
+export interface StripeCatalog {
+  plans: StripeCatalogPlan[];
+  secretConfigured: boolean;
+  webhookConfigured: boolean;
+  webhookUrl: string;
 }
 
 export interface ReferralItem {
@@ -285,6 +311,12 @@ export const api = {
       request<{ entitlement: BillingEntitlement }>(
         "/api/v1/billing/entitlements"
       ),
+    getStripeCatalog: () =>
+      request<StripeCatalog>("/api/v1/admin/stripe/catalog"),
+    syncStripeCatalog: () =>
+      request<StripeCatalog>("/api/v1/admin/stripe/catalog/sync", {
+        method: "POST",
+      }),
   },
 
   catalog: {

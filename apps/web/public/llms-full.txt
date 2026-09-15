@@ -1,0 +1,53 @@
+# ParlayPal — full product context
+
+## What ParlayPal is
+
+ParlayPal is a sportsbook-independent live bet companion. It reads a screenshot of a bet slip, extracts the teams, players, markets, lines, and combinations, lets the bettor review the result, then follows supported event data and builds a transparent outcome record.
+
+ParlayPal is not a sportsbook or gambling operator. It does not accept wagers, hold funds, set odds, or guarantee outcomes. Users should follow local laws and gamble responsibly.
+
+## Who it is for
+
+ParlayPal is for sports bettors who want one readable view of a ticket after placing it. It is useful for player props, team markets, moneylines, spreads, totals, same-game combinations, and parlays that mix player and team selections.
+
+## Workflow
+
+1. Upload a screenshot or photo of a ticket from FanDuel, DraftKings, BetMGM, PrizePicks, or another sportsbook.
+2. ParlayPal extracts the ticket and normalizes the event, player, team, market, line, direction, and period details.
+3. Review and confirm the extracted legs before live tracking begins.
+4. ParlayPal matches each leg to supported sports data and records progress snapshots.
+5. Receive scheduled updates and milestone notifications through the channels enabled in account preferences.
+6. Review settled tickets and personal hit-rate analytics by player, team, sport, market, and ticket size.
+
+## Notification behavior
+
+Notifications are designed to communicate meaningful ticket changes, not every raw feed event. A player prop can show current progress toward its line, such as a three-point or points-plus-rebounds-plus-assists total. A team moneyline or spread can show the current score and period or quarter. Final settlement notifications report whether a leg or full ticket won or lost. Delivery frequency depends on the user’s plan and selected interval; supported plans include scheduled five-minute or fifteen-minute live updates.
+
+## Supported sports
+
+- Football: NFL, NCAA football, international football. Track moneylines, spreads, totals, team markets, and supported passing, rushing, receiving, and touchdown props.
+- Basketball: NBA, WNBA, NCAA basketball, international basketball. Track moneylines, spreads, totals, points, rebounds, assists, threes, and supported combo props.
+- Baseball: MLB, MiLB, and international baseball. Track moneylines, run lines, totals, team markets, and supported hitter or pitcher props.
+- Hockey: NHL, AHL, and international hockey. Track moneylines, puck lines, totals, and supported shots, points, or goals props.
+- Soccer: Premier League, MLS, UEFA competitions, and international soccer. Track match result, goals totals, team markets, and supported player props.
+- MMA: UFC, MMA events, and supported promotions. Track fight moneylines, method of victory, round totals, and supported fighter props.
+- Tennis: ATP, WTA, Grand Slam events, and international tennis. Track match winners, set or game handicaps, totals, and supported player props.
+- Racing: NASCAR, Formula 1, IndyCar, and global motorsport. Track winners, podiums, finishing positions, matchups, laps, stages, and supported race props.
+- Golf: PGA Tour, LIV Golf, LPGA, and major championships. Track tournament winners, top finishes, player matchups, and supported round or tournament markets.
+
+Availability can vary by sportsbook ticket, league, event, market, and live-data coverage. The user reviews extracted legs before tracking.
+
+## Plans
+
+- Free: $0 forever; five tracked tickets per month, fifteen-minute live updates, basic player hit rates, and in-app notifications.
+- Pro: $12.99 monthly or $99.99 annually; 500 ticket uploads per month, five-minute live updates, player/team/market analytics, email game alerts, and priority processing.
+- Creator: $24.99 monthly or $199 annually; 1,000 ticket uploads per month, bulk historical imports, highest-priority processing, creator analytics, and Pro features.
+
+Current public pricing is listed at https://myparlaypal.com/pricing.md and on the homepage pricing section.
+
+## Public resources
+
+- Homepage: https://myparlaypal.com/
+- Pricing: https://myparlaypal.com/pricing.md
+- Sitemap: https://myparlaypal.com/sitemap.xml
+- Robots: https://myparlaypal.com/robots.txt

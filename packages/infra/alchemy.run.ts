@@ -26,6 +26,8 @@ const apiDomain = isPullRequest
 const webDomain = isPullRequest
   ? `pr-${pullRequestNumber}.myparlaypal.com`
   : "myparlaypal.com";
+const publicServerUrl = `https://${apiDomain}`;
+const publicWebUrl = `https://${webDomain}`;
 
 export const db = Cloudflare.D1.Database("database", {
   migrations: "../../packages/db/src/migrations",
@@ -72,7 +74,10 @@ export const server = Cloudflare.Worker("server", {
   dev: {
     port: 3000,
   },
-  domain: apiDomain,
+  // Existing DNS records are managed outside Alchemy. A zone route lets the
+  // Worker serve the proxied hostname without trying to replace those records
+  // with a custom domain.
+  routes: [{ pattern: `${apiDomain}/*` }],
   env: {
     ANALYTICS: analytics,
     API_RATE_LIMIT: Cloudflare.RateLimit("api-rate-limit", {
@@ -108,7 +113,9 @@ export const server = Cloudflare.Worker("server", {
       Config.withDefault(Redacted.make(""))
     ),
     BETTER_AUTH_SECRET: Config.redacted("BETTER_AUTH_SECRET"),
-    BETTER_AUTH_URL: Cloudflare.Worker.URL,
+    BETTER_AUTH_URL: Config.string("BETTER_AUTH_URL").pipe(
+      Config.withDefault(publicServerUrl)
+    ),
     CORS_ORIGIN: isPullRequest
       ? `https://${webDomain}`
       : Config.string("CORS_ORIGIN").pipe(
@@ -116,6 +123,12 @@ export const server = Cloudflare.Worker("server", {
         ),
     DB: db,
     EXTRACTION_QUEUE: extractionQueue,
+    FACEBOOK_CLIENT_ID: Config.string("FACEBOOK_CLIENT_ID").pipe(
+      Config.withDefault("")
+    ),
+    FACEBOOK_CLIENT_SECRET: Config.redacted("FACEBOOK_CLIENT_SECRET").pipe(
+      Config.withDefault(Redacted.make(""))
+    ),
     GEMINI_API_KEY: Config.redacted("GEMINI_API_KEY"),
     GOOGLE_CLIENT_ID: Config.string("GOOGLE_CLIENT_ID").pipe(
       Config.withDefault("")
@@ -135,6 +148,9 @@ export const server = Cloudflare.Worker("server", {
       Config.withDefault(Redacted.make(""))
     ),
     RESEND_FROM_EMAIL: Config.string("RESEND_FROM_EMAIL").pipe(
+      Config.withDefault("noreply@support.myparlaypal.com")
+    ),
+    RESEND_REPLY_TO_EMAIL: Config.string("RESEND_REPLY_TO_EMAIL").pipe(
       Config.withDefault("support@myparlaypal.com")
     ),
     REVENUECAT_WEBHOOK_SECRET: Config.redacted("REVENUECAT_WEBHOOK_SECRET"),
@@ -169,7 +185,7 @@ export const server = Cloudflare.Worker("server", {
       Config.withDefault("")
     ),
     WEB_PUSH_VAPID_SUBJECT: Config.string("WEB_PUSH_VAPID_SUBJECT").pipe(
-      Config.withDefault("mailto:support@myparlaypal.com")
+      Config.withDefault("mailto:noreply@support.myparlaypal.com")
     ),
     WEBHOOK_RATE_LIMIT: Cloudflare.RateLimit("webhook-rate-limit", {
       namespaceId: rateLimitNamespaceOffset + 1004,
@@ -177,10 +193,16 @@ export const server = Cloudflare.Worker("server", {
     }),
     STRIPE_CREATOR_ANNUAL_PRICE_ID: Config.string(
       "STRIPE_PRICE_CREATOR_YEARLY"
+    ).pipe(Config.withDefault("")),
+    STRIPE_CREATOR_PRICE_ID: Config.string("STRIPE_CREATOR_PRICE_ID").pipe(
+      Config.withDefault("")
     ),
-    STRIPE_CREATOR_PRICE_ID: Config.string("STRIPE_CREATOR_PRICE_ID"),
-    STRIPE_PRO_PRICE_ID: Config.string("STRIPE_PRO_PRICE_ID"),
-    STRIPE_PRO_ANNUAL_PRICE_ID: Config.string("STRIPE_PRICE_PRO_YEARLY"),
+    STRIPE_PRO_PRICE_ID: Config.string("STRIPE_PRO_PRICE_ID").pipe(
+      Config.withDefault("")
+    ),
+    STRIPE_PRO_ANNUAL_PRICE_ID: Config.string("STRIPE_PRICE_PRO_YEARLY").pipe(
+      Config.withDefault("")
+    ),
     STRIPE_TAX_ENABLED: Config.string("STRIPE_TAX_ENABLED").pipe(
       Config.withDefault("false")
     ),
@@ -251,7 +273,7 @@ export default Alchemy.Stack(
       },
     });
 
-    const webWorker = yield* Cloudflare.Website.Vite("web", {
+    yield* Cloudflare.Website.Vite("web", {
       compatibility: {
         date: "2026-09-10",
         flags: ["nodejs_compat"],
@@ -259,9 +281,13 @@ export default Alchemy.Stack(
       dev: {
         port: 3001,
       },
-      domain: webDomain,
+      // Existing DNS records are managed outside Alchemy; route the proxied
+      // hostname to this Worker without taking ownership of those records.
+      routes: [{ pattern: `${webDomain}/*` }],
       env: {
-        VITE_SERVER_URL: serverWorker.url.as<string>(),
+        VITE_SERVER_URL: Config.string("VITE_SERVER_URL").pipe(
+          Config.withDefault(publicServerUrl)
+        ),
       },
       rootDir: "../../apps/web",
       name: `ppal-web${deploymentSuffix}`,
@@ -269,8 +295,8 @@ export default Alchemy.Stack(
     });
 
     return {
-      server: serverWorker.url,
-      web: webWorker.url,
+      server: publicServerUrl,
+      web: publicWebUrl,
     };
   })
 );

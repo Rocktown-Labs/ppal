@@ -7,6 +7,7 @@ export interface NotificationServiceEnv {
   NOTIFICATION_QUEUE: Queue;
   RESEND_API_KEY: string;
   RESEND_FROM_EMAIL: string;
+  RESEND_REPLY_TO_EMAIL: string;
   WEB_PUSH_VAPID_PRIVATE_KEY: string;
   WEB_PUSH_VAPID_PUBLIC_KEY: string;
   WEB_PUSH_VAPID_SUBJECT: string;
@@ -251,6 +252,7 @@ const sendEmailOrExpoDelivery = async (
           body: JSON.stringify({
             from: workerEnv.RESEND_FROM_EMAIL,
             html: `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>${escapeHtml(delivery.title)}</title></head><body><main><h1>${escapeHtml(delivery.title)}</h1><p>${escapeHtml(delivery.body)}</p><p><a href="https://myparlaypal.com/dashboard/notifications">View in ParlayPal</a></p></main></body></html>`,
+            reply_to: workerEnv.RESEND_REPLY_TO_EMAIL,
             subject: delivery.title,
             text: `${delivery.title}\n\n${delivery.body}\n\nView in ParlayPal: https://myparlaypal.com/dashboard/notifications`,
             to: [delivery.destination],
