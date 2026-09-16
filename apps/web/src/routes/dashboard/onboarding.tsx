@@ -10,8 +10,8 @@ import {
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
-import { api } from "@/lib/api";
-import { authClient } from "@/lib/auth-client";
+import { api, resolveAvatarSource } from "@/lib/api";
+import { startWebSubscriptionCheckout } from "@/lib/billing";
 import { consumeReferralIntent } from "@/lib/referral-intent";
 
 const SPORTS_LIST = [
@@ -55,6 +55,7 @@ const OnboardingWizardComponent = () => {
   const [step, setStep] = useState(1);
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [avatarPreviewUrl, setAvatarPreviewUrl] = useState<string>();
   const [usernameError, setUsernameError] = useState<string | null>(null);
 
   const initialValues: OnboardingFormValues = {
@@ -81,14 +82,17 @@ const OnboardingWizardComponent = () => {
     const loadExistingProfile = async () => {
       try {
         const { user } = await api.community.getMe();
-        if (active && user?.profile) {
-          if (user.profile.username) {
-            form.setFieldValue("username", user.profile.username);
+        if (active) {
+          setAvatarPreviewUrl(resolveAvatarSource(user.image));
+          if (user.profile) {
+            if (user.profile.username) {
+              form.setFieldValue("username", user.profile.username);
+            }
+            form.setFieldValue(
+              "profileVisibility",
+              user.profile.isPublic ? "public" : "private"
+            );
           }
-          form.setFieldValue(
-            "profileVisibility",
-            user.profile.isPublic ? "public" : "private"
-          );
         }
       } catch {
         // Unauthenticated or not yet created
@@ -117,6 +121,7 @@ const OnboardingWizardComponent = () => {
     try {
       const { url } = await api.community.uploadAvatar(file);
       form.setFieldValue("avatarUrl", url);
+      setAvatarPreviewUrl(resolveAvatarSource(url));
       toast.success("Avatar uploaded successfully!");
       setIsUploadingAvatar(false);
     } catch (error) {
@@ -204,17 +209,12 @@ const OnboardingWizardComponent = () => {
     }
     setIsSubmitting(true);
     try {
-      const { origin } = window.location;
-      const checkout = await authClient.subscription.upgrade({
-        annual: form.getFieldValue("billingPeriod") === "yearly",
-        cancelUrl: `${origin}/dashboard/onboarding`,
+      await startWebSubscriptionCheckout({
+        billingPeriod: form.getFieldValue("billingPeriod"),
+        cancelPath: "/dashboard/onboarding",
         plan,
-        successUrl: `${origin}/dashboard`,
+        successPath: "/dashboard",
       });
-      if (checkout.error) {
-        toast.error(checkout.error.message ?? "Checkout could not be started");
-        setIsSubmitting(false);
-      }
     } catch (error) {
       toast.error(
         error instanceof Error ? error.message : "Checkout could not be started"
@@ -425,8 +425,17 @@ const OnboardingWizardComponent = () => {
                   <div className="rounded-3xl border border-white/10 bg-white/[0.03] p-6 sm:p-7">
                     <div className="flex h-full flex-col items-center justify-center text-center">
                       <div className="relative">
-                        <div className="flex size-28 items-center justify-center rounded-full border border-white/10 bg-white/5 text-zinc-500">
-                          <Camera className="size-10 stroke-[1.5]" />
+                        <div className="flex size-28 items-center justify-center overflow-hidden rounded-full border border-white/10 bg-white/5 text-zinc-500">
+                          {avatarPreviewUrl ? (
+                            <img
+                              src={avatarPreviewUrl}
+                              alt="Selected profile"
+                              className="size-full object-cover"
+                              onError={() => setAvatarPreviewUrl(undefined)}
+                            />
+                          ) : (
+                            <Camera className="size-10 stroke-[1.5]" />
+                          )}
                         </div>
                         {isUploadingAvatar && (
                           <div className="absolute inset-0 flex items-center justify-center rounded-full bg-black/60">

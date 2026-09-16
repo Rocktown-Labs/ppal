@@ -338,7 +338,7 @@ RevenueCat webhook read model ------/
 Rules:
 
 - Free, Pro, and Creator remain application concepts.
-- Pro and Creator support monthly and annual Stripe prices configured through secrets/environment, never hard-coded IDs.
+- Pro and Creator support monthly and annual Stripe prices. The admin Stripe catalog sync creates or adopts those prices using stable Stripe lookup keys; optional environment price IDs remain available to adopt an existing catalog without hard-coding IDs in the web bundle.
 - Checkout is created on the server; subscription access changes only from verified webhook/read-model state, not a success redirect.
 - Record every Stripe and RevenueCat webhook ID before processing to make delivery idempotent.
 - Resolve simultaneous active sources deterministically. Initially choose the highest active plan while flagging duplicate paid sources for support/reconciliation.
@@ -544,7 +544,7 @@ The first vertical slice now includes Alchemy-managed R2 and Queues, authenticat
 ## Remaining account and launch gates
 
 - The tested Sportradar key authorizes NBA and MLB. The tested NFL, NHL, soccer, tennis, MMA, global basketball, NASCAR, Formula 1, and PGA endpoints return `403`; enable those products before relying on those adapters in production.
-- All four Stripe monthly/yearly prices are active. Stripe Tax stays off until the account has an active tax registration; the live account currently has none.
+- Stripe catalog sync is available from Dashboard → Admin and is idempotent through stable product metadata, price lookup keys, and Stripe idempotency keys. Stripe Tax stays off until the account has an active tax registration; the live account currently has none.
 - Run Alchemy deployment and production webhook/DNS checks only when a production rollout is intended. No production deployment was performed during backend implementation.
 - Run the generated Laravel export against the production backup and copy any legacy upload objects into R2 before cutover. The checked-in source SQLite currently contains no upload rows or subscription rows.
 

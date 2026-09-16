@@ -25,6 +25,7 @@ import { toast } from "sonner";
 import { Settings } from "@/components/auth/settings/settings";
 import { api } from "@/lib/api";
 import type { BillingEntitlement, NotificationPreferences } from "@/lib/api";
+import { startWebSubscriptionCheckout } from "@/lib/billing";
 
 const getPlanBadgeClass = (plan: string) => {
   if (plan === "pro") {
@@ -102,6 +103,7 @@ const SettingsComponent = () => {
   const [isWebPushEnabled, setIsWebPushEnabled] = useState(false);
   const [isWebPushSaving, setIsWebPushSaving] = useState(false);
   const [webPushAvailable, setWebPushAvailable] = useState(false);
+  const [isCheckoutStarting, setIsCheckoutStarting] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -237,6 +239,23 @@ const SettingsComponent = () => {
     setIsWebPushSaving(false);
   };
 
+  const handleUpgrade = async () => {
+    setIsCheckoutStarting(true);
+    try {
+      await startWebSubscriptionCheckout({
+        billingPeriod: "monthly",
+        cancelPath: "/dashboard/settings",
+        plan: "pro",
+        successPath: "/dashboard/settings",
+      });
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Checkout could not be started"
+      );
+      setIsCheckoutStarting(false);
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="flex h-96 items-center justify-center">
@@ -331,18 +350,16 @@ const SettingsComponent = () => {
                 stat updates with ParlayPal Pro.
               </p>
             </div>
-            <a
-              href="#upgrade"
-              onClick={(e) => {
-                e.preventDefault();
-                toast.info(
-                  "Stripe integration available in production checkout"
-                );
-              }}
+            <button
+              type="button"
+              onClick={handleUpgrade}
+              disabled={isCheckoutStarting}
               className="inline-flex cursor-pointer items-center justify-center rounded-xl bg-emerald-500 px-4 py-2 text-xs font-bold text-black shadow-lg shadow-emerald-500/20 transition hover:bg-emerald-400"
             >
-              Upgrade to Pro ($12.99/mo)
-            </a>
+              {isCheckoutStarting
+                ? "Opening checkout…"
+                : "Upgrade to Pro ($12.99/mo)"}
+            </button>
           </div>
         )}
       </div>

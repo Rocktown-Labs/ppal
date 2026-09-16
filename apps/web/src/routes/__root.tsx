@@ -15,9 +15,11 @@ import { AuthProvider } from "@/components/auth/auth-provider";
 import { authClient } from "@/lib/auth-client";
 import {
   SITE_DESCRIPTION,
+  SITE_LOGO_ICON_URL,
   SITE_LOGO_URL,
   SITE_NAME,
   SITE_ORIGIN,
+  SITE_TITLE,
 } from "@/lib/seo";
 
 import appCss from "../index.css?url";
@@ -44,7 +46,11 @@ const RootDocument = () => {
         <AuthProvider
           Link={TanStackLinkAdapter}
           authClient={authClient}
+          basePaths={{ settings: "/dashboard" }}
           redirectTo="/dashboard"
+          viewPaths={{
+            settings: { account: "settings", security: "settings" },
+          }}
           navigate={({ to, replace }) => {
             void navigate({ replace, to });
           }}
@@ -71,18 +77,17 @@ export const Route = createRootRouteWithContext<RouterAppContext>()({
         rel: "stylesheet",
       },
       {
-        href: "/favicon.ico",
+        href: SITE_LOGO_ICON_URL,
         rel: "icon",
-        sizes: "any",
-      },
-      {
-        href: "/favicon.svg",
-        rel: "icon",
-        type: "image/svg+xml",
+        type: "image/png",
       },
       {
         href: "/apple-touch-icon.png",
         rel: "apple-touch-icon",
+      },
+      {
+        href: "/site.webmanifest",
+        rel: "manifest",
       },
     ],
     meta: [
@@ -94,7 +99,7 @@ export const Route = createRootRouteWithContext<RouterAppContext>()({
         name: "viewport",
       },
       {
-        title: "ParlayPal — Sportsbook-Independent Live Bet Companion",
+        title: SITE_TITLE,
       },
       {
         content: SITE_DESCRIPTION,
