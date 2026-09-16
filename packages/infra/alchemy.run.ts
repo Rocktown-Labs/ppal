@@ -26,6 +26,7 @@ const apiDomain = isPullRequest
 const webDomain = isPullRequest
   ? `pr-${pullRequestNumber}.myparlaypal.com`
   : "myparlaypal.com";
+const cloudflareZoneId = "f982a1aacdf38eb2657092788c32d113";
 const publicServerUrl = `https://${apiDomain}`;
 const publicWebUrl = `https://${webDomain}`;
 
@@ -74,10 +75,9 @@ export const server = Cloudflare.Worker("server", {
   dev: {
     port: 3000,
   },
-  // Existing DNS records are managed outside Alchemy. A zone route lets the
-  // Worker serve the proxied hostname without trying to replace those records
-  // with a custom domain.
-  routes: [{ pattern: `${apiDomain}/*` }],
+  // The zone is pinned so CI can use a least-privilege token without needing
+  // account-wide Zone Read access to discover it.
+  routes: [{ pattern: `${apiDomain}/*`, zoneId: cloudflareZoneId }],
   env: {
     ANALYTICS: analytics,
     API_RATE_LIMIT: Cloudflare.RateLimit("api-rate-limit", {
@@ -281,9 +281,8 @@ export default Alchemy.Stack(
       dev: {
         port: 3001,
       },
-      // Existing DNS records are managed outside Alchemy; route the proxied
-      // hostname to this Worker without taking ownership of those records.
-      routes: [{ pattern: `${webDomain}/*` }],
+      // The zone is pinned for the same least-privilege CI deployment path.
+      routes: [{ pattern: `${webDomain}/*`, zoneId: cloudflareZoneId }],
       env: {
         VITE_SERVER_URL: Config.string("VITE_SERVER_URL").pipe(
           Config.withDefault(publicServerUrl)

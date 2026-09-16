@@ -29,29 +29,24 @@ jobs:
       - name: Verify Cloudflare deployment scope
         working-directory: packages/infra
         run: |
-          zone_response="$(curl -sS \
-            -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
-            -H "Content-Type: application/json" \
-            'https://api.cloudflare.com/client/v4/zones?name=myparlaypal.com&status=active')"
-          zone_id="$(printf '%s' "$zone_response" | jq -r '.result[0].id // empty')"
-          if [ -z "$zone_id" ]; then
-            printf '%s' "$zone_response" | jq '{success, errors}'
-            echo "CLOUDFLARE_API_TOKEN cannot read the myparlaypal.com zone." >&2
+          if ! printf '%s' "$CLOUDFLARE_ZONE_ID" | grep -Eq '^[a-f0-9]{32}$'; then
+            echo "CLOUDFLARE_ZONE_ID must be the 32-character ID for myparlaypal.com." >&2
             exit 1
           fi
 
           route_response="$(curl -sS \
             -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
             -H "Content-Type: application/json" \
-            "https://api.cloudflare.com/client/v4/zones/$zone_id/workers/routes")"
+            "https://api.cloudflare.com/client/v4/zones/$CLOUDFLARE_ZONE_ID/workers/routes")"
           printf '%s' "$route_response" | jq '{success, errors}'
           if ! printf '%s' "$route_response" | jq -e '.success == true' >/dev/null; then
-            echo "CLOUDFLARE_API_TOKEN must be allowed to manage Workers Routes on myparlaypal.com." >&2
+            echo "CLOUDFLARE_API_TOKEN must include Workers Routes Read or Write for myparlaypal.com." >&2
             exit 1
           fi
         env:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID || vars.CLOUDFLARE_ACCOUNT_ID }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ZONE_ID: ${{ vars.CLOUDFLARE_ZONE_ID || 'f982a1aacdf38eb2657092788c32d113' }}
       - run: bun run check-types
       - run: bun test packages/domain apps/server/tests
       - name: Deploy Cloudflare stack
