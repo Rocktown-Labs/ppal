@@ -36,6 +36,8 @@ const TanStackLinkAdapter = ({
 
 const RootDocument = () => {
   const navigate = useNavigate();
+  const authBaseURL =
+    typeof window === "undefined" ? SITE_ORIGIN : window.location.origin;
 
   return (
     <html className="dark" lang="en">
@@ -47,6 +49,7 @@ const RootDocument = () => {
           Link={TanStackLinkAdapter}
           authClient={authClient}
           basePaths={{ settings: "/dashboard" }}
+          baseURL={authBaseURL}
           redirectTo="/dashboard"
           socialProviders={["google"]}
           viewPaths={{
