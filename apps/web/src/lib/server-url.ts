@@ -1,4 +1,31 @@
 const LOCAL_API_HOST = "127.0.0.1";
+const LOCAL_SERVER_URL = `http://${LOCAL_API_HOST}:3000`;
+const PRODUCTION_SERVER_URL = "https://api.myparlaypal.com";
+
+const getBrowserFallbackServerUrl = (): string => {
+  if (typeof window === "undefined") {
+    return PRODUCTION_SERVER_URL;
+  }
+
+  const { hostname, origin } = window.location;
+
+  if (hostname === "localhost" || hostname === LOCAL_API_HOST) {
+    return LOCAL_SERVER_URL;
+  }
+
+  const previewMatch = hostname.match(
+    /^pr-(?<previewId>\d+)\.myparlaypal\.com$/iu
+  );
+  if (previewMatch?.groups?.previewId) {
+    return `https://api-pr-${previewMatch.groups.previewId}.myparlaypal.com`;
+  }
+
+  if (hostname === "myparlaypal.com" || hostname === "www.myparlaypal.com") {
+    return PRODUCTION_SERVER_URL;
+  }
+
+  return origin;
+};
 
 /**
  * Resolve the API origin used by browser-side clients.
@@ -30,4 +57,13 @@ export const normalizeServerUrl = (value: string): string => {
   }
 
   return normalized;
+};
+
+/**
+ * Resolve the configured API origin, falling back when a static web build did
+ * not receive VITE_SERVER_URL from its deployment environment.
+ */
+export const resolveServerUrl = (value: string): string => {
+  const normalized = normalizeServerUrl(value);
+  return normalized || getBrowserFallbackServerUrl();
 };
