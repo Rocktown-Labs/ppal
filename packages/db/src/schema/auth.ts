@@ -24,6 +24,9 @@ export const user = sqliteTable("user", {
   referralCode: text("referral_code").unique(),
   role: text("role").default("user").notNull(),
   stripeCustomerId: text("stripe_customer_id").unique(),
+  termsAccepted: integer("terms_accepted", { mode: "boolean" })
+    .default(false)
+    .notNull(),
   twoFactorEnabled: integer("two_factor_enabled", { mode: "boolean" })
     .default(false)
     .notNull(),

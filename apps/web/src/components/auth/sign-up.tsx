@@ -22,8 +22,10 @@ import {
   CardHeader,
   CardTitle,
 } from "@ppal/ui/components/card";
+import { Checkbox } from "@ppal/ui/components/checkbox";
 import {
   Field,
+  FieldContent,
   FieldDescription,
   FieldError,
   FieldGroup,
@@ -148,6 +150,8 @@ export function SignUp({
     useState(false);
 
   const [isCompromised, setIsCompromised] = useState(false);
+  const [termsAccepted, setTermsAccepted] = useState(false);
+  const [termsError, setTermsError] = useState(false);
   const signUpFields = useMemo(
     () => additionalFields?.filter((field) => field.signUp) ?? [],
     [additionalFields]
@@ -161,6 +165,11 @@ export function SignUp({
       password: "",
     },
     onSubmit: async ({ value }) => {
+      if (!termsAccepted) {
+        setTermsError(true);
+        return;
+      }
+
       try {
         await signUpEmail({
           name: emailAndPassword?.name === false ? "" : value.name,
@@ -170,7 +179,13 @@ export function SignUp({
             signUpFields,
             value.additionalFields
           ),
-          fetchOptions,
+          fetchOptions: {
+            ...fetchOptions,
+            body: {
+              ...fetchOptions?.body,
+              termsAccepted,
+            },
+          },
         });
       } catch {
         // The mutation reports the error through its configured handler.
@@ -192,10 +207,60 @@ export function SignUp({
 
       <CardContent>
         <div className="flex flex-col gap-6">
+          <Field
+            className="items-start"
+            data-invalid={termsError}
+            orientation="horizontal"
+          >
+            <Checkbox
+              aria-invalid={termsError}
+              aria-required="true"
+              checked={termsAccepted}
+              disabled={isPending}
+              id="termsAccepted"
+              name="termsAccepted"
+              onBlur={() => setTermsError(!termsAccepted)}
+              onCheckedChange={(checked) => {
+                const accepted = checked === true;
+                setTermsAccepted(accepted);
+                setTermsError(!accepted);
+              }}
+            />
+            <FieldContent>
+              <FieldLabel
+                className="text-xs leading-5 text-zinc-400"
+                htmlFor="termsAccepted"
+              >
+                I agree to the{" "}
+                <Link
+                  className="text-emerald-400 underline underline-offset-4 hover:text-emerald-300"
+                  href="/terms"
+                >
+                  Terms of Service
+                </Link>{" "}
+                and{" "}
+                <Link
+                  className="text-emerald-400 underline underline-offset-4 hover:text-emerald-300"
+                  href="/privacy"
+                >
+                  Privacy Policy
+                </Link>
+                .
+              </FieldLabel>
+              {termsError ? (
+                <FieldError>Please confirm the terms to continue.</FieldError>
+              ) : null}
+            </FieldContent>
+          </Field>
+
           {socialPosition === "top" && (
             <>
               {socialProviders && socialProviders.length > 0 && (
-                <ProviderButtons socialLayout={socialLayout} view="signUp" />
+                <ProviderButtons
+                  disabled={!termsAccepted}
+                  socialLayout={socialLayout}
+                  view="signUp"
+                />
               )}
 
               {showSeparator && (
@@ -547,7 +612,9 @@ export function SignUp({
                   )}
 
                   <div className="flex flex-col gap-3">
-                    <form.AuthFormSubmitButton disabled={isPending}>
+                    <form.AuthFormSubmitButton
+                      disabled={isPending || !termsAccepted}
+                    >
                       {localization.auth.signUp}
                     </form.AuthFormSubmitButton>
 
@@ -574,7 +641,11 @@ export function SignUp({
               )}
 
               {socialProviders && socialProviders.length > 0 && (
-                <ProviderButtons socialLayout={socialLayout} view="signUp" />
+                <ProviderButtons
+                  disabled={!termsAccepted}
+                  socialLayout={socialLayout}
+                  view="signUp"
+                />
               )}
             </>
           )}

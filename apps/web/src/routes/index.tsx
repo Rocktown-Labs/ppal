@@ -943,8 +943,18 @@ const HomeComponent = () => {
                 Legal & Support
               </h4>
               <nav className="flex flex-col gap-2.5 text-sm text-zinc-400">
-                <span className="text-zinc-500">Terms of Service</span>
-                <span className="text-zinc-500">Privacy Policy</span>
+                <Link
+                  className="transition-colors hover:text-emerald-400"
+                  to="/terms"
+                >
+                  Terms of Service
+                </Link>
+                <Link
+                  className="transition-colors hover:text-emerald-400"
+                  to="/privacy"
+                >
+                  Privacy Policy
+                </Link>
                 <a
                   href="mailto:support@myparlaypal.com"
                   className="transition-colors hover:text-emerald-400"
@@ -961,9 +971,13 @@ const HomeComponent = () => {
               gambling operator. Always gamble responsibly. 18+.
             </p>
             <div className="flex items-center gap-4 text-xs text-zinc-500">
-              <span className="hover:text-zinc-400">Terms</span>
+              <Link className="hover:text-zinc-400" to="/terms">
+                Terms
+              </Link>
               <span>•</span>
-              <span className="hover:text-zinc-400">Privacy</span>
+              <Link className="hover:text-zinc-400" to="/privacy">
+                Privacy
+              </Link>
             </div>
           </div>
         </div>
