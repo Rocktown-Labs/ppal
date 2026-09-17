@@ -13,11 +13,11 @@ import type {
 import { env } from "@ppal/env/web";
 import type { z } from "zod";
 
-import { normalizeServerUrl } from "./server-url";
+import { resolveServerUrl } from "./server-url";
 
 export type ReviewTicketRequest = z.infer<typeof reviewTicketRequestSchema>;
 
-export const API_BASE_URL = normalizeServerUrl(env.VITE_SERVER_URL);
+export const API_BASE_URL = resolveServerUrl(env.VITE_SERVER_URL);
 const pathSegment = (value: string): string => encodeURIComponent(value);
 const UPLOAD_URL_PATTERN = /^\/api\/v1\/uploads\/[a-z0-9-]+\/content$/iu;
 

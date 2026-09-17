@@ -4,7 +4,7 @@ import { env } from "@ppal/env/web";
 import { adminClient, twoFactorClient } from "better-auth/client/plugins";
 import { createAuthClient } from "better-auth/react";
 
-import { normalizeServerUrl } from "./server-url";
+import { normalizeServerUrl, resolveServerUrl } from "./server-url";
 
 const getServerUrl = (url: string) => {
   const processEnv = (
@@ -17,6 +17,10 @@ const getServerUrl = (url: string) => {
   }
 
   const normalized = normalizeServerUrl(url);
+
+  if (!normalized) {
+    return resolveServerUrl(normalized);
+  }
 
   if (!normalized.startsWith("/")) {
     return normalized;
