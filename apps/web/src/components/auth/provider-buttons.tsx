@@ -7,6 +7,7 @@ import { useMemo } from "react";
 import { ProviderButton } from "./provider-button";
 
 export interface ProviderButtonsProps {
+  disabled?: boolean;
   socialLayout?: SocialLayout;
   view?: AuthView;
 }
@@ -20,6 +21,7 @@ export type SocialLayout = "auto" | "horizontal" | "vertical" | "grid";
  * @param socialLayout - Preferred layout for the provider buttons; `"auto"` chooses based on the number of providers.
  */
 export function ProviderButtons({
+  disabled = false,
   socialLayout = "auto",
   view = "signIn",
 }: ProviderButtonsProps) {
@@ -51,6 +53,7 @@ export function ProviderButtons({
           key={getProviderId(provider)}
           provider={provider}
           view={view}
+          disabled={disabled}
           display={
             resolvedSocialLayout === "vertical"
               ? "full"

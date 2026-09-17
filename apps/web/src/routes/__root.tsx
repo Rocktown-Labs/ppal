@@ -48,6 +48,7 @@ const RootDocument = () => {
           authClient={authClient}
           basePaths={{ settings: "/dashboard" }}
           redirectTo="/dashboard"
+          socialProviders={["google"]}
           viewPaths={{
             settings: { account: "settings", security: "settings" },
           }}

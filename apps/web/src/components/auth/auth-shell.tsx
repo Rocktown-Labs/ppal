@@ -132,8 +132,21 @@ export function AuthShell({ children }: AuthShellProps) {
             {children}
 
             <p className="mt-6 text-center text-[11px] leading-5 text-zinc-600">
-              By continuing, you agree to the ParlayPal terms and privacy
-              policy.
+              By creating an account, you agree to the ParlayPal{" "}
+              <Link
+                className="underline underline-offset-2 hover:text-zinc-400"
+                to="/terms"
+              >
+                Terms of Service
+              </Link>{" "}
+              and{" "}
+              <Link
+                className="underline underline-offset-2 hover:text-zinc-400"
+                to="/privacy"
+              >
+                Privacy Policy
+              </Link>
+              .
             </p>
           </div>
         </section>

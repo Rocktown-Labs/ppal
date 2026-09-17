@@ -26,10 +26,11 @@ import type { ComponentProps } from "react";
 import { LastUsedBadge } from "./last-login-method/last-used-badge";
 
 export type ProviderButtonProps = {
+  disabled?: boolean;
   provider: AuthSocialProvider;
   display?: "full" | "name" | "icon";
   view?: AuthView;
-} & Omit<ComponentProps<typeof Button>, "onClick" | "children" | "disabled">;
+} & Omit<ComponentProps<typeof Button>, "onClick" | "children">;
 
 /**
  * Social provider sign-in button.
@@ -38,6 +39,7 @@ export type ProviderButtonProps = {
  * @param display - `"full"` (e.g. "Continue with Google"), `"name"` (just the provider name), or `"icon"` (icon only).
  */
 export function ProviderButton({
+  disabled = false,
   provider,
   display = "full",
   view = "signIn",
@@ -101,7 +103,7 @@ export function ProviderButton({
     <Button
       type="button"
       variant={variant}
-      disabled={isPending}
+      disabled={disabled || isPending}
       onClick={handleSignIn}
       className={cn("relative overflow-visible", className)}
       {...props}

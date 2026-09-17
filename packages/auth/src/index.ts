@@ -15,6 +15,7 @@ import { hashPassword, verifyPassword } from "better-auth/crypto";
 import { admin, twoFactor } from "better-auth/plugins";
 import { Resend } from "resend";
 import StripeSdk from "stripe";
+import { z } from "zod";
 
 const useSecureCookies = env.BETTER_AUTH_URL.startsWith("https://");
 
@@ -207,6 +208,17 @@ export const createAuth = () => {
 
       schema,
     }),
+    user: {
+      additionalFields: {
+        termsAccepted: {
+          fieldName: "terms_accepted",
+          required: false,
+          returned: false,
+          type: "boolean",
+          validator: { input: z.literal(true) },
+        },
+      },
+    },
     trustedOrigins: [
       env.CORS_ORIGIN,
 
