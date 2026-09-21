@@ -4,6 +4,7 @@ import type { ExtractionResult } from "@ppal/contracts/uploads";
 import { extractTicketWithGemini } from "./gemini";
 import { refreshHistoricalBatch } from "./historical-imports";
 import { publishNotification } from "./notifications";
+import { resolveExtractedLeg } from "./ticket-resolution";
 
 const hashAnalyticsIdentifier = async (value: string): Promise<string> => {
   const digest = await crypto.subtle.digest(
@@ -26,7 +27,7 @@ interface UploadRow {
   user_id: string;
 }
 
-const createTicketStatements = ({
+const createTicketStatements = async ({
   db,
   extraction,
   extractionId,
@@ -38,8 +39,11 @@ const createTicketStatements = ({
   extractionId: string;
   ticketId: string;
   upload: UploadRow;
-}): D1PreparedStatement[] => {
+}): Promise<D1PreparedStatement[]> => {
   const now = Date.now();
+  const resolutions = await Promise.all(
+    extraction.legs.map((leg) => resolveExtractedLeg(db, leg))
+  );
   const statements = [
     db
       .prepare(
@@ -61,29 +65,37 @@ const createTicketStatements = ({
       ),
   ];
 
-  for (const leg of extraction.legs) {
+  for (const [index, leg] of extraction.legs.entries()) {
+    const resolution = resolutions[index];
     statements.push(
       db
         .prepare(
           `INSERT INTO ticket_legs (
-            display_description, event_hint, id, market_components, operator, raw_description,
-            raw_league_name, raw_market_name, raw_sport_name, resolver_confidence, resolver_status,
-            secondary_target_value, status, subject_name,
+            display_description, event_hint, id, league_id, market_components,
+            market_id, operator, participant_id, raw_description, raw_league_name,
+            raw_market_name, raw_sport_name, resolver_confidence, resolver_status,
+            secondary_target_value, sport_id, sports_event_id, status, subject_name,
             subject_type, target_value, ticket_id, updated_at, version
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'ambiguous', ?, 'pending', ?, ?, ?, ?, ?, 1)`
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, 1)`
         )
         .bind(
           leg.description,
           leg.eventHint ? JSON.stringify({ raw: leg.eventHint }) : null,
           crypto.randomUUID(),
+          resolution?.leagueId ?? null,
           JSON.stringify(leg.marketComponents),
+          resolution?.marketId ?? null,
           leg.operator,
+          resolution?.participantId ?? null,
           leg.description,
           leg.league,
           leg.market,
           leg.sport,
           leg.confidence,
+          resolution?.resolverStatus ?? "ambiguous",
           leg.secondaryTargetValue,
+          resolution?.sportId ?? null,
+          resolution?.sportsEventId ?? null,
           leg.subjectName,
           leg.subjectType,
           leg.targetValue,
@@ -207,7 +219,7 @@ export const processExtractionMessage = async (
       }
     }
     const ticketId = crypto.randomUUID();
-    const statements = createTicketStatements({
+    const statements = await createTicketStatements({
       db: workerEnv.DB,
       extraction: extracted.result,
       extractionId,
