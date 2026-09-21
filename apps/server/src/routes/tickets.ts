@@ -63,6 +63,18 @@ interface TicketLegRow {
 const dateString = (value: number | null): string | null =>
   value === null ? null : new Date(value).toISOString();
 
+const hasRequiredCatalogReferences = (
+  leg: Pick<
+    TicketLegContract,
+    "marketId" | "participantId" | "sportsEventId" | "subjectType"
+  >
+): boolean =>
+  Boolean(
+    leg.marketId &&
+    leg.sportsEventId &&
+    (leg.subjectType === "game" || leg.participantId)
+  );
+
 const mapLeg = (leg: TicketLegRow): TicketLegContract => ({
   currentValue: leg.current_value,
   displayDescription: leg.display_description,
@@ -241,24 +253,41 @@ export const createTicketRoutes = (auth: Auth) =>
             400
           );
         }
+        const completeLegs = input.legs.filter(hasRequiredCatalogReferences);
         const catalogMatches = await Promise.all(
-          input.legs.map((leg) =>
+          completeLegs.map((leg) =>
             env.DB.prepare(
-              `SELECT 1 AS valid FROM markets m
-               JOIN sports_events e ON e.id = ?
-               JOIN leagues event_league ON event_league.id = e.league_id
-               LEFT JOIN participants p ON p.id = ?
-               WHERE m.id = ?
+              `SELECT CASE WHEN m.id IS NOT NULL
                  AND (m.sport_id IS NULL OR m.sport_id = event_league.sport_id)
-                 AND (? = 'game' OR (p.id IS NOT NULL AND p.sport_id = event_league.sport_id))`
+                 AND m.subject_type = ?
+                 AND ((? = 'game' AND p.id IS NULL)
+                   OR (? != 'game' AND p.id IS NOT NULL
+                     AND p.type = m.subject_type
+                     AND p.sport_id = event_league.sport_id
+                     AND (? != 'team' OR p.id = e.home_participant_id
+                       OR p.id = e.away_participant_id)))
+                 THEN 1 ELSE 0 END AS valid,
+                 event_league.id AS league_id, event_league.sport_id AS sport_id
+               FROM sports_events e
+               JOIN leagues event_league ON event_league.id = e.league_id
+               LEFT JOIN markets m ON m.id = ?
+               LEFT JOIN participants p ON p.id = ?
+               WHERE e.id = ?`
             )
               .bind(
-                leg.sportsEventId,
-                leg.participantId,
+                leg.subjectType,
+                leg.subjectType,
+                leg.subjectType,
+                leg.subjectType,
                 leg.marketId,
-                leg.subjectType
+                leg.participantId,
+                leg.sportsEventId
               )
-              .first<{ valid: number }>()
+              .first<{
+                league_id: string;
+                sport_id: string;
+                valid: number;
+              }>()
           )
         );
         if (catalogMatches.some((match) => match?.valid !== 1)) {
@@ -271,31 +300,27 @@ export const createTicketRoutes = (auth: Auth) =>
             400
           );
         }
+        const catalogMatchByLegId = new Map(
+          completeLegs.map((leg, index) => [leg.id, catalogMatches[index]])
+        );
         const now = Date.now();
         const updates = input.legs.map((leg) =>
           env.DB.prepare(
             `UPDATE ticket_legs SET display_description = ?, league_id = ?,
               market_id = ?, operator = ?, participant_id = ?,
-              resolver_status = CASE
-                WHEN ? IS NOT NULL AND ? IS NOT NULL
-                  AND (? = 'game' OR ? IS NOT NULL) THEN 'resolved'
-                ELSE 'ambiguous'
-              END,
+              resolver_status = ?,
               secondary_target_value = ?, sport_id = ?, sports_event_id = ?,
               subject_name = ?, subject_type = ?, target_value = ?,
               updated_at = ?, version = version + 1 WHERE id = ? AND ticket_id = ?`
           ).bind(
             leg.displayDescription,
-            leg.leagueId,
+            catalogMatchByLegId.get(leg.id)?.league_id ?? leg.leagueId,
             leg.marketId,
             leg.operator,
             leg.participantId,
-            leg.sportsEventId,
-            leg.marketId,
-            leg.subjectType,
-            leg.participantId,
+            hasRequiredCatalogReferences(leg) ? "resolved" : "ambiguous",
             leg.secondaryTargetValue,
-            leg.sportId,
+            catalogMatchByLegId.get(leg.id)?.sport_id ?? leg.sportId,
             leg.sportsEventId,
             leg.subjectName,
             leg.subjectType,

@@ -58,6 +58,19 @@ const getResolverBadge = (status: string) => {
   );
 };
 
+const resolveLegStatus = (
+  hasCatalogMatch: boolean,
+  originalStatus?: string
+): string => {
+  if (hasCatalogMatch) {
+    return "resolved";
+  }
+  if (originalStatus && originalStatus !== "resolved") {
+    return originalStatus;
+  }
+  return "ambiguous";
+};
+
 const TicketReviewComponent = () => {
   const { ticketId } = useParams({
     from: "/dashboard/tickets/$ticketId/review",
@@ -136,6 +149,18 @@ const TicketReviewComponent = () => {
     };
   }, [ticketId]);
 
+  const updateLegFields = (index: number, fields: Partial<EditableLeg>) => {
+    setLegs((prev) => {
+      const copy = [...prev];
+      const current = copy[index];
+      if (!current) {
+        return prev;
+      }
+      copy[index] = { ...current, ...fields };
+      return copy;
+    });
+  };
+
   const updateLeg = <K extends keyof EditableLeg>(
     index: number,
     key: K,
@@ -143,7 +168,19 @@ const TicketReviewComponent = () => {
   ) => {
     setLegs((prev) => {
       const copy = [...prev];
-      copy[index] = { ...copy[index], [key]: value };
+      const current = copy[index];
+      if (!current) {
+        return prev;
+      }
+      const nextLeg = { ...current, [key]: value };
+      if (key === "subjectName" || key === "subjectType") {
+        nextLeg.leagueId = null;
+        nextLeg.marketId = null;
+        nextLeg.participantId = null;
+        nextLeg.sportId = null;
+        nextLeg.sportsEventId = null;
+      }
+      copy[index] = nextLeg;
       return copy;
     });
   };
@@ -168,11 +205,13 @@ const TicketReviewComponent = () => {
     if (searchModalLegIndex === null) {
       return;
     }
-    updateLeg(searchModalLegIndex, "subjectName", participant.name);
-    updateLeg(searchModalLegIndex, "subjectType", participant.type);
-    updateLeg(searchModalLegIndex, "participantId", participant.id);
-    updateLeg(searchModalLegIndex, "sportId", participant.sportId);
-    updateLeg(searchModalLegIndex, "leagueId", participant.leagueId);
+    updateLegFields(searchModalLegIndex, {
+      leagueId: participant.leagueId,
+      participantId: participant.id,
+      sportId: participant.sportId,
+      subjectName: participant.name,
+      subjectType: participant.type,
+    });
     toast.success(`Matched to ${participant.name} (${participant.sportName})`);
   };
 
@@ -180,10 +219,11 @@ const TicketReviewComponent = () => {
     if (searchModalLegIndex === null) {
       return;
     }
-    updateLeg(searchModalLegIndex, "marketId", market.id);
-    if (market.sportId) {
-      updateLeg(searchModalLegIndex, "sportId", market.sportId);
-    }
+    updateLegFields(searchModalLegIndex, {
+      marketId: market.id,
+      ...(market.sportId ? { sportId: market.sportId } : {}),
+      subjectType: market.subjectType,
+    });
     toast.success(`Matched market: ${market.name}`);
   };
 
@@ -462,19 +502,59 @@ const TicketReviewComponent = () => {
       <div className="space-y-4">
         {legs.map((leg, index) => {
           const originalLeg = ticket.legs.find((l) => l.id === leg.id);
-          const resolverStatus = originalLeg?.resolverStatus ?? "resolved";
+          const hasCatalogMatch = Boolean(
+            leg.marketId &&
+            leg.sportsEventId &&
+            (leg.subjectType === "game" || leg.participantId)
+          );
+          const resolverStatus = resolveLegStatus(
+            hasCatalogMatch,
+            originalLeg?.resolverStatus
+          );
 
           return (
             <div
               key={leg.id}
               className="space-y-4 rounded-2xl border border-zinc-800/90 bg-zinc-900/60 p-4 transition hover:border-zinc-700 sm:p-5"
             >
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                   <span className="flex size-6 items-center justify-center rounded-full bg-zinc-800 font-mono text-xs font-bold text-zinc-300">
                     {index + 1}
                   </span>
                   {getResolverBadge(resolverStatus)}
+                  <div className="flex items-center gap-1.5 text-[10px]">
+                    <span
+                      className={`rounded px-1.5 py-0.5 font-mono ${
+                        leg.participantId || leg.subjectType === "game"
+                          ? "bg-emerald-500/15 text-emerald-400"
+                          : "bg-amber-500/15 text-amber-400"
+                      }`}
+                    >
+                      Subject:{" "}
+                      {leg.participantId || leg.subjectType === "game"
+                        ? "Matched"
+                        : "Unmatched"}
+                    </span>
+                    <span
+                      className={`rounded px-1.5 py-0.5 font-mono ${
+                        leg.marketId
+                          ? "bg-emerald-500/15 text-emerald-400"
+                          : "bg-amber-500/15 text-amber-400"
+                      }`}
+                    >
+                      Market: {leg.marketId ? "Matched" : "Unmatched"}
+                    </span>
+                    <span
+                      className={`rounded px-1.5 py-0.5 font-mono ${
+                        leg.sportsEventId
+                          ? "bg-emerald-500/15 text-emerald-400"
+                          : "bg-amber-500/15 text-amber-400"
+                      }`}
+                    >
+                      Event: {leg.sportsEventId ? "Matched" : "Unmatched"}
+                    </span>
+                  </div>
                 </div>
 
                 <div className="flex items-center gap-2">
@@ -664,6 +744,17 @@ const TicketReviewComponent = () => {
 
       {/* Confirmation CTA Footer */}
       <div className="flex flex-col gap-4 border-t border-zinc-800 pt-6 sm:flex-row sm:items-center sm:justify-between">
+        {legs.some(
+          (leg) =>
+            !leg.marketId ||
+            !leg.sportsEventId ||
+            (leg.subjectType !== "game" && !leg.participantId)
+        ) ? (
+          <p className="max-w-md text-xs text-amber-300">
+            Match every leg to the sports catalog before starting live tracking.
+            You can save this review and finish matching it later.
+          </p>
+        ) : null}
         <Link
           to="/dashboard/tickets"
           className="text-xs font-semibold text-zinc-400 transition hover:text-white"
@@ -674,7 +765,16 @@ const TicketReviewComponent = () => {
         <button
           type="button"
           onClick={handleConfirmAndStartTracking}
-          disabled={isConfirming || legs.length === 0}
+          disabled={
+            isConfirming ||
+            legs.length === 0 ||
+            legs.some(
+              (leg) =>
+                !leg.marketId ||
+                !leg.sportsEventId ||
+                (leg.subjectType !== "game" && !leg.participantId)
+            )
+          }
           className="flex cursor-pointer items-center justify-center gap-2 rounded-xl bg-emerald-500 px-8 py-3 text-sm font-bold text-black shadow-xl shadow-emerald-500/25 transition hover:bg-emerald-400 disabled:opacity-50"
         >
           <Zap className="size-4" />
