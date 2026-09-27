@@ -1,6 +1,7 @@
 import { communityChatMessageSchema } from "@ppal/contracts/community";
 import { DurableObject } from "cloudflare:workers";
 
+import { escapeHtml } from "../lib/html";
 import { publishNotification } from "../services/notifications";
 import type { NotificationServiceEnv } from "../services/notifications";
 
@@ -222,7 +223,7 @@ export class CommunityChannelRoom extends DurableObject<CommunityRoomEnv> {
           name: author?.name ?? "Member",
           username: author?.username ?? null,
         },
-        body: parsed.data.body,
+        body: escapeHtml(parsed.data.body),
         clientId: parsed.data.clientId,
         createdAt: new Date(createdAt).toISOString(),
         deletedAt: null,
@@ -237,7 +238,7 @@ export class CommunityChannelRoom extends DurableObject<CommunityRoomEnv> {
     for (const profile of mentionedProfiles.results) {
       this.ctx.waitUntil(
         publishNotification({
-          body: `${author?.name ?? "Someone"} mentioned you in a community channel.`,
+          body: `${escapeHtml(author?.name ?? "Someone")} mentioned you in a community channel.`,
           milestoneKey: `community:${id}:mention:${profile.user_id}`,
           ticketId: null,
           title: "You were mentioned",

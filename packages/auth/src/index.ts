@@ -6,6 +6,7 @@ import { stripe } from "@better-auth/stripe";
 import type { Subscription } from "@better-auth/stripe";
 import { webSubscriptionPlans } from "@ppal/contracts/billing";
 import { createDb } from "@ppal/db";
+import { hasEncryptionKey, setEncryptionKey } from "@ppal/db/encryption";
 import * as schema from "@ppal/db/schema/auth";
 import { env } from "@ppal/env/server";
 import { compare } from "bcryptjs";
@@ -17,7 +18,19 @@ import { Resend } from "resend";
 import StripeSdk from "stripe";
 import { z } from "zod";
 
+// Configure database-column encryption once before Better Auth is initialized.
+// This lets the Drizzle custom types in `@ppal/db/schema/auth` encrypt/decrypt
+// OAuth tokens and two-factor secrets synchronously as Better Auth reads and
+// writes them.
+setEncryptionKey(env.DATA_ENCRYPTION_KEY ?? "");
+
 const useSecureCookies = env.BETTER_AUTH_URL.startsWith("https://");
+
+if (useSecureCookies && !hasEncryptionKey()) {
+  throw new Error(
+    "DATA_ENCRYPTION_KEY is required in production (BETTER_AUTH_URL is https)."
+  );
+}
 
 const getResendClient = (): Resend | null => {
   const apiKey = env.RESEND_API_KEY;
@@ -221,12 +234,12 @@ export const createAuth = () => {
     },
     trustedOrigins: [
       env.CORS_ORIGIN,
-
       "https://myparlaypal.com",
-
       "ppal://",
-      "exp://",
-      "http://localhost:8081",
+      ...(env.BETTER_AUTH_URL.startsWith("http://localhost:") ||
+      env.BETTER_AUTH_URL.startsWith("http://127.0.0.1:")
+        ? ["exp://", "http://localhost:8081"]
+        : []),
     ],
     emailAndPassword: {
       enabled: true,

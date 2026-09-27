@@ -45,7 +45,45 @@ const auth = createAuth();
 const app = new Hono<EvlogVariables>();
 
 app.use(evlog());
-app.use("*", secureHeaders());
+const API_ORIGIN = (() => {
+  try {
+    return new URL(env.BETTER_AUTH_URL).origin;
+  } catch {
+    return null;
+  }
+})();
+
+const WEB_ORIGIN = (() => {
+  try {
+    return new URL(env.CORS_ORIGIN).origin;
+  } catch {
+    return null;
+  }
+})();
+
+const contentSecurityPolicy = {
+  connectSrc: [
+    "'self'",
+    ...(API_ORIGIN ? [API_ORIGIN] : []),
+    ...(WEB_ORIGIN && WEB_ORIGIN !== API_ORIGIN ? [WEB_ORIGIN] : []),
+  ],
+  defaultSrc: ["'self'"],
+  fontSrc: ["'self'"],
+  frameAncestors: ["'none'"],
+  frameSrc: ["'none'"],
+  imgSrc: ["'self'", "data:", "blob:", ...(API_ORIGIN ? [API_ORIGIN] : [])],
+  objectSrc: ["'none'"],
+  scriptSrc: ["'self'"],
+  styleSrc: ["'self'", "'unsafe-inline'"],
+};
+
+app.use(
+  "*",
+  secureHeaders({
+    contentSecurityPolicy,
+    crossOriginEmbedderPolicy: false,
+  })
+);
 app.use(
   "*",
   cors({

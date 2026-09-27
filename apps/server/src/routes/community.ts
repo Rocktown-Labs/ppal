@@ -17,7 +17,9 @@ import StripeSdk from "stripe";
 import { z } from "zod";
 
 import { getAuthUser } from "../lib/auth";
+import { encryptValue, hashValue } from "../lib/crypto";
 import { escapeLikePattern } from "../lib/database";
+import { escapeHtml } from "../lib/html";
 import { matchesDeclaredMimeType } from "../lib/upload-security";
 import { writeAuditEvent } from "../services/audit";
 
@@ -359,11 +361,15 @@ export const createCommunityRoutes = (auth: Auth) =>
           return c.json({ code: "UNAUTHORIZED", error: "Unauthorized" }, 401);
         }
         const input = c.req.valid("json");
+        const [tokenHash, encryptedToken] = await Promise.all([
+          hashValue(input.token),
+          encryptValue(input.token),
+        ]);
         const now = Date.now();
         const existingOwner = await env.DB.prepare(
-          "SELECT user_id FROM device_tokens WHERE token = ?"
+          "SELECT user_id FROM device_tokens WHERE token_hash = ?"
         )
-          .bind(input.token)
+          .bind(tokenHash)
           .first<{ user_id: string }>();
         if (existingOwner && existingOwner.user_id !== user.id) {
           return c.json(
@@ -385,18 +391,26 @@ export const createCommunityRoutes = (auth: Auth) =>
             409
           );
         }
+        if (existingOwner) {
+          await env.DB.prepare(
+            `UPDATE device_tokens SET last_seen_at = ?, platform = ?,
+               token = ?, updated_at = ?
+             WHERE token_hash = ? AND user_id = ?`
+          )
+            .bind(now, input.platform, encryptedToken, now, tokenHash, user.id)
+            .run();
+          return c.json({ registered: true }, 200);
+        }
         await env.DB.prepare(
-          `INSERT INTO device_tokens (id, last_seen_at, platform, token, updated_at, user_id)
-         VALUES (?, ?, ?, ?, ?, ?)
-         ON CONFLICT(token) DO UPDATE SET last_seen_at = excluded.last_seen_at,
-           platform = excluded.platform, updated_at = excluded.updated_at
-           WHERE device_tokens.user_id = excluded.user_id`
+          `INSERT INTO device_tokens (id, last_seen_at, platform, token, token_hash, updated_at, user_id)
+           VALUES (?, ?, ?, ?, ?, ?, ?)`
         )
           .bind(
             crypto.randomUUID(),
             now,
             input.platform,
-            input.token,
+            encryptedToken,
+            tokenHash,
             now,
             user.id
           )
@@ -421,10 +435,11 @@ export const createCommunityRoutes = (auth: Auth) =>
           400
         );
       }
+      const tokenHash = await hashValue(token);
       const result = await env.DB.prepare(
-        "DELETE FROM device_tokens WHERE user_id = ? AND token = ?"
+        "DELETE FROM device_tokens WHERE user_id = ? AND token_hash = ?"
       )
-        .bind(user.id, token)
+        .bind(user.id, tokenHash)
         .run();
       return c.json({ deleted: result.meta.changes > 0 });
     })
@@ -1233,7 +1248,9 @@ export const createCommunityRoutes = (auth: Auth) =>
             name: row.name,
             username: row.pusername,
           },
-          body: row.deleted_at ? "This message was deleted" : row.body,
+          body: row.deleted_at
+            ? "This message was deleted"
+            : escapeHtml(row.body),
           createdAt: new Date(row.created_at).toISOString(),
           deletedAt: row.deleted_at
             ? new Date(row.deleted_at).toISOString()
@@ -1334,7 +1351,6 @@ export const createCommunityRoutes = (auth: Auth) =>
           role: row.role,
           status: row.status,
           user: {
-            email: row.email,
             id: row.id,
             image: row.image,
             name: row.name,

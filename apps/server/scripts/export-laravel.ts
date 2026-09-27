@@ -1,4 +1,5 @@
 import { Database } from "bun:sqlite";
+import { createHash } from "node:crypto";
 
 const [sourcePath, outputPath = "./laravel-to-d1.sql"] = process.argv.slice(2);
 if (!sourcePath) {
@@ -55,6 +56,9 @@ const insert = (table: string, values: Record<string, unknown>): string => {
   return `INSERT OR IGNORE INTO ${table} (${entries.map(([key]) => `\`${key}\``).join(",")}) VALUES (${entries.map(([, value]) => literal(value)).join(",")});`;
 };
 
+const sha256Hex = (value: string): string =>
+  createHash("sha256").update(value).digest("hex");
+
 const referralStatus = (value: unknown): string => {
   const status = String(value);
   if (["qualified", "rewarded"].includes(status)) {
@@ -109,6 +113,7 @@ for (const row of rows("users")) {
         last_seen_at: timestamp(row.updated_at) ?? createdAt,
         platform: "ios",
         token: row.expo_push_token,
+        token_hash: sha256Hex(String(row.expo_push_token)),
         updated_at: timestamp(row.updated_at) ?? createdAt,
         user_id: userId,
       })

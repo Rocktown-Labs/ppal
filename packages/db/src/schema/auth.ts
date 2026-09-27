@@ -7,6 +7,8 @@ import {
   uniqueIndex,
 } from "drizzle-orm/sqlite-core";
 
+import { encryptedText, encryptedTextNullable } from "./encrypted-text";
+
 export const user = sqliteTable("user", {
   banExpires: integer("ban_expires", { mode: "timestamp_ms" }),
   banReason: text("ban_reason"),
@@ -90,7 +92,7 @@ export const session = sqliteTable(
 export const account = sqliteTable(
   "account",
   {
-    accessToken: text("access_token"),
+    accessToken: encryptedTextNullable("access_token"),
     accessTokenExpiresAt: integer("access_token_expires_at", {
       mode: "timestamp_ms",
     }),
@@ -99,11 +101,11 @@ export const account = sqliteTable(
       .default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)
       .notNull(),
     id: text("id").primaryKey(),
-    idToken: text("id_token"),
+    idToken: encryptedTextNullable("id_token"),
     issuer: text("issuer").notNull(),
     password: text("password"),
     providerId: text("provider_id").notNull(),
-    refreshToken: text("refresh_token"),
+    refreshToken: encryptedTextNullable("refresh_token"),
     refreshTokenExpiresAt: integer("refresh_token_expires_at", {
       mode: "timestamp_ms",
     }),
@@ -145,11 +147,11 @@ export const verification = sqliteTable(
 export const twoFactor = sqliteTable(
   "twoFactor",
   {
-    backupCodes: text("backup_codes").notNull(),
+    backupCodes: encryptedText("backup_codes").notNull(),
     failedVerificationCount: integer("failed_verification_count").default(0),
     id: text("id").primaryKey(),
     lockedUntil: integer("locked_until", { mode: "timestamp_ms" }),
-    secret: text("secret").notNull(),
+    secret: encryptedText("secret").notNull(),
     userId: text("user_id")
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),

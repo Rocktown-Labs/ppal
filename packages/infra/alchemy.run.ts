@@ -121,6 +121,9 @@ export const server = Cloudflare.Worker("server", {
       : Config.string("CORS_ORIGIN").pipe(
           Config.withDefault("https://myparlaypal.com")
         ),
+    DATA_ENCRYPTION_KEY: Config.redacted("DATA_ENCRYPTION_KEY").pipe(
+      Config.withDefault(Redacted.make(""))
+    ),
     DB: db,
     EXTRACTION_QUEUE: extractionQueue,
     FACEBOOK_CLIENT_ID: Config.string("FACEBOOK_CLIENT_ID").pipe(

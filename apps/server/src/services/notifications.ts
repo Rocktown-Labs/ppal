@@ -2,6 +2,8 @@ import type { PushPayload, PushSubscriptionData } from "@mmmike/web-push";
 import { sendPushNotification, WebPushError } from "@mmmike/web-push/send";
 import { notificationQueueMessageSchema } from "@ppal/contracts/queues";
 
+import { decryptValue } from "../lib/crypto";
+
 export interface NotificationServiceEnv {
   DB: D1Database;
   NOTIFICATION_QUEUE: Queue;
@@ -101,7 +103,7 @@ export const publishNotification = async ({
     ? [userId, userId, userId]
     : [userId, userId];
   const destinations = await workerEnv.DB.prepare(
-    `SELECT 'push' AS channel, d.token AS destination FROM device_tokens d
+    `SELECT 'push' AS channel, d.token_hash AS destination FROM device_tokens d
      LEFT JOIN notification_preferences p ON p.user_id = d.user_id
      WHERE d.user_id = ? AND COALESCE(p.push_enabled, 1) = 1 ${preferenceClause}
      UNION ALL
@@ -152,6 +154,7 @@ interface DeliveryRow {
   id: string;
   notification_id: string;
   p256dh: string | null;
+  push_token: string | null;
   status: string;
   title: string;
   ticket_id: string | null;
@@ -206,9 +209,22 @@ const processWebPushDelivery = async (
     );
     return;
   }
+  let auth: string;
+  let p256dh: string;
+  try {
+    [auth, p256dh] = await Promise.all([
+      decryptValue(delivery.auth),
+      decryptValue(delivery.p256dh),
+    ]);
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Failed to decrypt push keys";
+    await markDeliveryFailed(delivery.id, message, workerEnv);
+    return;
+  }
   const subscription: PushSubscriptionData = {
     endpoint: delivery.destination,
-    keys: { auth: delivery.auth, p256dh: delivery.p256dh },
+    keys: { auth, p256dh },
   };
   const payload: PushPayload = {
     body: delivery.body,
@@ -246,62 +262,68 @@ const sendEmailOrExpoDelivery = async (
   delivery: DeliveryRow,
   workerEnv: NotificationServiceEnv
 ): Promise<string | null> => {
-  const response =
-    delivery.channel === "email"
-      ? await fetch("https://api.resend.com/emails", {
-          body: JSON.stringify({
-            from: workerEnv.RESEND_FROM_EMAIL,
-            html: `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>${escapeHtml(delivery.title)}</title></head><body><main><h1>${escapeHtml(delivery.title)}</h1><p>${escapeHtml(delivery.body)}</p><p><a href="https://myparlaypal.com/dashboard/notifications">View in ParlayPal</a></p></main></body></html>`,
-            reply_to: workerEnv.RESEND_REPLY_TO_EMAIL,
-            subject: delivery.title,
-            text: `${delivery.title}\n\n${delivery.body}\n\nView in ParlayPal: https://myparlaypal.com/dashboard/notifications`,
-            to: [delivery.destination],
-          }),
-          headers: {
-            authorization: `Bearer ${workerEnv.RESEND_API_KEY}`,
-            "content-type": "application/json",
-            "idempotency-key": delivery.id,
-          },
-          method: "POST",
-        })
-      : await fetch("https://exp.host/--/api/v2/push/send", {
-          body: JSON.stringify({
-            body: delivery.body,
-            data: { notificationId: delivery.notification_id },
-            sound: "default",
-            title: delivery.title,
-            to: delivery.destination,
-          }),
-          headers: {
-            accept: "application/json",
-            "accept-encoding": "gzip, deflate",
-            "content-type": "application/json",
-          },
-          method: "POST",
-        });
-  const result = (await response.json()) as ExpoPushResponse & {
-    id?: string;
-    message?: string;
-  };
-  if (
-    !response.ok ||
-    (delivery.channel === "push" && result.data?.status === "error")
-  ) {
-    const errorDetail = result.data?.details?.error;
-    if (errorDetail === "DeviceNotRegistered") {
-      await workerEnv.DB.prepare("DELETE FROM device_tokens WHERE token = ?")
-        .bind(delivery.destination)
-        .run();
+  if (delivery.channel === "push") {
+    if (!delivery.push_token) {
+      throw new Error("Push token is no longer registered");
     }
+    const pushToken = await decryptValue(delivery.push_token);
+    const response = await fetch("https://exp.host/--/api/v2/push/send", {
+      body: JSON.stringify({
+        body: delivery.body,
+        data: { notificationId: delivery.notification_id },
+        sound: "default",
+        title: delivery.title,
+        to: pushToken,
+      }),
+      headers: {
+        accept: "application/json",
+        "accept-encoding": "gzip, deflate",
+        "content-type": "application/json",
+      },
+      method: "POST",
+    });
+    const result = (await response.json()) as ExpoPushResponse;
+    if (!response.ok || result.data?.status === "error") {
+      const errorDetail = result.data?.details?.error;
+      if (errorDetail === "DeviceNotRegistered") {
+        await workerEnv.DB.prepare(
+          "DELETE FROM device_tokens WHERE token_hash = ?"
+        )
+          .bind(delivery.destination)
+          .run();
+      }
+      throw new Error(
+        result.data?.message ??
+          errorDetail ??
+          `Expo push delivery failed (${response.status})`
+      );
+    }
+    return result.data?.id ?? null;
+  }
+
+  const response = await fetch("https://api.resend.com/emails", {
+    body: JSON.stringify({
+      from: workerEnv.RESEND_FROM_EMAIL,
+      html: `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>${escapeHtml(delivery.title)}</title></head><body><main><h1>${escapeHtml(delivery.title)}</h1><p>${escapeHtml(delivery.body)}</p><p><a href="https://myparlaypal.com/dashboard/notifications">View in ParlayPal</a></p></main></body></html>`,
+      reply_to: workerEnv.RESEND_REPLY_TO_EMAIL,
+      subject: delivery.title,
+      text: `${delivery.title}\n\n${delivery.body}\n\nView in ParlayPal: https://myparlaypal.com/dashboard/notifications`,
+      to: [delivery.destination],
+    }),
+    headers: {
+      authorization: `Bearer ${workerEnv.RESEND_API_KEY}`,
+      "content-type": "application/json",
+      "idempotency-key": delivery.id,
+    },
+    method: "POST",
+  });
+  const result = (await response.json()) as { id?: string; message?: string };
+  if (!response.ok) {
     throw new Error(
-      result.data?.message ??
-        errorDetail ??
-        `${delivery.channel === "email" ? "Email" : "Expo push"} delivery failed (${response.status})`
+      result.message ?? `Email delivery failed (${response.status})`
     );
   }
-  return delivery.channel === "push"
-    ? (result.data?.id ?? null)
-    : (result.id ?? null);
+  return result.id ?? null;
 };
 
 export const processNotificationMessage = async (
@@ -320,11 +342,13 @@ export const processNotificationMessage = async (
   }
   const delivery = await workerEnv.DB.prepare(
     `SELECT d.channel, d.destination, d.id, d.notification_id, d.status,
-      n.body, n.title, n.ticket_id, w.p256dh, w.auth
+      n.body, n.title, n.ticket_id, dt.token AS push_token, w.p256dh, w.auth
       FROM notification_deliveries d
       JOIN notifications n ON n.id = d.notification_id
       LEFT JOIN web_push_subscriptions w
         ON d.channel = 'web_push' AND w.endpoint = d.destination
+      LEFT JOIN device_tokens dt
+        ON d.channel = 'push' AND dt.token_hash = d.destination
       WHERE d.id = ?`
   )
     .bind(deliveryId)
@@ -425,7 +449,9 @@ export const processExpoPushReceipts = async (
       if (receipt.status === "error") {
         if (receipt.details?.error === "DeviceNotRegistered") {
           updates.push(
-            workerEnv.DB.prepare("DELETE FROM device_tokens WHERE token = ?")
+            workerEnv.DB.prepare(
+              "DELETE FROM device_tokens WHERE token_hash = ?"
+            )
               .bind(delivery.destination)
               .run()
           );

@@ -11,6 +11,7 @@ import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
 
 import { getAuthUser } from "../lib/auth";
+import { encryptValue, hashValue } from "../lib/crypto";
 import { safeJsonParse } from "../lib/database";
 
 const STREAM_DURATION_MS = 60_000;
@@ -252,6 +253,10 @@ export const createNotificationRoutes = (auth: Auth) =>
           );
         }
         const now = Date.now();
+        const [encryptedAuth, encryptedP256dh] = await Promise.all([
+          encryptValue(input.keys.auth),
+          encryptValue(input.keys.p256dh),
+        ]);
         await env.DB.prepare(
           `INSERT INTO web_push_subscriptions
            (auth, endpoint, last_seen_at, p256dh, updated_at, user_id)
@@ -264,10 +269,10 @@ export const createNotificationRoutes = (auth: Auth) =>
              user_id = excluded.user_id`
         )
           .bind(
-            input.keys.auth,
+            encryptedAuth,
             input.endpoint,
             now,
-            input.keys.p256dh,
+            encryptedP256dh,
             now,
             user.id
           )
@@ -354,10 +359,11 @@ export const createNotificationRoutes = (auth: Auth) =>
           400
         );
       }
+      const tokenHash = await hashValue(token);
       const result = await env.DB.prepare(
-        "DELETE FROM device_tokens WHERE user_id = ? AND token = ?"
+        "DELETE FROM device_tokens WHERE user_id = ? AND token_hash = ?"
       )
-        .bind(user.id, token)
+        .bind(user.id, tokenHash)
         .run();
       return c.json({ deleted: result.meta.changes > 0 });
     });

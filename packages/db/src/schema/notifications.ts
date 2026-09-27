@@ -40,7 +40,8 @@ export const deviceTokens = sqliteTable(
     id: text("id").primaryKey(),
     lastSeenAt: integer("last_seen_at", { mode: "timestamp_ms" }).notNull(),
     platform: text("platform").notNull(),
-    token: text("token").notNull().unique(),
+    token: text("token").notNull(),
+    tokenHash: text("token_hash").notNull().unique(),
     updatedAt: updatedAtColumn(),
     userId: text("user_id")
       .notNull()
