@@ -141,7 +141,10 @@ export const publishNotification = async ({
 
   const destinations = await workerEnv.DB.prepare(fragments.join(" UNION ALL "))
     .bind(...bindings)
-    .all<{ channel: "email" | "push" | "web_push"; destination: string }>();
+    .all<{
+      channel: "email" | "push" | "sms" | "web_push";
+      destination: string;
+    }>();
 
   const messages: MessageSendRequest[] = [];
   const statements: D1PreparedStatement[] = [];

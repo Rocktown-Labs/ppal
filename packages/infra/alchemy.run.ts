@@ -151,10 +151,10 @@ export const server = Cloudflare.Worker("server", {
       Config.withDefault(Redacted.make(""))
     ),
     RESEND_FROM_EMAIL: Config.string("RESEND_FROM_EMAIL").pipe(
-      Config.withDefault("noreply@support.myparlaypal.com")
+      Config.withDefault("noreply@bets.myparlaypal.com")
     ),
     RESEND_REPLY_TO_EMAIL: Config.string("RESEND_REPLY_TO_EMAIL").pipe(
-      Config.withDefault("support@myparlaypal.com")
+      Config.withDefault("support@bets.myparlaypal.com")
     ),
     REVENUECAT_WEBHOOK_SECRET: Config.redacted("REVENUECAT_WEBHOOK_SECRET"),
     SERVER_BUILD: Config.string("GITHUB_SHA").pipe(Config.withDefault("local")),

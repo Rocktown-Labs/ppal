@@ -68,8 +68,8 @@ jobs:
           OPERATIONS_API_TOKEN: ${{ secrets.OPERATIONS_API_TOKEN }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
-          RESEND_FROM_EMAIL: ${{ vars.RESEND_FROM_EMAIL || 'noreply@support.myparlaypal.com' }}
-          RESEND_REPLY_TO_EMAIL: ${{ vars.RESEND_REPLY_TO_EMAIL || 'support@myparlaypal.com' }}
+          RESEND_FROM_EMAIL: ${{ vars.RESEND_FROM_EMAIL || 'noreply@bets.myparlaypal.com' }}
+          RESEND_REPLY_TO_EMAIL: ${{ vars.RESEND_REPLY_TO_EMAIL || 'support@bets.myparlaypal.com' }}
           REVENUECAT_WEBHOOK_SECRET: ${{ secrets.REVENUECAT_WEBHOOK_SECRET }}
           SENT_DM_API_KEY: ${{ secrets.SENT_DM_API_KEY }}
           SPORTRADAR_API_KEY: ${{ secrets.SPORTRADAR_API_KEY }}
@@ -116,8 +116,8 @@ jobs:
           OPERATIONS_API_TOKEN: ${{ secrets.OPERATIONS_API_TOKEN }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
-          RESEND_FROM_EMAIL: ${{ vars.RESEND_FROM_EMAIL || 'noreply@support.myparlaypal.com' }}
-          RESEND_REPLY_TO_EMAIL: ${{ vars.RESEND_REPLY_TO_EMAIL || 'support@myparlaypal.com' }}
+          RESEND_FROM_EMAIL: ${{ vars.RESEND_FROM_EMAIL || 'noreply@bets.myparlaypal.com' }}
+          RESEND_REPLY_TO_EMAIL: ${{ vars.RESEND_REPLY_TO_EMAIL || 'support@bets.myparlaypal.com' }}
           REVENUECAT_WEBHOOK_SECRET: ${{ secrets.REVENUECAT_WEBHOOK_SECRET }}
           SPORTRADAR_API_KEY: ${{ secrets.SPORTRADAR_API_KEY }}
           STRIPE_CREATOR_PRICE_ID: ${{ secrets.STRIPE_CREATOR_PRICE_ID }}
