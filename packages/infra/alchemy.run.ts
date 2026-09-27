@@ -159,6 +159,9 @@ export const server = Cloudflare.Worker("server", {
     REVENUECAT_WEBHOOK_SECRET: Config.redacted("REVENUECAT_WEBHOOK_SECRET"),
     SERVER_BUILD: Config.string("GITHUB_SHA").pipe(Config.withDefault("local")),
     SPORTRADAR_API_KEY: Config.redacted("SPORTRADAR_API_KEY"),
+    SPORTRADAR_LEAGUES: Config.string("SPORTRADAR_LEAGUES").pipe(
+      Config.withDefault("")
+    ),
     SPORTRADAR_ACCESS_LEVEL: Config.string("SPORTRADAR_ACCESS_LEVEL").pipe(
       Config.withDefault("trial")
     ),

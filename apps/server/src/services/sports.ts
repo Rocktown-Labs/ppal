@@ -559,7 +559,33 @@ export const processSportsMessage = async (
       .run();
     return;
   }
-  const { payload, sequence } = await fetchSummary(event, workerEnv);
+  let summary: {
+    payload: Record<string, unknown>;
+    sequence: string;
+  };
+  try {
+    summary = await fetchSummary(event, workerEnv);
+  } catch (error) {
+    // Provider outages, 429s, or an expired trial must not trigger the queue's
+    // rapid retries: park the event with backoff and return normally.
+    const detail =
+      error instanceof Error ? error.message : "Unknown provider error";
+    const quotaHit = /(?<quota>429|403|quota|limit)/iu.test(detail);
+    const retryAt = Date.now() + (quotaHit ? 15 * 60 * 1000 : 2 * 60 * 1000);
+    await workerEnv.DB.prepare(
+      `UPDATE sports_events SET next_poll_at = ?, poll_lease_until = NULL,
+       updated_at = ? WHERE id = ?`
+    )
+      .bind(retryAt, Date.now(), event.id)
+      .run();
+    workerEnv.ANALYTICS.writeDataPoint({
+      blobs: ["sportradar.poll_failed", event.league_slug],
+      doubles: [quotaHit ? 1 : 0],
+      indexes: [event.league_slug],
+    });
+    return;
+  }
+  const { payload, sequence } = summary;
   const status = normalizeStatus(payload, event.status);
   const scores = summaryScores(payload, event);
   const syncedAt = Date.now();

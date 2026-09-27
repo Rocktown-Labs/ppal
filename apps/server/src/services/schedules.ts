@@ -292,6 +292,13 @@ const upsertScheduleEvent = async (
 export const synchronizeSportsCatalog = async (
   workerEnv: Env
 ): Promise<void> => {
+  const allowlist = new Set(
+    workerEnv.SPORTRADAR_LEAGUES.split(",")
+      .map((slug) => slug.trim().toLowerCase())
+      .filter((slug) => slug.length > 0)
+  );
+  const isLeagueEnabled = (slug: string): boolean =>
+    allowlist.size === 0 || allowlist.has(slug.toLowerCase());
   const sportNames = new Map(
     leagues.map((league) => [league[2], league[2]] as const)
   );
@@ -347,6 +354,14 @@ export const synchronizeSportsCatalog = async (
     workerEnv.SPORTRADAR_ACCESS_LEVEL
   );
   for (const [leagueSlug, , sportSlug] of leagues) {
+    if (!isLeagueEnabled(leagueSlug)) {
+      workerEnv.ANALYTICS.writeDataPoint({
+        blobs: ["sportradar.league_skipped", leagueSlug],
+        doubles: [0],
+        indexes: [leagueSlug],
+      });
+      continue;
+    }
     const playbook = playbooks[leagueSlug];
     if (!playbook) {
       continue;
