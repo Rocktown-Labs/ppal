@@ -404,8 +404,8 @@ export const processNotificationMessage = async (
         templateName,
         templateParameters: templateName
           ? {
-              "1": delivery.title,
-              "2": delivery.body,
+              title: delivery.title,
+              body: delivery.body,
             }
           : undefined,
         text: templateName
