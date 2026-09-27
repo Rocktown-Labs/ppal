@@ -3,6 +3,7 @@ import { sendPushNotification, WebPushError } from "@mmmike/web-push/send";
 import { notificationQueueMessageSchema } from "@ppal/contracts/queues";
 
 import { decryptValue } from "../lib/crypto";
+import { getUserPlan } from "../lib/entitlements";
 
 export interface NotificationServiceEnv {
   DB: D1Database;
@@ -93,26 +94,36 @@ export const publishNotification = async ({
   const preferenceClause = preferenceColumn
     ? `AND COALESCE(p.${preferenceColumn}, 1) = 1`
     : "";
-  const webPushDestination = isWebPushConfigured(workerEnv)
-    ? `UNION ALL
-     SELECT 'web_push' AS channel, w.endpoint AS destination FROM web_push_subscriptions w
-     LEFT JOIN notification_preferences p ON p.user_id = w.user_id
-     WHERE w.user_id = ? AND COALESCE(p.push_enabled, 1) = 1 ${preferenceClause}`
-    : "";
-  const destinationBindings = isWebPushConfigured(workerEnv)
-    ? [userId, userId, userId]
-    : [userId, userId];
-  const destinations = await workerEnv.DB.prepare(
+  const plan = await getUserPlan(workerEnv.DB, userId);
+  const includeEmail = plan !== "free";
+
+  const fragments: string[] = [
     `SELECT 'push' AS channel, d.token_hash AS destination FROM device_tokens d
      LEFT JOIN notification_preferences p ON p.user_id = d.user_id
-     WHERE d.user_id = ? AND COALESCE(p.push_enabled, 1) = 1 ${preferenceClause}
-     UNION ALL
-     SELECT 'email' AS channel, u.email AS destination FROM user u
-     LEFT JOIN notification_preferences p ON p.user_id = u.id
-     WHERE u.id = ? AND COALESCE(p.email_enabled, 1) = 1 ${preferenceClause}
-     ${webPushDestination}`
-  )
-    .bind(...destinationBindings)
+     WHERE d.user_id = ? AND COALESCE(p.push_enabled, 1) = 1 ${preferenceClause}`,
+  ];
+  const bindings: string[] = [userId];
+
+  if (includeEmail) {
+    fragments.push(
+      `SELECT 'email' AS channel, u.email AS destination FROM user u
+       LEFT JOIN notification_preferences p ON p.user_id = u.id
+       WHERE u.id = ? AND COALESCE(p.email_enabled, 1) = 1 ${preferenceClause}`
+    );
+    bindings.push(userId);
+  }
+
+  if (isWebPushConfigured(workerEnv)) {
+    fragments.push(
+      `SELECT 'web_push' AS channel, w.endpoint AS destination FROM web_push_subscriptions w
+       LEFT JOIN notification_preferences p ON p.user_id = w.user_id
+       WHERE w.user_id = ? AND COALESCE(p.push_enabled, 1) = 1 ${preferenceClause}`
+    );
+    bindings.push(userId);
+  }
+
+  const destinations = await workerEnv.DB.prepare(fragments.join(" UNION ALL "))
+    .bind(...bindings)
     .all<{ channel: "email" | "push" | "web_push"; destination: string }>();
 
   const messages: MessageSendRequest[] = [];

@@ -9,6 +9,7 @@ import { Hono } from "hono";
 
 import { getAuthUser } from "../lib/auth";
 import { scopeIdempotencyKey } from "../lib/database";
+import { assertPlan } from "../lib/entitlements";
 import { refreshHistoricalBatch } from "../services/historical-imports";
 import { releaseUploadUsage, reserveUploadUsage } from "../services/usage";
 
@@ -52,14 +53,15 @@ const loadBatch = (id: string, userId: string): Promise<BatchRow | null> =>
     .first<BatchRow>();
 
 const hasCreatorPlan = async (userId: string): Promise<boolean> => {
-  const row = await env.DB.prepare(
-    `SELECT 1 AS allowed FROM billing_entitlements
-     WHERE user_id = ? AND plan = 'creator' AND status IN ('trialing', 'active', 'grace_period')
-       AND (expires_at IS NULL OR expires_at > ?) LIMIT 1`
-  )
-    .bind(userId, Date.now())
-    .first<{ allowed: number }>();
-  return row?.allowed === 1;
+  try {
+    await assertPlan(env.DB, userId, "creator");
+    return true;
+  } catch (error) {
+    if (error instanceof Error && error.name === "EntitlementError") {
+      return false;
+    }
+    throw error;
+  }
 };
 
 export const createHistoricalImportRoutes = (auth: Auth) =>

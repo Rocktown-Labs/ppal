@@ -3,6 +3,7 @@ import { env } from "@ppal/env/server";
 import { Hono } from "hono";
 
 import { getAuthUser } from "../lib/auth";
+import { assertPlan, EntitlementError } from "../lib/entitlements";
 
 interface PlayerSummaryRow {
   hit_rate: number;
@@ -12,6 +13,18 @@ interface PlayerSummaryRow {
   selections: number;
   sport: string;
   won: number;
+}
+
+interface UserVariables {
+  user: {
+    email: string;
+    id: string;
+  };
+}
+
+declare module "hono" {
+  // oxlint-disable-next-line typescript/no-empty-interface, typescript/no-empty-object-type
+  interface ContextVariableMap extends UserVariables {}
 }
 
 const playerSummarySql = `SELECT l.participant_id,
@@ -38,13 +51,33 @@ const mapPlayer = (row: PlayerSummaryRow) => ({
 
 export const createAnalyticsRoutes = (auth: Auth) =>
   new Hono()
-    .get("/analytics/overview", async (c) => {
+    .use("/*", async (c, next) => {
       const user = await getAuthUser(auth, c.req.raw.headers, {
         authoritative: true,
       });
       if (!user) {
         return c.json({ code: "UNAUTHORIZED", error: "Unauthorized" }, 401);
       }
+      c.set("user", user);
+      try {
+        await assertPlan(env.DB, user.id, "pro");
+      } catch (error) {
+        if (error instanceof EntitlementError) {
+          return c.json(
+            {
+              code: "PRO_REQUIRED",
+              error: "Analytics require the Pro or Creator plan.",
+              plan: error.actualPlan,
+            },
+            403
+          );
+        }
+        throw error;
+      }
+      return next();
+    })
+    .get("/analytics/overview", async (c) => {
+      const { user } = c.var;
       const summary = await env.DB.prepare(
         `SELECT
         COUNT(*) AS total,
@@ -75,12 +108,7 @@ export const createAnalyticsRoutes = (auth: Auth) =>
       });
     })
     .get("/analytics/players", async (c) => {
-      const user = await getAuthUser(auth, c.req.raw.headers, {
-        authoritative: true,
-      });
-      if (!user) {
-        return c.json({ code: "UNAUTHORIZED", error: "Unauthorized" }, 401);
-      }
+      const { user } = c.var;
       const rows = await env.DB.prepare(
         `${playerSummarySql} GROUP BY COALESCE(l.participant_id, lower(l.subject_name)) ORDER BY selections DESC LIMIT 100`
       )
@@ -89,12 +117,7 @@ export const createAnalyticsRoutes = (auth: Auth) =>
       return c.json({ players: rows.results.map(mapPlayer) });
     })
     .get("/analytics/players/:participantId", async (c) => {
-      const user = await getAuthUser(auth, c.req.raw.headers, {
-        authoritative: true,
-      });
-      if (!user) {
-        return c.json({ code: "UNAUTHORIZED", error: "Unauthorized" }, 401);
-      }
+      const { user } = c.var;
       const participantId = c.req.param("participantId");
       const summary = await env.DB.prepare(
         `${playerSummarySql} AND l.participant_id = ? GROUP BY l.participant_id`
@@ -128,24 +151,12 @@ export const createAnalyticsRoutes = (auth: Auth) =>
          ORDER BY l.settled_at DESC LIMIT 5`
       )
         .bind(user.id, participantId)
-        .all<{ status: "lost" | "won" }>();
+        .all<{ status: string }>();
       return c.json({
-        player: {
-          ...mapPlayer(summary),
-          markets: markets.results.map((market) => ({
-            hitRate:
-              market.won + market.lost > 0
-                ? Math.round((market.won / (market.won + market.lost)) * 1000) /
-                  10
-                : 0,
-            lost: market.lost,
-            market: market.market,
-            selections: market.selections,
-            won: market.won,
-          })),
-          recentForm: recent.results.map(({ status }) =>
-            status === "won" ? ("W" as const) : ("L" as const)
-          ),
+        details: {
+          markets: markets.results,
+          recent: recent.results.map((row) => row.status),
+          summary: mapPlayer(summary),
         },
       });
     });

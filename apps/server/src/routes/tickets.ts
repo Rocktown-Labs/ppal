@@ -11,6 +11,7 @@ import { Hono } from "hono";
 
 import { getAuthUser } from "../lib/auth";
 import { safeJsonParse } from "../lib/database";
+import { getUserPlan } from "../lib/entitlements";
 import { writeAuditEvent } from "../services/audit";
 import { refreshHistoricalBatch } from "../services/historical-imports";
 import { firstPregamePollAt } from "../services/sports-progress";
@@ -304,6 +305,9 @@ export const createTicketRoutes = (auth: Auth) =>
           completeLegs.map((leg, index) => [leg.id, catalogMatches[index]])
         );
         const now = Date.now();
+        const plan = await getUserPlan(env.DB, user.id);
+        const notificationIntervalMinutes =
+          plan === "free" ? 15 : input.notificationIntervalMinutes;
         const updates = input.legs.map((leg) =>
           env.DB.prepare(
             `UPDATE ticket_legs SET display_description = ?, league_id = ?,
@@ -335,14 +339,15 @@ export const createTicketRoutes = (auth: Auth) =>
           env.DB.prepare(
             `UPDATE tickets SET notification_interval_minutes = ?, updated_at = ?,
               version = version + 1 WHERE id = ? AND user_id = ?`
-          ).bind(input.notificationIntervalMinutes, now, ticketId, user.id),
+          ).bind(notificationIntervalMinutes, now, ticketId, user.id),
         ]);
         await writeAuditEvent({
           action: "ticket.review",
           actorUserId: user.id,
           metadata: {
             legCount: input.legs.length,
-            notificationIntervalMinutes: input.notificationIntervalMinutes,
+            notificationIntervalMinutes,
+            requestedInterval: input.notificationIntervalMinutes,
           },
           outcome: "success",
           request: c.req.raw,
