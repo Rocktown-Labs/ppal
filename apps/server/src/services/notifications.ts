@@ -397,11 +397,20 @@ export const processNotificationMessage = async (
       if (!workerEnv.SENT_DM_API_KEY) {
         throw new Error("SENT_DM_API_KEY is not configured");
       }
+      const templateName = workerEnv.SENT_DM_TEMPLATE_NAME?.trim();
       const result = await sendSms({
         apiKey: workerEnv.SENT_DM_API_KEY,
         sandbox: false,
-        templateName: workerEnv.SENT_DM_TEMPLATE_NAME,
-        text: `${delivery.title}\n\n${delivery.body}`,
+        templateName,
+        templateParameters: templateName
+          ? {
+              "1": delivery.title,
+              "2": delivery.body,
+            }
+          : undefined,
+        text: templateName
+          ? undefined
+          : `${delivery.title}\n\n${delivery.body}`,
         to: delivery.destination,
       });
       await markDeliveryDelivered(delivery, workerEnv, result.messageId);

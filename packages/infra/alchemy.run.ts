@@ -182,6 +182,9 @@ export const server = Cloudflare.Worker("server", {
     SENT_DM_API_KEY: Config.redacted("SENT_DM_API_KEY").pipe(
       Config.withDefault(Redacted.make(""))
     ),
+    SENT_DM_TEMPLATE_NAME: Config.string("SENT_DM_TEMPLATE_NAME").pipe(
+      Config.withDefault("")
+    ),
     SPORTS_QUEUE: sportsQueue,
     UPLOAD_RATE_LIMIT: Cloudflare.RateLimit("upload-rate-limit", {
       namespaceId: rateLimitNamespaceOffset + 1002,
