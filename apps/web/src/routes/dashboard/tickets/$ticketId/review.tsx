@@ -13,6 +13,7 @@ import {
   AlertCircle,
   ArrowRight,
   CheckCircle2,
+  ChevronDown,
   ChevronRight,
   HelpCircle,
   RefreshCw,
@@ -84,6 +85,9 @@ const TicketReviewComponent = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [isConfirming, setIsConfirming] = useState(false);
+  // Accordion state: leg ids the user explicitly expanded/collapsed.
+  // Untouched legs default to expanded when unresolved, collapsed when matched.
+  const [toggledLegs, setToggledLegs] = useState<Record<string, boolean>>({});
 
   // Catalog search modal state
   const [searchModalLegIndex, setSearchModalLegIndex] = useState<number | null>(
@@ -499,7 +503,47 @@ const TicketReviewComponent = () => {
       </fieldset>
 
       {/* Legs List */}
-      <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <p className="text-xs text-zinc-400">
+          <span className="font-bold text-white">
+            {
+              legs.filter(
+                (leg) =>
+                  leg.marketId &&
+                  leg.sportsEventId &&
+                  (leg.subjectType === "game" || leg.participantId)
+              ).length
+            }
+          </span>{" "}
+          of {legs.length} legs matched
+        </p>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={() =>
+              setToggledLegs(
+                Object.fromEntries(legs.map((leg) => [leg.id, true]))
+              )
+            }
+            className="cursor-pointer text-[11px] font-semibold text-zinc-400 transition hover:text-white"
+          >
+            Expand all
+          </button>
+          <span className="text-zinc-700">·</span>
+          <button
+            type="button"
+            onClick={() =>
+              setToggledLegs(
+                Object.fromEntries(legs.map((leg) => [leg.id, false]))
+              )
+            }
+            className="cursor-pointer text-[11px] font-semibold text-zinc-400 transition hover:text-white"
+          >
+            Collapse all
+          </button>
+        </div>
+      </div>
+      <div className="space-y-3">
         {legs.map((leg, index) => {
           const originalLeg = ticket.legs.find((l) => l.id === leg.id);
           const hasCatalogMatch = Boolean(
@@ -511,185 +555,190 @@ const TicketReviewComponent = () => {
             hasCatalogMatch,
             originalLeg?.resolverStatus
           );
+          const subjectMatched = Boolean(
+            leg.participantId || leg.subjectType === "game"
+          );
+          const matchCount = [
+            subjectMatched,
+            Boolean(leg.marketId),
+            Boolean(leg.sportsEventId),
+          ].filter(Boolean).length;
+          const isExpanded = toggledLegs[leg.id] ?? !hasCatalogMatch;
 
           return (
             <div
               key={leg.id}
-              className="space-y-4 rounded-2xl border border-zinc-800/90 bg-zinc-900/60 p-4 transition hover:border-zinc-700 sm:p-5"
+              className={`overflow-hidden rounded-2xl border bg-zinc-900/60 transition ${isExpanded ? "border-zinc-700" : "border-zinc-800/90 hover:border-zinc-700"}`}
             >
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="flex size-6 items-center justify-center rounded-full bg-zinc-800 font-mono text-xs font-bold text-zinc-300">
+              <div className="flex items-center gap-2 p-3 sm:p-4">
+                <button
+                  type="button"
+                  onClick={() =>
+                    setToggledLegs((prev) => ({
+                      ...prev,
+                      [leg.id]: !isExpanded,
+                    }))
+                  }
+                  aria-expanded={isExpanded}
+                  className="flex min-w-0 flex-1 cursor-pointer items-center gap-2.5 text-left"
+                >
+                  <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-zinc-800 font-mono text-xs font-bold text-zinc-300">
                     {index + 1}
                   </span>
-                  {getResolverBadge(resolverStatus)}
-                  <div className="flex items-center gap-1.5 text-[10px]">
-                    <span
-                      className={`rounded px-1.5 py-0.5 font-mono ${
-                        leg.participantId || leg.subjectType === "game"
-                          ? "bg-emerald-500/15 text-emerald-400"
-                          : "bg-amber-500/15 text-amber-400"
-                      }`}
-                    >
-                      Subject:{" "}
-                      {leg.participantId || leg.subjectType === "game"
-                        ? "Matched"
-                        : "Unmatched"}
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-xs font-bold text-white">
+                      {leg.subjectName || "Untitled leg"}
                     </span>
-                    <span
-                      className={`rounded px-1.5 py-0.5 font-mono ${
-                        leg.marketId
-                          ? "bg-emerald-500/15 text-emerald-400"
-                          : "bg-amber-500/15 text-amber-400"
-                      }`}
-                    >
-                      Market: {leg.marketId ? "Matched" : "Unmatched"}
+                    <span className="mt-0.5 flex items-center gap-1.5 text-[10px] text-zinc-500">
+                      {getResolverBadge(resolverStatus)}
+                      <span aria-label={`${matchCount} of 3 fields matched`}>
+                        {matchCount}/3 matched
+                      </span>
                     </span>
-                    <span
-                      className={`rounded px-1.5 py-0.5 font-mono ${
-                        leg.sportsEventId
-                          ? "bg-emerald-500/15 text-emerald-400"
-                          : "bg-amber-500/15 text-amber-400"
-                      }`}
-                    >
-                      Event: {leg.sportsEventId ? "Matched" : "Unmatched"}
-                    </span>
+                  </span>
+                  <ChevronDown
+                    className={`size-4 shrink-0 text-zinc-500 transition-transform ${isExpanded ? "rotate-180" : ""}`}
+                  />
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearchModalLegIndex(index);
+                    setCatalogQuery(leg.subjectName);
+                    handleSearchCatalog(leg.subjectName);
+                  }}
+                  className="flex shrink-0 cursor-pointer items-center gap-1 rounded-lg border border-zinc-700 bg-zinc-800/80 px-2.5 py-1.5 text-[11px] font-semibold text-zinc-300 transition hover:border-emerald-500/40 hover:text-emerald-400"
+                >
+                  <Search className="size-3" />
+                  <span className="hidden sm:inline">Search Catalog</span>
+                  <span className="sm:hidden">Match</span>
+                </button>
+              </div>
+
+              {isExpanded ? (
+                <div className="space-y-3 border-t border-zinc-800/80 p-4 sm:p-5">
+                  <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                    <div className="sm:col-span-2">
+                      <label
+                        htmlFor={`subject-${leg.id}`}
+                        className="block text-[10px] font-bold tracking-wider text-zinc-400 uppercase"
+                      >
+                        Subject Name (Player / Team)
+                      </label>
+                      <input
+                        id={`subject-${leg.id}`}
+                        type="text"
+                        value={leg.subjectName}
+                        onChange={(e) =>
+                          updateLeg(index, "subjectName", e.target.value)
+                        }
+                        className="mt-1.5 h-9 w-full rounded-xl border border-zinc-700 bg-zinc-800/90 px-3 text-xs text-white placeholder-zinc-500 outline-none focus:border-emerald-400"
+                      />
+                    </div>
+
+                    <div>
+                      <label
+                        htmlFor={`type-${leg.id}`}
+                        className="block text-[10px] font-bold tracking-wider text-zinc-400 uppercase"
+                      >
+                        Type
+                      </label>
+                      <select
+                        id={`type-${leg.id}`}
+                        value={leg.subjectType}
+                        onChange={(e) =>
+                          updateLeg(
+                            index,
+                            "subjectType",
+                            e.target.value as "player" | "team" | "game"
+                          )
+                        }
+                        className="mt-1.5 h-9 w-full rounded-xl border border-zinc-700 bg-zinc-800/90 px-3 text-xs text-white outline-none focus:border-emerald-400"
+                      >
+                        <option value="player">Player</option>
+                        <option value="team">Team</option>
+                        <option value="game">Game</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label
+                        htmlFor={`operator-${leg.id}`}
+                        className="block text-[10px] font-bold tracking-wider text-zinc-400 uppercase"
+                      >
+                        Condition
+                      </label>
+                      <select
+                        id={`operator-${leg.id}`}
+                        value={leg.operator}
+                        onChange={(e) =>
+                          updateLeg(
+                            index,
+                            "operator",
+                            e.target.value as TicketLegOperator
+                          )
+                        }
+                        className="mt-1.5 h-9 w-full rounded-xl border border-zinc-700 bg-zinc-800/90 px-3 text-xs text-white capitalize outline-none focus:border-emerald-400"
+                      >
+                        <option value="over">Over</option>
+                        <option value="under">Under</option>
+                        <option value="gte">At Least (GTE)</option>
+                        <option value="lte">At Most (LTE)</option>
+                        <option value="moneyline">Moneyline</option>
+                        <option value="spread">Spread</option>
+                        <option value="yes">Yes</option>
+                        <option value="no">No</option>
+                        <option value="custom">Custom</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label
+                        htmlFor={`target-${leg.id}`}
+                        className="block text-[10px] font-bold tracking-wider text-zinc-400 uppercase"
+                      >
+                        Target Stat
+                      </label>
+                      <input
+                        id={`target-${leg.id}`}
+                        type="number"
+                        step="0.5"
+                        value={leg.targetValue ?? ""}
+                        onChange={(e) =>
+                          updateLeg(
+                            index,
+                            "targetValue",
+                            e.target.value === ""
+                              ? null
+                              : Number(e.target.value)
+                          )
+                        }
+                        placeholder="e.g. 24.5"
+                        className="mt-1.5 h-9 w-full rounded-xl border border-zinc-700 bg-zinc-800/90 px-3 font-mono text-xs text-white placeholder-zinc-500 outline-none focus:border-emerald-400"
+                      />
+                    </div>
+
+                    <div className="sm:col-span-3">
+                      <label
+                        htmlFor={`desc-${leg.id}`}
+                        className="block text-[10px] font-bold tracking-wider text-zinc-400 uppercase"
+                      >
+                        Display Description
+                      </label>
+                      <input
+                        id={`desc-${leg.id}`}
+                        type="text"
+                        value={leg.displayDescription}
+                        onChange={(e) =>
+                          updateLeg(index, "displayDescription", e.target.value)
+                        }
+                        className="mt-1.5 h-9 w-full rounded-xl border border-zinc-700 bg-zinc-800/90 px-3 text-xs text-white placeholder-zinc-500 outline-none focus:border-emerald-400"
+                      />
+                    </div>
                   </div>
                 </div>
-
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSearchModalLegIndex(index);
-                      setCatalogQuery(leg.subjectName);
-                      handleSearchCatalog(leg.subjectName);
-                    }}
-                    className="flex cursor-pointer items-center gap-1 rounded-lg border border-zinc-700 bg-zinc-800/80 px-2.5 py-1 text-[11px] font-semibold text-zinc-300 transition hover:border-emerald-500/40 hover:text-emerald-400"
-                  >
-                    <Search className="size-3" />
-                    <span>Search Catalog</span>
-                  </button>
-                </div>
-              </div>
-
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                <div className="sm:col-span-2">
-                  <label
-                    htmlFor={`subject-${leg.id}`}
-                    className="block text-[10px] font-bold tracking-wider text-zinc-400 uppercase"
-                  >
-                    Subject Name (Player / Team)
-                  </label>
-                  <input
-                    id={`subject-${leg.id}`}
-                    type="text"
-                    value={leg.subjectName}
-                    onChange={(e) =>
-                      updateLeg(index, "subjectName", e.target.value)
-                    }
-                    className="mt-1.5 h-9 w-full rounded-xl border border-zinc-700 bg-zinc-800/90 px-3 text-xs text-white placeholder-zinc-500 outline-none focus:border-emerald-400"
-                  />
-                </div>
-
-                <div>
-                  <label
-                    htmlFor={`type-${leg.id}`}
-                    className="block text-[10px] font-bold tracking-wider text-zinc-400 uppercase"
-                  >
-                    Type
-                  </label>
-                  <select
-                    id={`type-${leg.id}`}
-                    value={leg.subjectType}
-                    onChange={(e) =>
-                      updateLeg(
-                        index,
-                        "subjectType",
-                        e.target.value as "player" | "team" | "game"
-                      )
-                    }
-                    className="mt-1.5 h-9 w-full rounded-xl border border-zinc-700 bg-zinc-800/90 px-3 text-xs text-white outline-none focus:border-emerald-400"
-                  >
-                    <option value="player">Player</option>
-                    <option value="team">Team</option>
-                    <option value="game">Game</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label
-                    htmlFor={`operator-${leg.id}`}
-                    className="block text-[10px] font-bold tracking-wider text-zinc-400 uppercase"
-                  >
-                    Condition
-                  </label>
-                  <select
-                    id={`operator-${leg.id}`}
-                    value={leg.operator}
-                    onChange={(e) =>
-                      updateLeg(
-                        index,
-                        "operator",
-                        e.target.value as TicketLegOperator
-                      )
-                    }
-                    className="mt-1.5 h-9 w-full rounded-xl border border-zinc-700 bg-zinc-800/90 px-3 text-xs text-white capitalize outline-none focus:border-emerald-400"
-                  >
-                    <option value="over">Over</option>
-                    <option value="under">Under</option>
-                    <option value="gte">At Least (GTE)</option>
-                    <option value="lte">At Most (LTE)</option>
-                    <option value="moneyline">Moneyline</option>
-                    <option value="spread">Spread</option>
-                    <option value="yes">Yes</option>
-                    <option value="no">No</option>
-                    <option value="custom">Custom</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label
-                    htmlFor={`target-${leg.id}`}
-                    className="block text-[10px] font-bold tracking-wider text-zinc-400 uppercase"
-                  >
-                    Target Stat
-                  </label>
-                  <input
-                    id={`target-${leg.id}`}
-                    type="number"
-                    step="0.5"
-                    value={leg.targetValue ?? ""}
-                    onChange={(e) =>
-                      updateLeg(
-                        index,
-                        "targetValue",
-                        e.target.value === "" ? null : Number(e.target.value)
-                      )
-                    }
-                    placeholder="e.g. 24.5"
-                    className="mt-1.5 h-9 w-full rounded-xl border border-zinc-700 bg-zinc-800/90 px-3 font-mono text-xs text-white placeholder-zinc-500 outline-none focus:border-emerald-400"
-                  />
-                </div>
-
-                <div className="sm:col-span-3">
-                  <label
-                    htmlFor={`desc-${leg.id}`}
-                    className="block text-[10px] font-bold tracking-wider text-zinc-400 uppercase"
-                  >
-                    Display Description
-                  </label>
-                  <input
-                    id={`desc-${leg.id}`}
-                    type="text"
-                    value={leg.displayDescription}
-                    onChange={(e) =>
-                      updateLeg(index, "displayDescription", e.target.value)
-                    }
-                    className="mt-1.5 h-9 w-full rounded-xl border border-zinc-700 bg-zinc-800/90 px-3 text-xs text-white placeholder-zinc-500 outline-none focus:border-emerald-400"
-                  />
-                </div>
-              </div>
+              ) : null}
             </div>
           );
         })}
@@ -743,48 +792,58 @@ const TicketReviewComponent = () => {
       )}
 
       {/* Confirmation CTA Footer */}
-      <div className="flex flex-col gap-4 border-t border-zinc-800 pt-6 sm:flex-row sm:items-center sm:justify-between">
-        {legs.some(
-          (leg) =>
-            !leg.marketId ||
-            !leg.sportsEventId ||
-            (leg.subjectType !== "game" && !leg.participantId)
-        ) ? (
-          <p className="max-w-md text-xs text-amber-300">
-            Match every leg to the sports catalog before starting live tracking.
-            You can save this review and finish matching it later.
-          </p>
-        ) : null}
-        <Link
-          to="/dashboard/tickets"
-          className="text-xs font-semibold text-zinc-400 transition hover:text-white"
-        >
-          ← Cancel & Return
-        </Link>
+      <div className="sticky bottom-0 -mx-2 border-t border-zinc-800 bg-zinc-950/90 px-2 py-3 backdrop-blur sm:-mx-4 sm:px-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          {legs.some(
+            (leg) =>
+              !leg.marketId ||
+              !leg.sportsEventId ||
+              (leg.subjectType !== "game" && !leg.participantId)
+          ) ? (
+            <p className="flex items-center gap-1.5 text-[11px] text-amber-300">
+              <AlertCircle className="size-3.5 shrink-0" />
+              Match every leg before starting live tracking — or save and finish
+              later.
+            </p>
+          ) : (
+            <p className="flex items-center gap-1.5 text-[11px] text-emerald-300">
+              <CheckCircle2 className="size-3.5 shrink-0" />
+              Every leg is matched and ready.
+            </p>
+          )}
+          <div className="flex items-center gap-2">
+            <Link
+              to="/dashboard/tickets"
+              className="rounded-xl border border-zinc-700 bg-zinc-800/60 px-4 py-2.5 text-xs font-semibold text-zinc-300 transition hover:border-zinc-600 hover:text-white"
+            >
+              Cancel
+            </Link>
 
-        <button
-          type="button"
-          onClick={handleConfirmAndStartTracking}
-          disabled={
-            isConfirming ||
-            legs.length === 0 ||
-            legs.some(
-              (leg) =>
-                !leg.marketId ||
-                !leg.sportsEventId ||
-                (leg.subjectType !== "game" && !leg.participantId)
-            )
-          }
-          className="flex cursor-pointer items-center justify-center gap-2 rounded-xl bg-emerald-500 px-8 py-3 text-sm font-bold text-black shadow-xl shadow-emerald-500/25 transition hover:bg-emerald-400 disabled:opacity-50"
-        >
-          <Zap className="size-4" />
-          <span>
-            {isConfirming
-              ? "Activating Tracking..."
-              : "Confirm & Start Live Tracking"}
-          </span>
-          <ArrowRight className="size-4" />
-        </button>
+            <button
+              type="button"
+              onClick={handleConfirmAndStartTracking}
+              disabled={
+                isConfirming ||
+                legs.length === 0 ||
+                legs.some(
+                  (leg) =>
+                    !leg.marketId ||
+                    !leg.sportsEventId ||
+                    (leg.subjectType !== "game" && !leg.participantId)
+                )
+              }
+              className="flex cursor-pointer items-center justify-center gap-2 rounded-xl bg-emerald-500 px-5 py-2.5 text-xs font-bold text-black shadow-lg shadow-emerald-500/25 transition hover:bg-emerald-400 disabled:opacity-50"
+            >
+              <Zap className="size-4" />
+              <span>
+                {isConfirming
+                  ? "Activating Tracking..."
+                  : "Confirm & Start Live Tracking"}
+              </span>
+              <ArrowRight className="size-4" />
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   );
