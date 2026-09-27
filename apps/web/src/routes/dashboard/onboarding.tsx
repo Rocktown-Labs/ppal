@@ -900,6 +900,30 @@ const OnboardingWizardComponent = () => {
                           );
                         }}
                       </form.Field>
+
+                      <p className="mt-2 text-[10px] leading-4 text-zinc-500">
+                        By opting in, you agree to receive automated
+                        transactional text messages about your tracked tickets
+                        from ParlayPal. Msg &amp; data rates may apply. Message
+                        frequency varies by activity. Reply HELP for help or
+                        STOP to cancel. No mobile information will be sold or
+                        shared with third parties for promotional or marketing
+                        purposes.{" "}
+                        <Link
+                          to="/privacy"
+                          className="underline transition hover:text-zinc-300"
+                        >
+                          Privacy Policy
+                        </Link>
+                        {" · "}
+                        <Link
+                          to="/terms"
+                          className="underline transition hover:text-zinc-300"
+                        >
+                          Terms
+                        </Link>
+                        .
+                      </p>
                     </div>
 
                     <div className="mt-5 rounded-2xl border border-emerald-400/15 bg-emerald-400/5 p-4">
