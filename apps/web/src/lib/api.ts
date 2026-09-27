@@ -93,7 +93,9 @@ export interface NotificationPreferences {
   inAppEnabled: boolean;
   legLost: boolean;
   legWon: boolean;
+  phoneNumber: string | null;
   pushEnabled: boolean;
+  smsEnabled: boolean;
   ticketLost: boolean;
   ticketWon: boolean;
 }

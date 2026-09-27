@@ -37,6 +37,8 @@ interface OnboardingFormValues {
   notifyEmail: boolean;
   notifyLegWon: boolean;
   notifyOneLegAway: boolean;
+  notifySms: boolean;
+  phoneNumber: string;
   profileVisibility: "private" | "public";
   selectedPlan: "creator" | "free" | "pro";
   selectedSports: string[];
@@ -64,6 +66,8 @@ const OnboardingWizardComponent = () => {
     notifyEmail: true,
     notifyLegWon: true,
     notifyOneLegAway: true,
+    notifySms: false,
+    phoneNumber: "",
     profileVisibility: "private",
     selectedPlan: "free",
     selectedSports: ["basketball", "football"],
@@ -188,7 +192,11 @@ const OnboardingWizardComponent = () => {
         inAppEnabled: true,
         legLost: form.getFieldValue("notifyOneLegAway"),
         legWon: form.getFieldValue("notifyLegWon"),
+        phoneNumber: form.getFieldValue("phoneNumber").trim() || null,
         pushEnabled: true,
+        smsEnabled:
+          form.getFieldValue("selectedPlan") !== "free" &&
+          form.getFieldValue("notifySms"),
         ticketLost: true,
         ticketWon: true,
       });
@@ -819,8 +827,7 @@ const OnboardingWizardComponent = () => {
                             <span className="flex items-center gap-3">
                               <span className="text-base">📧</span>
                               <span className="text-xs font-semibold text-zinc-300">
-                                Email alerts{" "}
-                                <span className="text-zinc-600">(Pro)</span>
+                                Email alerts
                               </span>
                             </span>
                             <input
@@ -834,6 +841,64 @@ const OnboardingWizardComponent = () => {
                             />
                           </label>
                         )}
+                      </form.Field>
+
+                      <form.Field name="phoneNumber">
+                        {(field) => (
+                          <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                            <label
+                              htmlFor="phone-number"
+                              className="text-xs font-semibold text-zinc-300"
+                            >
+                              Phone number{" "}
+                              <span className="text-zinc-600">
+                                ( optional )
+                              </span>
+                            </label>
+                            <input
+                              id="phone-number"
+                              type="tel"
+                              value={field.state.value}
+                              onChange={(e) =>
+                                field.handleChange(e.target.value)
+                              }
+                              placeholder="+14155550123"
+                              className="mt-2 w-full rounded-xl border border-zinc-800 bg-zinc-950 px-3 py-2 text-xs text-white placeholder-zinc-700 focus:border-emerald-400 focus:outline-none"
+                            />
+                          </div>
+                        )}
+                      </form.Field>
+
+                      <form.Field name="notifySms">
+                        {(field) => {
+                          const isPaid =
+                            form.getFieldValue("selectedPlan") !== "free";
+                          return (
+                            <label
+                              aria-label="Notify via SMS alerts"
+                              htmlFor="notify-sms"
+                              className={`flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-black/20 p-4 transition ${isPaid ? "cursor-pointer hover:border-white/20" : "opacity-60"}`}
+                            >
+                              <span className="flex items-center gap-3">
+                                <span className="text-base">💬</span>
+                                <span className="text-xs font-semibold text-zinc-300">
+                                  SMS alerts{" "}
+                                  <span className="text-zinc-600">(Pro)</span>
+                                </span>
+                              </span>
+                              <input
+                                id="notify-sms"
+                                type="checkbox"
+                                checked={isPaid && field.state.value}
+                                disabled={!isPaid}
+                                onChange={(e) =>
+                                  field.handleChange(e.target.checked)
+                                }
+                                className="size-4 cursor-pointer accent-emerald-400 disabled:cursor-not-allowed"
+                              />
+                            </label>
+                          );
+                        }}
                       </form.Field>
                     </div>
 

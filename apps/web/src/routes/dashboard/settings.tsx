@@ -13,6 +13,7 @@ import {
   CreditCard,
   Gift,
   Mail,
+  MessageSquareText,
   RefreshCw,
   Save,
   Shield,
@@ -94,7 +95,9 @@ const SettingsComponent = () => {
     inAppEnabled: true,
     legLost: true,
     legWon: true,
+    phoneNumber: "",
     pushEnabled: true,
+    smsEnabled: false,
     ticketLost: true,
     ticketWon: true,
   });
@@ -139,7 +142,9 @@ const SettingsComponent = () => {
               inAppEnabled: p.inAppEnabled ?? true,
               legLost: p.legLost ?? true,
               legWon: p.legWon ?? true,
+              phoneNumber: p.phoneNumber ?? "",
               pushEnabled: p.pushEnabled ?? true,
+              smsEnabled: p.smsEnabled ?? false,
               ticketLost: p.ticketLost ?? true,
               ticketWon: p.ticketWon ?? true,
             });
@@ -471,6 +476,53 @@ const SettingsComponent = () => {
               {webPushActionLabel}
             </button>
           </div>
+        </div>
+
+        {/* SMS Alerts — Pro/Creator only */}
+        <div className="space-y-3 rounded-2xl border border-zinc-800 bg-zinc-950/40 p-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <MessageSquareText className="size-4 text-emerald-400" />
+              <span className="text-xs font-semibold text-white">
+                SMS Alerts
+              </span>
+            </div>
+            {plan !== "free" && (
+              <input
+                id="sms-alerts"
+                type="checkbox"
+                checked={prefs.smsEnabled}
+                onChange={(e) =>
+                  setPrefs({ ...prefs, smsEnabled: e.target.checked })
+                }
+                className="size-4 cursor-pointer accent-emerald-500"
+              />
+            )}
+          </div>
+          {plan === "free" ? (
+            <p className="text-[11px] text-zinc-500">
+              SMS alerts are available on Pro and Creator plans.
+            </p>
+          ) : (
+            <div className="space-y-2">
+              <label htmlFor="phone-number" className="sr-only">
+                Phone number
+              </label>
+              <input
+                id="phone-number"
+                type="tel"
+                value={prefs.phoneNumber}
+                onChange={(e) =>
+                  setPrefs({ ...prefs, phoneNumber: e.target.value })
+                }
+                placeholder="+1 (415) 555-0123"
+                className="w-full rounded-xl border border-zinc-800 bg-zinc-900 px-3 py-2 text-xs text-white placeholder-zinc-600 focus:border-emerald-500 focus:outline-none"
+              />
+              <p className="text-[11px] text-zinc-500">
+                Enter your number in international format (e.g. +14155550123).
+              </p>
+            </div>
+          )}
         </div>
 
         {/* Triggers */}

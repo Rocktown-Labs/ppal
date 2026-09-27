@@ -4,6 +4,7 @@ import { notificationQueueMessageSchema } from "@ppal/contracts/queues";
 
 import { decryptValue } from "../lib/crypto";
 import { getUserPlan } from "../lib/entitlements";
+import { sendSms } from "../lib/sent";
 
 export interface NotificationServiceEnv {
   DB: D1Database;
@@ -11,6 +12,8 @@ export interface NotificationServiceEnv {
   RESEND_API_KEY: string;
   RESEND_FROM_EMAIL: string;
   RESEND_REPLY_TO_EMAIL: string;
+  SENT_DM_API_KEY: string;
+  SENT_DM_TEMPLATE_NAME?: string;
   WEB_PUSH_VAPID_PRIVATE_KEY: string;
   WEB_PUSH_VAPID_PUBLIC_KEY: string;
   WEB_PUSH_VAPID_SUBJECT: string;
@@ -94,9 +97,6 @@ export const publishNotification = async ({
   const preferenceClause = preferenceColumn
     ? `AND COALESCE(p.${preferenceColumn}, 1) = 1`
     : "";
-  const plan = await getUserPlan(workerEnv.DB, userId);
-  const includeEmail = plan !== "free";
-
   const fragments: string[] = [
     `SELECT 'push' AS channel, d.token_hash AS destination FROM device_tokens d
      LEFT JOIN notification_preferences p ON p.user_id = d.user_id
@@ -104,7 +104,24 @@ export const publishNotification = async ({
   ];
   const bindings: string[] = [userId];
 
-  if (includeEmail) {
+  // Free users get email, push, and web push. SMS is Pro/Creator only.
+  const plan = await getUserPlan(workerEnv.DB, userId);
+  const includeSms = plan !== "free";
+
+  if (includeSms) {
+    fragments.push(
+      `SELECT 'email' AS channel, u.email AS destination FROM user u
+       LEFT JOIN notification_preferences p ON p.user_id = u.id
+       WHERE u.id = ? AND COALESCE(p.email_enabled, 1) = 1 ${preferenceClause}`
+    );
+    bindings.push(userId);
+    fragments.push(
+      `SELECT 'sms' AS channel, u.phone_number AS destination FROM user u
+       LEFT JOIN notification_preferences p ON p.user_id = u.id
+       WHERE u.id = ? AND u.phone_number IS NOT NULL AND COALESCE(p.sms_enabled, 0) = 1 ${preferenceClause}`
+    );
+    bindings.push(userId);
+  } else {
     fragments.push(
       `SELECT 'email' AS channel, u.email AS destination FROM user u
        LEFT JOIN notification_preferences p ON p.user_id = u.id
@@ -160,7 +177,7 @@ export const publishNotification = async ({
 interface DeliveryRow {
   auth: string | null;
   body: string;
-  channel: "email" | "push" | "web_push";
+  channel: "email" | "push" | "sms" | "web_push";
   destination: string;
   id: string;
   notification_id: string;
@@ -370,6 +387,21 @@ export const processNotificationMessage = async (
   try {
     if (delivery.channel === "web_push") {
       await processWebPushDelivery(delivery, workerEnv);
+      return;
+    }
+
+    if (delivery.channel === "sms") {
+      if (!workerEnv.SENT_DM_API_KEY) {
+        throw new Error("SENT_DM_API_KEY is not configured");
+      }
+      const result = await sendSms({
+        apiKey: workerEnv.SENT_DM_API_KEY,
+        sandbox: false,
+        templateName: workerEnv.SENT_DM_TEMPLATE_NAME,
+        text: `${delivery.title}\n\n${delivery.body}`,
+        to: delivery.destination,
+      });
+      await markDeliveryDelivered(delivery, workerEnv, result.messageId);
       return;
     }
 

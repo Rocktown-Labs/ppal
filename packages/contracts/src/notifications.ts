@@ -5,7 +5,9 @@ export const notificationPreferencesSchema = z.object({
   inAppEnabled: z.boolean(),
   legLost: z.boolean(),
   legWon: z.boolean(),
+  phoneNumber: z.string().nullable(),
   pushEnabled: z.boolean(),
+  smsEnabled: z.boolean(),
   ticketLost: z.boolean(),
   ticketWon: z.boolean(),
 });

@@ -71,6 +71,7 @@ jobs:
           RESEND_FROM_EMAIL: ${{ vars.RESEND_FROM_EMAIL || 'noreply@support.myparlaypal.com' }}
           RESEND_REPLY_TO_EMAIL: ${{ vars.RESEND_REPLY_TO_EMAIL || 'support@myparlaypal.com' }}
           REVENUECAT_WEBHOOK_SECRET: ${{ secrets.REVENUECAT_WEBHOOK_SECRET }}
+          SENT_DM_API_KEY: ${{ secrets.SENT_DM_API_KEY }}
           SPORTRADAR_API_KEY: ${{ secrets.SPORTRADAR_API_KEY }}
           STRIPE_CREATOR_PRICE_ID: ${{ secrets.STRIPE_CREATOR_PRICE_ID }}
           STRIPE_PRICE_CREATOR_YEARLY: ${{ secrets.STRIPE_PRICE_CREATOR_YEARLY }}

@@ -176,6 +176,9 @@ export const server = Cloudflare.Worker("server", {
     SPORTRADAR_ROLLING_WINDOW_DAYS: Config.string(
       "SPORTRADAR_ROLLING_WINDOW_DAYS"
     ).pipe(Config.withDefault("30")),
+    SENT_DM_API_KEY: Config.redacted("SENT_DM_API_KEY").pipe(
+      Config.withDefault(Redacted.make(""))
+    ),
     SPORTS_QUEUE: sportsQueue,
     UPLOAD_RATE_LIMIT: Cloudflare.RateLimit("upload-rate-limit", {
       namespaceId: rateLimitNamespaceOffset + 1002,

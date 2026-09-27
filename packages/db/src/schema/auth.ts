@@ -23,6 +23,7 @@ export const user = sqliteTable("user", {
   id: text("id").primaryKey(),
   image: text("image"),
   name: text("name").notNull(),
+  phoneNumber: text("phone_number"),
   referralCode: text("referral_code").unique(),
   role: text("role").default("user").notNull(),
   stripeCustomerId: text("stripe_customer_id").unique(),

@@ -311,15 +311,21 @@ export const createNotificationRoutes = (auth: Auth) =>
         }
         const input = c.req.valid("json");
         await env.DB.prepare(
+          "UPDATE user SET phone_number = ?, updated_at = ? WHERE id = ?"
+        )
+          .bind(input.phoneNumber ?? null, Date.now(), user.id)
+          .run();
+        await env.DB.prepare(
           `INSERT INTO notification_preferences (
             email_enabled, in_app_enabled, leg_lost, leg_won, push_enabled,
-            ticket_lost, ticket_won, updated_at, user_id
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            sms_enabled, ticket_lost, ticket_won, updated_at, user_id
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
           ON CONFLICT(user_id) DO UPDATE SET
             email_enabled = excluded.email_enabled,
             in_app_enabled = excluded.in_app_enabled,
             leg_lost = excluded.leg_lost, leg_won = excluded.leg_won,
             push_enabled = excluded.push_enabled,
+            sms_enabled = excluded.sms_enabled,
             ticket_lost = excluded.ticket_lost, ticket_won = excluded.ticket_won,
             updated_at = excluded.updated_at`
         )
@@ -329,6 +335,7 @@ export const createNotificationRoutes = (auth: Auth) =>
             Number(input.legLost),
             Number(input.legWon),
             Number(input.pushEnabled),
+            Number(input.smsEnabled),
             Number(input.ticketLost),
             Number(input.ticketWon),
             Date.now(),

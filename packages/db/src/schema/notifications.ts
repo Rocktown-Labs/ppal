@@ -23,6 +23,9 @@ export const notificationPreferences = sqliteTable("notification_preferences", {
   pushEnabled: integer("push_enabled", { mode: "boolean" })
     .notNull()
     .default(true),
+  smsEnabled: integer("sms_enabled", { mode: "boolean" })
+    .notNull()
+    .default(false),
   ticketLost: integer("ticket_lost", { mode: "boolean" })
     .notNull()
     .default(true),
