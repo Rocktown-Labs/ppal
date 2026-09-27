@@ -58,3 +58,37 @@ DATA_ENCRYPTION_KEY=<value>
 ```
 
 If you do not set it locally, the app runs in plaintext fallback mode so tests and local hacking keep working.
+
+# Sent.dm SMS Setup
+
+SMS delivery is integrated via Sent.dm for Pro/Creator subscribers who opt in and store a phone number.
+
+## Required credentials
+
+- `SENT_DM_API_KEY` — your Sent.dm workspace API key.
+- `SENT_DM_TEMPLATE_NAME` (optional) — name of an approved Sent.dm template for the first outgoing message to a new contact.
+
+## Where to set it
+
+Add to `packages/infra/.env` and as a GitHub Actions secret named `SENT_DM_API_KEY`:
+
+```bash
+SENT_DM_API_KEY=<your-sent-api-key>
+SENT_DM_TEMPLATE_NAME=<template-name>
+```
+
+## Before first production send
+
+1. Apply the latest D1 migration so `user.phone_number` and `notification_preferences.sms_enabled` exist.
+2. Confirm `SENT_DM_API_KEY` is configured as a Cloudflare Worker secret.
+3. Sent.dm normally requires an approved template to start a conversation with a new contact; configure `SENT_DM_TEMPLATE_NAME` if your first message must use one.
+
+## Local development
+
+Copy the key into `apps/server/.dev.vars`:
+
+```text
+SENT_DM_API_KEY=<your-sent-api-key>
+```
+
+If it is absent, the SMS route will throw and the delivery will be marked failed; other channels continue to work.
