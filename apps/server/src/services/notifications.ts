@@ -42,6 +42,21 @@ const getPreferenceColumn = (notificationType: string): string | null => {
   return null;
 };
 
+// SMS is reserved for terminal settlement results so message volume stays
+// within the registered 10DLC frequency cap. Progress ticks and other
+// non-settlement events stay in-app, push, and email only.
+const smsEligibleTypes = new Set([
+  "ticket.lost",
+  "ticket.partially_void",
+  "ticket.push",
+  "ticket.settled",
+  "ticket.void",
+  "ticket.won",
+]);
+
+export const shouldSendSms = (notificationType: string): boolean =>
+  smsEligibleTypes.has(notificationType);
+
 const isWebPushConfigured = (workerEnv: NotificationServiceEnv): boolean =>
   Boolean(
     workerEnv.WEB_PUSH_VAPID_PUBLIC_KEY &&
@@ -104,28 +119,23 @@ export const publishNotification = async ({
   ];
   const bindings: string[] = [userId];
 
-  // Free users get email, push, and web push. SMS is Pro/Creator only.
+  // Email goes to everyone. SMS is Pro/Creator only and settlement-only,
+  // so the message count stays under the 10DLC frequency cap.
   const plan = await getUserPlan(workerEnv.DB, userId);
-  const includeSms = plan !== "free";
+  const includeSms = plan !== "free" && shouldSendSms(type);
+
+  fragments.push(
+    `SELECT 'email' AS channel, u.email AS destination FROM user u
+     LEFT JOIN notification_preferences p ON p.user_id = u.id
+     WHERE u.id = ? AND COALESCE(p.email_enabled, 1) = 1 ${preferenceClause}`
+  );
+  bindings.push(userId);
 
   if (includeSms) {
-    fragments.push(
-      `SELECT 'email' AS channel, u.email AS destination FROM user u
-       LEFT JOIN notification_preferences p ON p.user_id = u.id
-       WHERE u.id = ? AND COALESCE(p.email_enabled, 1) = 1 ${preferenceClause}`
-    );
-    bindings.push(userId);
     fragments.push(
       `SELECT 'sms' AS channel, u.phone_number AS destination FROM user u
        LEFT JOIN notification_preferences p ON p.user_id = u.id
        WHERE u.id = ? AND u.phone_number IS NOT NULL AND COALESCE(p.sms_enabled, 0) = 1 ${preferenceClause}`
-    );
-    bindings.push(userId);
-  } else {
-    fragments.push(
-      `SELECT 'email' AS channel, u.email AS destination FROM user u
-       LEFT JOIN notification_preferences p ON p.user_id = u.id
-       WHERE u.id = ? AND COALESCE(p.email_enabled, 1) = 1 ${preferenceClause}`
     );
     bindings.push(userId);
   }
