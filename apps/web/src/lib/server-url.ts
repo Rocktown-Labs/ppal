@@ -62,8 +62,17 @@ export const normalizeServerUrl = (value: string): string => {
 /**
  * Resolve the configured API origin, falling back when a static web build did
  * not receive VITE_SERVER_URL from its deployment environment.
+ *
+ * In development the browser always talks to the Vite dev server, which
+ * proxies `/api` to the local Worker. Same-origin requests keep Better Auth
+ * session cookies first-party — browsers block cross-site cookies, and
+ * `localhost` (the page) and `127.0.0.1` (the Worker) are different sites.
  */
 export const resolveServerUrl = (value: string): string => {
+  if (typeof window !== "undefined" && import.meta.env.DEV) {
+    return window.location.origin;
+  }
+
   const normalized = normalizeServerUrl(value);
   return normalized || getBrowserFallbackServerUrl();
 };

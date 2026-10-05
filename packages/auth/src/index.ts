@@ -224,7 +224,9 @@ export const createAuth = () => {
     user: {
       additionalFields: {
         termsAccepted: {
-          fieldName: "terms_accepted",
+          // Note: `fieldName` must match the Drizzle property key
+          // (`termsAccepted`), not the SQL column — Drizzle maps the
+          // property to the `terms_accepted` column itself.
           required: false,
           returned: false,
           type: "boolean",
@@ -304,8 +306,13 @@ export const createAuth = () => {
     session: {
       cookieCache: {
         enabled: true,
-        maxAge: 60,
+        maxAge: 60 * 5,
       },
+      // Hold sign-ins for as long as possible: a session lasts 30 days and
+      // is renewed for another 30 whenever a session older than a week is
+      // used again, so active users never have to re-authenticate.
+      expiresIn: 60 * 60 * 24 * 30,
+      updateAge: 60 * 60 * 24 * 7,
     },
     secret: env.BETTER_AUTH_SECRET,
     baseURL: env.BETTER_AUTH_URL,

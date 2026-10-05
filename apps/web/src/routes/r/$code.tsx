@@ -81,7 +81,7 @@ const ReferralLandingComponent = () => {
         await navigate({ to: "/dashboard" });
         return;
       }
-      await navigate({ to: "/login" });
+      await navigate({ to: "/auth/sign-in" });
     } catch (error) {
       clearReferralIntent();
       toast.error(
@@ -118,7 +118,7 @@ const ReferralLandingComponent = () => {
           </Link>
 
           <Link
-            to="/login"
+            to="/auth/sign-in"
             className="rounded-xl border border-zinc-800 bg-zinc-900 px-3.5 py-1.5 text-xs font-semibold text-zinc-200 transition hover:border-zinc-700 hover:text-white"
           >
             Sign In
@@ -222,7 +222,7 @@ const ReferralLandingComponent = () => {
             </div>
 
             <Link
-              to="/login"
+              to="/auth/sign-in"
               className="inline-flex h-11 items-center justify-center rounded-xl bg-emerald-500 px-6 text-xs font-bold text-black transition hover:bg-emerald-400"
             >
               Continue to ParlayPal

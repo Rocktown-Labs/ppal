@@ -16,6 +16,12 @@ const getServerUrl = (url: string) => {
     return normalizeServerUrl(processEnv.SERVER_URL);
   }
 
+  if (typeof window !== "undefined" && import.meta.env.DEV) {
+    // Dev browsers reach the API through the Vite `/api` proxy so session
+    // cookies stay first-party. See `resolveServerUrl` for the rationale.
+    return window.location.origin;
+  }
+
   const normalized = normalizeServerUrl(url);
 
   if (!normalized) {

@@ -118,6 +118,11 @@ export const communityChatMessageSchema = z.object({
   type: z.literal("message"),
 });
 
+/** Emoji reaction payload; toggles the caller's reaction on a message. */
+export const messageReactionRequestSchema = z.object({
+  emoji: z.string().trim().min(1).max(16),
+});
+
 export const createCommunityReportRequestSchema = z.object({
   reason: z.string().trim().min(3).max(500),
 });

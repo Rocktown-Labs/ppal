@@ -1,219 +1,99 @@
-import type {
-  WebPushConfig,
-  WebPushSubscription,
-} from "@ppal/contracts/notifications";
-import type {
-  TicketContract,
-  reviewTicketRequestSchema,
-} from "@ppal/contracts/tickets";
-import type {
-  CreateUploadRequest,
-  UploadContract,
-} from "@ppal/contracts/uploads";
-import { env } from "@ppal/env/web";
+import type { InferResponseType } from "@ppal/api";
+import type { WebPushSubscription } from "@ppal/contracts/notifications";
+import type { reviewTicketRequestSchema } from "@ppal/contracts/tickets";
+import type { CreateUploadRequest } from "@ppal/contracts/uploads";
 import type { z } from "zod";
 
-import { resolveServerUrl } from "./server-url";
+import { API_BASE_URL, client } from "./api-client";
+
+export { API_BASE_URL } from "./api-client";
+export type { TicketContract } from "@ppal/contracts/tickets";
+export type { UploadContract } from "@ppal/contracts/uploads";
+export type { WebPushConfig } from "@ppal/contracts/notifications";
 
 export type ReviewTicketRequest = z.infer<typeof reviewTicketRequestSchema>;
 
-export const API_BASE_URL = resolveServerUrl(env.VITE_SERVER_URL);
-const pathSegment = (value: string): string => encodeURIComponent(value);
 const UPLOAD_URL_PATTERN = /^\/api\/v1\/uploads\/[a-z0-9-]+\/content$/iu;
+// ---------------------------------------------------------------------------
+// Response and request types are inferred from the server's route chain —
+// the hand-written duplicates this file used to carry are gone.
+// ---------------------------------------------------------------------------
 
-export interface TimelineEvent {
-  id: string;
-  message: string | null;
-  metadata: Record<string, unknown> | null;
-  occurredAt: string;
-  ticketLegId: string | null;
-  title: string;
-  type: string;
-}
+type CommunityDetail = InferResponseType<
+  (typeof client.api.v1.communities)[":slug"]["$get"],
+  200
+>;
+type TicketTimeline = InferResponseType<
+  (typeof client.api.v1.tickets)[":ticketId"]["timeline"]["$get"],
+  200
+>;
+type MeResponse = InferResponseType<(typeof client.api.v1.me)["$get"], 200>;
+type PublicProfileResponse = InferResponseType<
+  (typeof client.api.v1.profiles)[":username"]["$get"],
+  200
+>;
+type AnalyticsOverviewResponse = InferResponseType<
+  (typeof client.api.v1.analytics)["overview"]["$get"],
+  200
+>;
+type AnalyticsPlayersResponse = InferResponseType<
+  (typeof client.api.v1.analytics)["players"]["$get"],
+  200
+>;
+type NotificationsResponse = InferResponseType<
+  (typeof client.api.v1.notifications)["$get"],
+  200
+>;
+type NotificationSettings = InferResponseType<
+  (typeof client.api.v1.settings)["notifications"]["$get"],
+  200
+>;
+type EntitlementsResponse = InferResponseType<
+  (typeof client.api.v1.billing)["entitlements"]["$get"],
+  200
+>;
+type StripeCatalogResponse = InferResponseType<
+  (typeof client.api.v1.admin)["stripe"]["catalog"]["$get"],
+  200
+>;
+type ReferralsResponse = InferResponseType<
+  (typeof client.api.v1.referrals)["$get"],
+  200
+>;
+type CatalogSearchResponse = InferResponseType<
+  (typeof client.api.v1.catalog)["search"]["$get"],
+  200
+>;
+type JoinedCommunities = InferResponseType<
+  (typeof client.api.v1.communities)["$get"],
+  200
+>;
+type CommunityMessages = InferResponseType<
+  (typeof client.api.v1.communities)[":slug"]["channels"][":channelId"]["messages"]["$get"],
+  200
+>;
 
-export interface AnalyticsOverview {
-  active: number;
-  lost: number;
-  total: number;
-  verified: number;
-  winRate: number | null;
-  won: number;
-}
-
-export interface PlayerSummary {
-  hitRate: number;
-  lost: number;
-  name: string;
-  participantId: string | null;
-  selections: number;
-  sport: string;
-  won: number;
-}
-
-export interface UserProfile {
-  bio: string | null;
-  isPublic: boolean;
-  username: string;
-}
-
-export interface CurrentUserWithProfile {
-  email: string;
-  id: string;
-  image?: string | null;
-  name: string;
-  profile: UserProfile | null;
-  role?: string;
-}
-
-export interface PublicProfile {
-  avatarUrl?: string | null;
-  bio: string | null;
-  followerCount?: number;
-  followers?: number;
-  image?: string | null;
-  losses: number;
-  name: string;
-  username: string;
-  wins: number;
-}
-
-export interface NotificationItem {
-  body: string;
-  createdAt: string;
-  data: Record<string, unknown> | null;
-  id: string;
-  readAt: string | null;
-  ticketId: string | null;
-  title: string;
-  type: string;
-}
-
-export interface NotificationPreferences {
-  emailEnabled: boolean;
-  inAppEnabled: boolean;
-  legLost: boolean;
-  legWon: boolean;
-  phoneNumber: string | null;
-  pushEnabled: boolean;
-  smsEnabled: boolean;
-  ticketLost: boolean;
-  ticketWon: boolean;
-}
-
-export interface CatalogParticipant {
-  id: string;
-  leagueId: string | null;
-  leagueName: string | null;
-  name: string;
-  shortName: string | null;
-  sportId: string;
-  sportName: string;
-  type: "player" | "team";
-}
-
-export interface CatalogMarket {
-  id: string;
-  name: string;
-  slug: string;
-  sportId: string | null;
-  subjectType: "player" | "team" | "game";
-  valueType: "count" | "points" | "binary";
-}
-
-export interface CatalogSportsEvent {
-  awayName: string | null;
-  homeName: string | null;
-  id: string;
-  leagueName: string | null;
-  providerEventId: string;
-  startsAt: string;
-  status: string;
-}
-
-export interface BillingEntitlement {
-  currentPeriodEnd: string | null;
-  plan: "free" | "pro" | "creator";
-  source: string | null;
-  status: string;
-}
-
-export interface StripeCatalogPrice {
-  amountCents: number | null;
-  currency: string | null;
-  id: string | null;
-  interval: "month" | "year";
-  lookupKey: string;
-  status: "missing" | "needs_sync" | "ready";
-}
-
-export interface StripeCatalogPlan {
-  annual: StripeCatalogPrice;
-  monthly: StripeCatalogPrice;
-  plan: "creator" | "pro";
-  product: { id: string; name: string } | null;
-  productStatus: "missing" | "needs_sync" | "ready";
-}
-
-export interface StripeCatalog {
-  plans: StripeCatalogPlan[];
-  secretConfigured: boolean;
-  webhookConfigured: boolean;
-  webhookUrl: string;
-}
-
-export interface ReferralItem {
-  claimedAt: string | null;
-  code: string;
-  completedAt: string | null;
-  createdAt: string;
-  id: string;
-  status: "pending" | "completed" | "expired" | "cancelled";
-}
-
-export interface ReferralSummary {
-  completed: number;
-  pending: number;
-  total: number;
-}
-
-export interface CommunitySummary {
-  access: "free" | "paid";
-  description: string | null;
-  id: string;
-  name: string;
-  ownerUserId: string;
-  priceCents: number | null;
-  rules: string | null;
-  slug: string;
-  visibility: "public" | "private";
-}
-
-export interface CommunityChannel {
-  description: string | null;
-  id: string;
-  isDefault: boolean;
-  name: string;
-  position: number;
-  slug: string;
-}
-
-export interface CommunityMembership {
-  role: "owner" | "moderator" | "member";
-  status: "active" | "pending" | "muted" | "banned";
-}
-
-export interface CommunityMessage {
-  author: { avatarUrl: string | null; name: string; username: string | null };
-  body: string;
-  clientId?: string;
-  createdAt: string;
-  deletedAt: string | null;
-  editedAt: string | null;
-  id: string;
-  mentions: string[];
-  replyToId: string | null;
-}
-
+export type TimelineEvent = TicketTimeline["events"][number];
+export type AnalyticsOverview = AnalyticsOverviewResponse["overview"];
+export type PlayerSummary = AnalyticsPlayersResponse["players"][number];
+export type UserProfile = NonNullable<MeResponse["user"]["profile"]>;
+export type CurrentUserWithProfile = MeResponse["user"];
+export type PublicProfile = PublicProfileResponse["profile"];
+export type NotificationItem = NotificationsResponse["notifications"][number];
+export type NotificationPreferences = NotificationSettings["preferences"];
+export type CatalogParticipant = CatalogSearchResponse["participants"][number];
+export type CatalogMarket = CatalogSearchResponse["markets"][number];
+export type CatalogSportsEvent = CatalogSearchResponse["events"][number];
+export type BillingEntitlement = EntitlementsResponse["entitlement"];
+export type StripeCatalog = StripeCatalogResponse;
+export type StripeCatalogPrice = StripeCatalog["plans"][number]["monthly"];
+export type ReferralItem = ReferralsResponse["referrals"][number];
+export type ReferralSummary = ReferralsResponse["summary"];
+export type CommunitySummary = CommunityDetail["community"];
+export type CommunityChannel = CommunityDetail["channels"][number];
+export type CommunityMembership = NonNullable<CommunityDetail["membership"]>;
+export type CommunityMessage = CommunityMessages["messages"][number];
+export type CommunityWithMembership = JoinedCommunities["communities"][number];
 export interface ManualVerificationRequest {
   legs: {
     id: string;
@@ -223,35 +103,27 @@ export interface ManualVerificationRequest {
   source: "settled_slip" | "manual";
 }
 
-const request = async <T>(path: string, init?: RequestInit): Promise<T> => {
-  const url = path.startsWith("http") ? path : `${API_BASE_URL}${path}`;
-  const response = await fetch(url, {
-    ...init,
-    credentials: "include",
-    headers: {
-      "Content-Type": "application/json",
-      ...init?.headers,
-    },
-  });
+interface RpcErrorBody {
+  code: string;
+  error: string;
+}
 
-  if (!response.ok) {
-    let errorMessage = `API request failed with status ${response.status}`;
-    try {
-      const errorJson = await response.json();
-      if (errorJson && typeof errorJson === "object" && "error" in errorJson) {
-        errorMessage = String(errorJson.error);
-      }
-    } catch {
-      // Non-JSON error body
+/** Read the shared `{ code, error }` contract out of a failed RPC response. */
+const toError = async (res: {
+  json: () => Promise<unknown>;
+}): Promise<Error> => {
+  let message = `API request failed with status ${
+    "status" in res ? (res.status as number) : "unknown"
+  }`;
+  try {
+    const body = (await res.json().catch(() => null)) as RpcErrorBody | null;
+    if (body && typeof body.error === "string") {
+      message = body.error;
     }
-    throw new Error(errorMessage);
+  } catch {
+    // Non-JSON error body.
   }
-
-  if (response.status === 204) {
-    return null as T;
-  }
-
-  return (await response.json()) as T;
+  return new Error(message);
 };
 
 export const calculateSha256 = async (file: Blob): Promise<string> => {
@@ -302,42 +174,74 @@ export const resolveAvatarSource = (
 
 export const api = {
   analytics: {
-    getOverview: () =>
-      request<{ overview: AnalyticsOverview }>("/api/v1/analytics/overview"),
-    getPlayers: () =>
-      request<{ players: PlayerSummary[] }>("/api/v1/analytics/players"),
+    getOverview: async () => {
+      const res = await client.api.v1.analytics.overview.$get();
+      if (!res.ok) {
+        throw await toError(res);
+      }
+      return res.json();
+    },
+
+    getPlayers: async () => {
+      const res = await client.api.v1.analytics.players.$get();
+      if (!res.ok) {
+        throw await toError(res);
+      }
+      return res.json();
+    },
   },
 
   billing: {
-    getEntitlements: () =>
-      request<{ entitlement: BillingEntitlement }>(
-        "/api/v1/billing/entitlements"
-      ),
-    getStripeCatalog: () =>
-      request<StripeCatalog>("/api/v1/admin/stripe/catalog"),
-    syncStripeCatalog: () =>
-      request<StripeCatalog>("/api/v1/admin/stripe/catalog/sync", {
-        method: "POST",
-      }),
+    getEntitlements: async () => {
+      const res = await client.api.v1.billing.entitlements.$get();
+      if (!res.ok) {
+        throw await toError(res);
+      }
+      return res.json();
+    },
+
+    getStripeCatalog: async () => {
+      const res = await client.api.v1.admin.stripe.catalog.$get();
+      if (!res.ok) {
+        throw await toError(res);
+      }
+      return res.json();
+    },
+
+    syncStripeCatalog: async () => {
+      const res = await client.api.v1.admin.stripe.catalog.sync.$post();
+      if (!res.ok) {
+        throw await toError(res);
+      }
+      return res.json();
+    },
   },
 
   catalog: {
-    search: (q: string) =>
-      request<{
-        events: CatalogSportsEvent[];
-        markets: CatalogMarket[];
-        participants: CatalogParticipant[];
-      }>(`/api/v1/catalog/search?q=${encodeURIComponent(q)}`),
+    search: async (q: string) => {
+      const res = await client.api.v1.catalog.search.$get({ query: { q } });
+      if (!res.ok) {
+        throw await toError(res);
+      }
+      return res.json();
+    },
   },
 
   community: {
-    completePaidJoin: (slug: string, sessionId: string) =>
-      request<{ membership: CommunityMembership }>(
-        `/api/v1/communities/${pathSegment(slug)}/join/complete`,
-        { body: JSON.stringify({ sessionId }), method: "POST" }
-      ),
+    completePaidJoin: async (slug: string, sessionId: string) => {
+      const res = await client.api.v1.communities[":slug"]["join"][
+        "complete"
+      ].$post({
+        json: { sessionId },
+        param: { slug },
+      });
+      if (!res.ok) {
+        throw await toError(res);
+      }
+      return res.json();
+    },
 
-    create: (payload: {
+    create: async (payload: {
       access: "free" | "paid";
       description?: string | null;
       name: string;
@@ -345,100 +249,173 @@ export const api = {
       rules?: string | null;
       slug: string;
       visibility: "public" | "private";
-    }) =>
-      request<{
-        community: CommunitySummary & { membership: CommunityMembership };
-      }>("/api/v1/communities", {
-        body: JSON.stringify(payload),
-        method: "POST",
-      }),
+    }) => {
+      const res = await client.api.v1.communities.$post({ json: payload });
+      if (!res.ok) {
+        throw await toError(res);
+      }
+      return res.json();
+    },
 
-    createChannel: (
+    createChannel: async (
       slug: string,
       payload: { description?: string | null; name: string; slug: string }
-    ) =>
-      request<{ channel: CommunityChannel }>(
-        `/api/v1/communities/${pathSegment(slug)}/channels`,
-        { body: JSON.stringify(payload), method: "POST" }
-      ),
+    ) => {
+      const res = await client.api.v1.communities[":slug"].channels.$post({
+        json: payload,
+        param: { slug },
+      });
+      if (!res.ok) {
+        throw await toError(res);
+      }
+      return res.json();
+    },
 
-    follow: (username: string) =>
-      request<{ following: boolean }>(
-        `/api/v1/profiles/${pathSegment(username)}/follow`,
-        {
-          method: "POST",
-        }
-      ),
+    follow: async (username: string) => {
+      const res = await client.api.v1.profiles[":username"].follow.$post({
+        param: { username },
+      });
+      if (!res.ok) {
+        throw await toError(res);
+      }
+      return res.json();
+    },
 
-    get: (slug: string) =>
-      request<{
-        channels: CommunityChannel[];
-        community: CommunitySummary;
-        membership: CommunityMembership | null;
-      }>(`/api/v1/communities/${pathSegment(slug)}`),
+    get: async (slug: string) => {
+      const res = await client.api.v1.communities[":slug"].$get({
+        param: { slug },
+      });
+      if (!res.ok) {
+        throw await toError(res);
+      }
+      return res.json();
+    },
 
-    getMe: () => request<{ user: CurrentUserWithProfile }>("/api/v1/me"),
+    /** Public bettor directory ordered by follower count. */
+    getBettors: async () => {
+      const res = await client.api.v1.profiles.$get();
+      if (!res.ok) {
+        throw await toError(res);
+      }
+      return res.json();
+    },
 
-    getMessages: (
+    getMe: async () => {
+      const res = await client.api.v1.me.$get();
+      if (!res.ok) {
+        throw await toError(res);
+      }
+      return res.json();
+    },
+
+    getMembers: async (slug: string) => {
+      const res = await client.api.v1.communities[":slug"].members.$get({
+        param: { slug },
+      });
+      if (!res.ok) {
+        throw await toError(res);
+      }
+      return res.json();
+    },
+
+    getMessages: async (
       slug: string,
       channelId: string,
       params?: { cursor?: string; limit?: number }
     ) => {
-      const search = new URLSearchParams();
-      if (params?.cursor) {
-        search.set("cursor", params.cursor);
+      const res = await client.api.v1.communities[":slug"].channels[
+        ":channelId"
+      ].messages.$get({
+        param: { channelId, slug },
+        query: {
+          ...(params?.cursor ? { cursor: params.cursor } : {}),
+          ...(params?.limit ? { limit: String(params.limit) } : {}),
+        },
+      });
+      if (!res.ok) {
+        throw await toError(res);
       }
-      if (params?.limit) {
-        search.set("limit", String(params.limit));
-      }
-      const query = search.toString();
-      return request<{
-        messages: CommunityMessage[];
-        nextCursor: string | null;
-      }>(
-        `/api/v1/communities/${pathSegment(slug)}/channels/${pathSegment(channelId)}/messages${query ? `?${query}` : ""}`
-      );
+      return res.json();
     },
 
-    getMine: () =>
-      request<{
-        communities: (CommunitySummary & { membership: CommunityMembership })[];
-      }>("/api/v1/communities"),
+    getMine: async () => {
+      const res = await client.api.v1.communities.$get();
+      if (!res.ok) {
+        throw await toError(res);
+      }
+      return res.json();
+    },
 
-    getPublic: (limit = 50) =>
-      request<{ communities: CommunitySummary[] }>(
-        `/api/v1/communities/public?limit=${limit}`
-      ),
+    getPublic: async (limit = 50) => {
+      const res = await client.api.v1.communities.public.$get({
+        query: { limit: String(limit) },
+      });
+      if (!res.ok) {
+        throw await toError(res);
+      }
+      return res.json();
+    },
 
-    getPublicProfile: (username: string) =>
-      request<{ profile: PublicProfile }>(
-        `/api/v1/profiles/${pathSegment(username)}`
-      ),
+    getPublicProfile: async (username: string) => {
+      const res = await client.api.v1.profiles[":username"].$get({
+        param: { username },
+      });
+      if (!res.ok) {
+        throw await toError(res);
+      }
+      return res.json();
+    },
 
-    join: (slug: string) =>
-      request<{
-        checkoutUrl?: string | null;
-        membership?: CommunityMembership;
-      }>(`/api/v1/communities/${pathSegment(slug)}/join`, { method: "POST" }),
+    join: async (slug: string) => {
+      const res = await client.api.v1.communities[":slug"].join.$post({
+        param: { slug },
+      });
+      if (!res.ok) {
+        throw await toError(res);
+      }
+      return res.json();
+    },
 
-    unfollow: (username: string) =>
-      request<{ following: boolean }>(
-        `/api/v1/profiles/${pathSegment(username)}/follow`,
-        {
-          method: "DELETE",
-        }
-      ),
+    toggleReaction: async (
+      slug: string,
+      channelId: string,
+      messageId: string,
+      emoji: string
+    ) => {
+      const res = await client.api.v1.communities[":slug"].channels[
+        ":channelId"
+      ].messages[":messageId"].reactions.$post({
+        json: { emoji },
+        param: { channelId, messageId, slug },
+      });
+      if (!res.ok) {
+        throw await toError(res);
+      }
+      return res.json();
+    },
 
-    updateMe: (payload: {
+    unfollow: async (username: string) => {
+      const res = await client.api.v1.profiles[":username"].follow.$delete({
+        param: { username },
+      });
+      if (!res.ok) {
+        throw await toError(res);
+      }
+      return res.json();
+    },
+
+    updateMe: async (payload: {
       bio?: string | null;
       isPublic?: boolean;
       name?: string;
       username?: string;
-    }) =>
-      request<{ updated: boolean }>("/api/v1/me", {
-        body: JSON.stringify(payload),
-        method: "PATCH",
-      }),
+    }) => {
+      const res = await client.api.v1.me.$patch({ json: payload });
+      if (!res.ok) {
+        throw await toError(res);
+      }
+      return res.json();
+    },
 
     uploadAvatar: async (file: File) => {
       const formData = new FormData();
@@ -469,163 +446,225 @@ export const api = {
   },
 
   notifications: {
-    getSettings: () =>
-      request<{ preferences: NotificationPreferences }>(
-        "/api/v1/settings/notifications"
-      ),
+    getSettings: async () => {
+      const res = await client.api.v1.settings.notifications.$get();
+      if (!res.ok) {
+        throw await toError(res);
+      }
+      return res.json();
+    },
 
-    getWebPushConfig: () =>
-      request<WebPushConfig>("/api/v1/notifications/web-push/config"),
+    getWebPushConfig: async () => {
+      const res = await client.api.v1.notifications["web-push"].config.$get();
+      if (!res.ok) {
+        throw await toError(res);
+      }
+      return res.json();
+    },
 
-    list: () =>
-      request<{ notifications: NotificationItem[] }>("/api/v1/notifications"),
+    list: async () => {
+      const res = await client.api.v1.notifications.$get();
+      if (!res.ok) {
+        throw await toError(res);
+      }
+      return res.json();
+    },
 
-    markRead: (id: string) =>
-      request<{ read: boolean }>(
-        `/api/v1/notifications/${pathSegment(id)}/read`,
-        {
-          method: "PATCH",
-        }
-      ),
+    markRead: async (id: string) => {
+      const res = await client.api.v1.notifications[
+        ":notificationId"
+      ].read.$patch({
+        param: { notificationId: id },
+      });
+      if (!res.ok) {
+        throw await toError(res);
+      }
+      return res.json();
+    },
 
-    removeWebPushSubscription: (endpoint: string) =>
-      request<{ deleted: boolean }>(
-        "/api/v1/notifications/web-push/subscription",
-        {
-          body: JSON.stringify({ endpoint }),
-          method: "DELETE",
-        }
-      ),
+    removeWebPushSubscription: async (endpoint: string) => {
+      const res = await client.api.v1.notifications[
+        "web-push"
+      ].subscription.$delete({
+        json: { endpoint },
+      });
+      if (!res.ok) {
+        throw await toError(res);
+      }
+      return res.json();
+    },
 
-    saveWebPushSubscription: (payload: WebPushSubscription) =>
-      request<{ subscribed: boolean }>(
-        "/api/v1/notifications/web-push/subscription",
-        {
-          body: JSON.stringify(payload),
-          method: "PUT",
-        }
-      ),
+    saveWebPushSubscription: async (payload: WebPushSubscription) => {
+      const res = await client.api.v1.notifications[
+        "web-push"
+      ].subscription.$put({
+        json: payload,
+      });
+      if (!res.ok) {
+        throw await toError(res);
+      }
+      return res.json();
+    },
 
-    updateSettings: (payload: NotificationPreferences) =>
-      request<{ preferences: NotificationPreferences }>(
-        "/api/v1/settings/notifications",
-        {
-          body: JSON.stringify(payload),
-          method: "PATCH",
-        }
-      ),
+    updateSettings: async (payload: NotificationPreferences) => {
+      const res = await client.api.v1.settings.notifications.$patch({
+        json: payload,
+      });
+      if (!res.ok) {
+        throw await toError(res);
+      }
+      return res.json();
+    },
   },
 
   referrals: {
-    claim: (code: string) =>
-      request<{ claimed: boolean; referralId: string }>(
-        `/api/v1/referrals/${pathSegment(code)}/claim`,
-        {
-          method: "POST",
-        }
-      ),
+    claim: async (code: string) => {
+      const res = await client.api.v1.referrals[":code"].claim.$post({
+        param: { code },
+      });
+      if (!res.ok) {
+        throw await toError(res);
+      }
+      return res.json();
+    },
 
-    createCode: () =>
-      request<{ code: string; shareUrl: string }>("/api/v1/referrals", {
-        method: "POST",
-      }),
+    createCode: async () => {
+      const res = await client.api.v1.referrals.$post();
+      if (!res.ok) {
+        throw await toError(res);
+      }
+      return res.json();
+    },
 
-    get: () =>
-      request<{
-        code: string;
-        referrals: ReferralItem[];
-        shareUrl: string;
-        summary: ReferralSummary;
-      }>("/api/v1/referrals"),
+    get: async () => {
+      const res = await client.api.v1.referrals.$get();
+      if (!res.ok) {
+        throw await toError(res);
+      }
+      return res.json();
+    },
 
-    getByCode: (code: string) =>
-      request<{
-        referral: {
-          available: boolean;
-          code: string;
-        };
-      }>(`/api/v1/referrals/${pathSegment(code)}`),
+    getByCode: async (code: string) => {
+      const res = await client.api.v1.referrals[":code"].$get({
+        param: { code },
+      });
+      if (!res.ok) {
+        throw await toError(res);
+      }
+      return res.json();
+    },
   },
 
   tickets: {
-    cancel: (ticketId: string) =>
-      request<{ ticket: TicketContract }>(
-        `/api/v1/tickets/${pathSegment(ticketId)}/cancel`,
-        {
-          method: "POST",
-        }
-      ),
-
-    confirm: (ticketId: string) =>
-      request<{ ticket: TicketContract }>(
-        `/api/v1/tickets/${pathSegment(ticketId)}/confirm`,
-        {
-          method: "POST",
-        }
-      ),
-
-    delete: (ticketId: string) =>
-      request<null>(`/api/v1/tickets/${pathSegment(ticketId)}`, {
-        method: "DELETE",
-      }),
-
-    get: (ticketId: string) =>
-      request<{ ticket: TicketContract }>(
-        `/api/v1/tickets/${pathSegment(ticketId)}`
-      ),
-
-    list: (params?: { cursor?: string; limit?: number }) => {
-      const search = new URLSearchParams();
-      if (params?.cursor) {
-        search.set("cursor", params.cursor);
+    cancel: async (ticketId: string) => {
+      const res = await client.api.v1.tickets[":ticketId"].cancel.$post({
+        param: { ticketId },
+      });
+      if (!res.ok) {
+        throw await toError(res);
       }
-      if (params?.limit) {
-        search.set("limit", String(params.limit));
-      }
-      const qs = search.toString();
-      return request<{ nextCursor: string | null; tickets: TicketContract[] }>(
-        `/api/v1/tickets${qs ? `?${qs}` : ""}`
-      );
+      return res.json();
     },
 
-    manualSettlement: (ticketId: string, payload: ManualVerificationRequest) =>
-      request<{ ticket: TicketContract }>(
-        `/api/v1/tickets/${pathSegment(ticketId)}/manual-settlement`,
-        {
-          body: JSON.stringify(payload),
-          method: "POST",
-        }
-      ),
+    confirm: async (ticketId: string) => {
+      const res = await client.api.v1.tickets[":ticketId"].confirm.$post({
+        param: { ticketId },
+      });
+      if (!res.ok) {
+        throw await toError(res);
+      }
+      return res.json();
+    },
 
-    review: (ticketId: string, payload: ReviewTicketRequest) =>
-      request<{ ticket: TicketContract }>(
-        `/api/v1/tickets/${pathSegment(ticketId)}/review`,
-        {
-          body: JSON.stringify(payload),
-          method: "PATCH",
-        }
-      ),
+    delete: async (ticketId: string) => {
+      const res = await client.api.v1.tickets[":ticketId"].$delete({
+        param: { ticketId },
+      });
+      if (!res.ok) {
+        throw await toError(res);
+      }
+      return null;
+    },
 
-    timeline: (ticketId: string) =>
-      request<{ events: TimelineEvent[] }>(
-        `/api/v1/tickets/${pathSegment(ticketId)}/timeline`
-      ),
+    get: async (ticketId: string) => {
+      const res = await client.api.v1.tickets[":ticketId"].$get({
+        param: { ticketId },
+      });
+      if (!res.ok) {
+        throw await toError(res);
+      }
+      return res.json();
+    },
+
+    list: async (params?: { cursor?: string; limit?: number }) => {
+      const res = await client.api.v1.tickets.$get({
+        query: {
+          ...(params?.cursor ? { cursor: params.cursor } : {}),
+          ...(params?.limit ? { limit: String(params.limit) } : {}),
+        },
+      });
+      if (!res.ok) {
+        throw await toError(res);
+      }
+      return res.json();
+    },
+
+    manualSettlement: async (
+      ticketId: string,
+      payload: ManualVerificationRequest
+    ) => {
+      const res = await client.api.v1.tickets[":ticketId"][
+        "manual-settlement"
+      ].$post({
+        json: payload,
+        param: { ticketId },
+      });
+      if (!res.ok) {
+        throw await toError(res);
+      }
+      return res.json();
+    },
+
+    review: async (ticketId: string, payload: ReviewTicketRequest) => {
+      const res = await client.api.v1.tickets[":ticketId"].review.$patch({
+        json: payload,
+        param: { ticketId },
+      });
+      if (!res.ok) {
+        throw await toError(res);
+      }
+      return res.json();
+    },
+
+    timeline: async (ticketId: string) => {
+      const res = await client.api.v1.tickets[":ticketId"].timeline.$get({
+        param: { ticketId },
+      });
+      if (!res.ok) {
+        throw await toError(res);
+      }
+      return res.json();
+    },
   },
 
   uploads: {
-    createIntent: (payload: CreateUploadRequest) =>
-      request<{ upload: UploadContract; uploadUrl: string }>(
-        "/api/v1/uploads/intents",
-        {
-          body: JSON.stringify(payload),
-          method: "POST",
-        }
-      ),
+    createIntent: async (payload: CreateUploadRequest) => {
+      const res = await client.api.v1.uploads.intents.$post({ json: payload });
+      if (!res.ok) {
+        throw await toError(res);
+      }
+      return res.json();
+    },
 
-    get: (uploadId: string) =>
-      request<{ upload: UploadContract }>(
-        `/api/v1/uploads/${pathSegment(uploadId)}`
-      ),
+    get: async (uploadId: string) => {
+      const res = await client.api.v1.uploads[":uploadId"].$get({
+        param: { uploadId },
+      });
+      if (!res.ok) {
+        throw await toError(res);
+      }
+      return res.json();
+    },
 
     uploadContent: async (uploadUrl: string, file: Blob) => {
       if (!UPLOAD_URL_PATTERN.test(uploadUrl)) {
@@ -643,7 +682,7 @@ export const api = {
       if (!response.ok) {
         let err = `Upload failed with status ${response.status}`;
         try {
-          const res = await response.json();
+          const res = (await response.json()) as { error?: string };
           if (res?.error) {
             err = res.error;
           }

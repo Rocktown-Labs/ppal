@@ -1,9 +1,11 @@
 import { zValidator } from "@hono/zod-validator";
 import type { Auth } from "@ppal/auth";
 import {
+  communityChatMessageSchema,
   createCommunityChannelRequestSchema,
   createCommunityReportRequestSchema,
   createCommunityRequestSchema,
+  messageReactionRequestSchema,
   moderateCommunityMemberRequestSchema,
   resolveCommunityReportRequestSchema,
   updateCommunityChannelRequestSchema,
@@ -75,8 +77,12 @@ interface CommunityRow {
   archived_at: number | null;
   description: string | null;
   id: string;
+  /** Active member count; joined in listing queries, optional otherwise. */
+  member_count?: number;
   name: string;
   owner_user_id: string;
+  /** Owner handle; joined from profiles, optional in queries that omit it. */
+  owner_username?: string | null;
   price_cents: number | null;
   rules: string | null;
   slug: string;
@@ -88,7 +94,55 @@ interface MembershipRow {
   status: "active" | "pending" | "muted" | "banned";
 }
 
-const unauthorized = (c: Context): Response =>
+/** Chat message payload returned by the channel history and send endpoints. */
+interface ChannelMessagePayload {
+  author: { avatarUrl: string | null; name: string; username: string | null };
+  body: string;
+  clientId?: string;
+  createdAt: string;
+  deletedAt: string | null;
+  editedAt: string | null;
+  id: string;
+  mentions: string[];
+  reactions: ReactionSummary[];
+  replyToId: string | null;
+}
+
+interface ReactionSummary {
+  count: number;
+  emoji: string;
+  mine: boolean;
+}
+
+/** Aggregates reactions for a page of messages, flagging the viewer's own. */
+const reactionsByMessage = async (
+  messageIds: string[],
+  viewerId: string | null
+): Promise<Map<string, ReactionSummary[]>> => {
+  if (messageIds.length === 0) {
+    return new Map();
+  }
+  const placeholders = messageIds.map(() => "?").join(", ");
+  const rows = await env.DB.prepare(
+    `SELECT r.message_id, r.emoji, COUNT(*) AS count,
+            MAX(CASE WHEN r.user_id = ? THEN 1 ELSE 0 END) AS mine
+       FROM community_message_reactions r
+      WHERE r.message_id IN (${placeholders})
+      GROUP BY r.message_id, r.emoji
+      ORDER BY count DESC, r.emoji`
+  )
+    .bind(viewerId ?? "", ...messageIds)
+    .all<{ count: number; emoji: string; message_id: string; mine: number }>();
+  const grouped = new Map<string, ReactionSummary[]>();
+  for (const row of rows.results) {
+    const list = grouped.get(row.message_id) ?? [];
+    list.push({ count: row.count, emoji: row.emoji, mine: row.mine === 1 });
+    grouped.set(row.message_id, list);
+  }
+  return grouped;
+};
+
+const unauthorized = (c: Context) =>
   c.json({ code: "UNAUTHORIZED", error: "Unauthorized" }, 401);
 
 const creatorCanCreate = async (userId: string): Promise<boolean> => {
@@ -107,9 +161,14 @@ const creatorCanCreate = async (userId: string): Promise<boolean> => {
 
 const getCommunity = (slug: string): Promise<CommunityRow | null> =>
   env.DB.prepare(
-    `SELECT access, archived_at, description, id, name, owner_user_id,
-            price_cents, rules, slug, visibility
-       FROM communities WHERE slug = ? AND archived_at IS NULL`
+    `SELECT c.access, c.archived_at, c.description, c.id, c.name,
+            c.owner_user_id, c.price_cents, c.rules, c.slug, c.visibility,
+            COALESCE(p.username, '') AS owner_username,
+            (SELECT COUNT(*) FROM community_members m
+              WHERE m.community_id = c.id AND m.status = 'active') AS member_count
+       FROM communities c
+       LEFT JOIN profiles p ON p.user_id = c.owner_user_id
+      WHERE c.slug = ? AND c.archived_at IS NULL`
   )
     .bind(slug)
     .first<CommunityRow>();
@@ -138,8 +197,10 @@ const communityResponse = (community: CommunityRow) => ({
   access: community.access,
   description: community.description,
   id: community.id,
+  memberCount: community.member_count ?? null,
   name: community.name,
   ownerUserId: community.owner_user_id,
+  ownerUsername: community.owner_username || null,
   priceCents: community.price_cents,
   rules: community.rules,
   slug: community.slug,
@@ -151,7 +212,7 @@ const stripeClient = (): StripeSdk | null => {
   return key ? new StripeSdk(key) : null;
 };
 
-const uploadAvatar = async (c: Context, auth: Auth): Promise<Response> => {
+const uploadAvatar = async (c: Context, auth: Auth) => {
   const user = await getAuthUser(auth, c.req.raw.headers, {
     authoritative: true,
   });
@@ -247,10 +308,7 @@ const uploadAvatar = async (c: Context, auth: Auth): Promise<Response> => {
 
 type UpdateProfileInput = z.infer<typeof updateProfileRequestSchema>;
 
-export const getCurrentUserProfile = async (
-  c: Context,
-  auth: Auth
-): Promise<Response> => {
+const getCurrentUserProfile = async (c: Context, auth: Auth) => {
   const user = await getAuthUser(auth, c.req.raw.headers, {
     authoritative: true,
   });
@@ -276,11 +334,11 @@ export const getCurrentUserProfile = async (
   });
 };
 
-export const updateCurrentUserProfile = async (
+const updateCurrentUserProfile = async (
   c: Context,
   auth: Auth,
   input: UpdateProfileInput
-): Promise<Response> => {
+) => {
   const user = await getAuthUser(auth, c.req.raw.headers, {
     authoritative: true,
   });
@@ -590,19 +648,44 @@ export const createCommunityRoutes = (auth: Auth) =>
         .run();
       return c.json({ following: false });
     })
-    .get("/communities/public", async (c) => {
-      const limit = communityListLimit(c.req.query("limit"));
-      const rows = await env.DB.prepare(
-        `SELECT access, description, id, name, owner_user_id, price_cents,
-                rules, slug, visibility
-           FROM communities
-          WHERE visibility = 'public' AND archived_at IS NULL
-          ORDER BY created_at DESC LIMIT ?`
-      )
-        .bind(limit)
-        .all<CommunityRow>();
-      return c.json({ communities: rows.results.map(communityResponse) });
-    })
+    .get(
+      "/communities/public",
+      zValidator(
+        "query",
+        z.object({ limit: z.coerce.number().int().min(1).max(100).optional() }),
+        (result, c) => {
+          if (result.success) {
+            return;
+          }
+          return c.json(
+            {
+              code: "INVALID_LIMIT",
+              error: "Limit must be a number between 1 and 100",
+            },
+            400
+          );
+        }
+      ),
+      async (c) => {
+        const limit = communityListLimit(
+          c.req.valid("query").limit?.toString()
+        );
+        const rows = await env.DB.prepare(
+          `SELECT c.access, c.description, c.id, c.name, c.owner_user_id,
+                  c.price_cents, c.rules, c.slug, c.visibility,
+                  COALESCE(p.username, '') AS owner_username,
+                  (SELECT COUNT(*) FROM community_members m
+                    WHERE m.community_id = c.id AND m.status = 'active') AS member_count
+             FROM communities c
+             LEFT JOIN profiles p ON p.user_id = c.owner_user_id
+            WHERE c.visibility = 'public' AND c.archived_at IS NULL
+            ORDER BY c.created_at DESC LIMIT ?`
+        )
+          .bind(limit)
+          .all<CommunityRow>();
+        return c.json({ communities: rows.results.map(communityResponse) });
+      }
+    )
     .get("/communities", async (c) => {
       const user = await getAuthUser(auth, c.req.raw.headers, {
         authoritative: true,
@@ -612,9 +695,14 @@ export const createCommunityRoutes = (auth: Auth) =>
       }
       const rows = await env.DB.prepare(
         `SELECT c.access, c.description, c.id, c.name, c.owner_user_id,
-                c.price_cents, c.rules, c.slug, c.visibility, m.role, m.status
+                c.price_cents, c.rules, c.slug, c.visibility,
+                m.role, m.status,
+                COALESCE(p.username, '') AS owner_username,
+                (SELECT COUNT(*) FROM community_members cm
+                  WHERE cm.community_id = c.id AND cm.status = 'active') AS member_count
            FROM communities c
            JOIN community_members m ON m.community_id = c.id
+           LEFT JOIN profiles p ON p.user_id = c.owner_user_id
           WHERE m.user_id = ? AND c.archived_at IS NULL
           ORDER BY c.created_at DESC`
       )
@@ -1076,83 +1164,91 @@ export const createCommunityRoutes = (auth: Auth) =>
         .run();
       return c.json({ membership: { role: "member", status } }, 201);
     })
-    .post("/communities/:slug/join/complete", async (c) => {
-      const user = await getAuthUser(auth, c.req.raw.headers, {
-        authoritative: true,
-      });
-      if (!user) {
-        return unauthorized(c);
-      }
-      const body = (await c.req.json().catch(() => null)) as {
-        sessionId?: unknown;
-      } | null;
-      if (
-        !body ||
-        typeof body.sessionId !== "string" ||
-        body.sessionId.length > 10_000
-      ) {
-        return c.json(
-          {
-            code: "INVALID_SESSION",
-            error: "A checkout session id is required",
-          },
-          400
-        );
-      }
-      const community = await getCommunity(c.req.param("slug"));
-      const stripe = stripeClient();
-      if (!community || community.access !== "paid") {
-        return c.json({ code: "NOT_FOUND", error: "Community not found" }, 404);
-      }
-      if (!stripe) {
-        return c.json(
-          {
-            code: "PAYMENTS_UNAVAILABLE",
-            error: "Paid community checkout is not configured",
-          },
-          503
-        );
-      }
-      const session = await stripe.checkout.sessions.retrieve(body.sessionId);
-      const paidAmount =
-        env.STRIPE_TAX_ENABLED === "true"
-          ? session.amount_subtotal
-          : session.amount_total;
-      if (
-        session.payment_status !== "paid" ||
-        session.status !== "complete" ||
-        session.metadata?.communityId !== community.id ||
-        session.metadata?.userId !== user.id ||
-        paidAmount === null
-      ) {
-        return c.json(
-          {
-            code: "PAYMENT_NOT_VERIFIED",
-            error: "Payment could not be verified",
-          },
-          402
-        );
-      }
-      const now = Date.now();
-      const activation = await env.DB.prepare(
-        `INSERT INTO community_members (community_id, joined_at, paid_at, payment_reference, role, status, updated_at, user_id)
+    .post(
+      "/communities/:slug/join/complete",
+      zValidator(
+        "json",
+        z.object({ sessionId: z.string().trim().min(1).max(10_000) }),
+        (result, c) => {
+          if (result.success) {
+            return;
+          }
+          return c.json(
+            {
+              code: "INVALID_SESSION",
+              error: "A checkout session id is required",
+            },
+            400
+          );
+        }
+      ),
+      async (c) => {
+        const user = await getAuthUser(auth, c.req.raw.headers, {
+          authoritative: true,
+        });
+        if (!user) {
+          return unauthorized(c);
+        }
+        const { sessionId } = c.req.valid("json");
+        const community = await getCommunity(c.req.param("slug"));
+        const stripe = stripeClient();
+        if (!community || community.access !== "paid") {
+          return c.json(
+            { code: "NOT_FOUND", error: "Community not found" },
+            404
+          );
+        }
+        if (!stripe) {
+          return c.json(
+            {
+              code: "PAYMENTS_UNAVAILABLE",
+              error: "Paid community checkout is not configured",
+            },
+            503
+          );
+        }
+        const session = await stripe.checkout.sessions.retrieve(sessionId);
+        const paidAmount =
+          env.STRIPE_TAX_ENABLED === "true"
+            ? session.amount_subtotal
+            : session.amount_total;
+        if (
+          session.payment_status !== "paid" ||
+          session.status !== "complete" ||
+          session.metadata?.communityId !== community.id ||
+          session.metadata?.userId !== user.id ||
+          paidAmount === null
+        ) {
+          return c.json(
+            {
+              code: "PAYMENT_NOT_VERIFIED",
+              error: "Payment could not be verified",
+            },
+            402
+          );
+        }
+        const now = Date.now();
+        const activation = await env.DB.prepare(
+          `INSERT INTO community_members (community_id, joined_at, paid_at, payment_reference, role, status, updated_at, user_id)
          SELECT id, ?, ?, ?, 'member', 'active', ?, ? FROM communities
          WHERE id = ? AND archived_at IS NULL AND access = 'paid' AND price_cents = ?
          ON CONFLICT(community_id, user_id) DO UPDATE SET paid_at = excluded.paid_at, payment_reference = excluded.payment_reference, status = 'active', updated_at = excluded.updated_at`
-      )
-        .bind(now, now, session.id, now, user.id, community.id, paidAmount)
-        .run();
-      if (activation.meta.changes === 0) {
-        return c.json(
-          {
-            code: "PRICE_CHANGED",
-            error: "The community price changed. Start a new checkout to join.",
-          },
-          409
-        );
+        )
+          .bind(now, now, session.id, now, user.id, community.id, paidAmount)
+          .run();
+        if (activation.meta.changes === 0) {
+          return c.json(
+            {
+              code: "PRICE_CHANGED",
+              error:
+                "The community price changed. Start a new checkout to join.",
+            },
+            409
+          );
+        }
+        return c.json({ membership: { role: "member", status: "active" } });
       }
-      return c.json({ membership: { role: "member", status: "active" } });
-    })
+    )
     .delete("/communities/:slug/membership", async (c) => {
       const user = await getAuthUser(auth, c.req.raw.headers, {
         authoritative: true,
@@ -1181,93 +1277,296 @@ export const createCommunityRoutes = (auth: Auth) =>
         .run();
       return c.json({ left: true });
     })
-    .get("/communities/:slug/channels/:channelId/messages", async (c) => {
-      const community = await getCommunity(c.req.param("slug"));
-      if (!community) {
-        return c.json({ code: "NOT_FOUND", error: "Community not found" }, 404);
-      }
-      const user = await getAuthUser(auth, c.req.raw.headers, {
-        authoritative: true,
-      });
-      const membership = user
-        ? await getMembership(community.id, user.id)
-        : null;
-      if (!canViewCommunity(community, membership)) {
-        return c.json({ code: "NOT_FOUND", error: "Community not found" }, 404);
-      }
-      const channel = await env.DB.prepare(
-        "SELECT id FROM community_channels WHERE id = ? AND community_id = ? AND is_archived = 0"
-      )
-        .bind(c.req.param("channelId"), community.id)
-        .first<{ id: string }>();
-      if (!channel) {
-        return c.json({ code: "NOT_FOUND", error: "Channel not found" }, 404);
-      }
-      const limit = communityListLimit(c.req.query("limit"));
-      const cursor = decodeCursor(c.req.query("cursor"));
-      const query = cursor
-        ? `SELECT m.author_user_id, m.body, m.created_at, m.deleted_at, m.edited_at, m.id,
+    .get(
+      "/communities/:slug/channels/:channelId/messages",
+      zValidator(
+        "query",
+        z.object({
+          cursor: z.string().max(200).optional(),
+          limit: z.coerce.number().int().min(1).max(100).optional(),
+        }),
+        (result, c) => {
+          if (result.success) {
+            return;
+          }
+          return c.json(
+            {
+              code: "INVALID_QUERY",
+              error: "Invalid cursor or limit",
+            },
+            400
+          );
+        }
+      ),
+      async (c) => {
+        const community = await getCommunity(c.req.param("slug"));
+        if (!community) {
+          return c.json(
+            { code: "NOT_FOUND", error: "Community not found" },
+            404
+          );
+        }
+        const user = await getAuthUser(auth, c.req.raw.headers, {
+          authoritative: true,
+        });
+        const membership = user
+          ? await getMembership(community.id, user.id)
+          : null;
+        if (!canViewCommunity(community, membership)) {
+          return c.json(
+            { code: "NOT_FOUND", error: "Community not found" },
+            404
+          );
+        }
+        const channel = await env.DB.prepare(
+          "SELECT id FROM community_channels WHERE id = ? AND community_id = ? AND is_archived = 0"
+        )
+          .bind(c.req.param("channelId"), community.id)
+          .first<{ id: string }>();
+        if (!channel) {
+          return c.json({ code: "NOT_FOUND", error: "Channel not found" }, 404);
+        }
+        const limit = communityListLimit(
+          c.req.valid("query").limit?.toString()
+        );
+        const cursor = decodeCursor(c.req.valid("query").cursor);
+        const query = cursor
+          ? `SELECT m.author_user_id, m.body, m.created_at, m.deleted_at, m.edited_at, m.id,
                   m.mentions, m.reply_to_id, u.image, u.name, p.username
              FROM community_messages m JOIN user u ON u.id = m.author_user_id
              LEFT JOIN profiles p ON p.user_id = m.author_user_id
             WHERE m.channel_id = ? AND (m.created_at < ? OR (m.created_at = ? AND m.id < ?))
             ORDER BY m.created_at DESC, m.id DESC LIMIT ?`
-        : `SELECT m.author_user_id, m.body, m.created_at, m.deleted_at, m.edited_at, m.id,
+          : `SELECT m.author_user_id, m.body, m.created_at, m.deleted_at, m.edited_at, m.id,
                   m.mentions, m.reply_to_id, u.image, u.name, p.username
              FROM community_messages m JOIN user u ON u.id = m.author_user_id
              LEFT JOIN profiles p ON p.user_id = m.author_user_id
             WHERE m.channel_id = ? ORDER BY m.created_at DESC, m.id DESC LIMIT ?`;
-      const statement = cursor
-        ? env.DB.prepare(query).bind(
-            channel.id,
-            cursor.createdAt,
-            cursor.createdAt,
-            cursor.id,
-            limit + 1
-          )
-        : env.DB.prepare(query).bind(channel.id, limit + 1);
-      const rows = await statement.all<{
-        author_user_id: string;
-        body: string;
-        created_at: number;
-        deleted_at: number | null;
-        edited_at: number | null;
-        id: string;
-        image: string | null;
-        mentions: string;
-        name: string;
-        pusername: string | null;
-        reply_to_id: string | null;
-      }>();
-      const hasMore = rows.results.length > limit;
-      const page = rows.results.slice(0, limit);
-      return c.json({
-        messages: page.toReversed().map((row) => ({
-          author: {
-            avatarUrl: row.image,
-            name: row.name,
-            username: row.pusername,
+        const statement = cursor
+          ? env.DB.prepare(query).bind(
+              channel.id,
+              cursor.createdAt,
+              cursor.createdAt,
+              cursor.id,
+              limit + 1
+            )
+          : env.DB.prepare(query).bind(channel.id, limit + 1);
+        const rows = await statement.all<{
+          author_user_id: string;
+          body: string;
+          created_at: number;
+          deleted_at: number | null;
+          edited_at: number | null;
+          id: string;
+          image: string | null;
+          mentions: string;
+          name: string;
+          pusername: string | null;
+          reply_to_id: string | null;
+        }>();
+        const hasMore = rows.results.length > limit;
+        const page = rows.results.slice(0, limit);
+        const reactions = await reactionsByMessage(
+          page.map((row) => row.id),
+          user?.id ?? null
+        );
+        return c.json({
+          messages: page.toReversed().map((row) => ({
+            author: {
+              avatarUrl: row.image,
+              name: row.name,
+              username: row.pusername,
+            },
+            body: row.deleted_at
+              ? "This message was deleted"
+              : escapeHtml(row.body),
+            createdAt: new Date(row.created_at).toISOString(),
+            deletedAt: row.deleted_at
+              ? new Date(row.deleted_at).toISOString()
+              : null,
+            editedAt: row.edited_at
+              ? new Date(row.edited_at).toISOString()
+              : null,
+            id: row.id,
+            mentions: JSON.parse(row.mentions) as string[],
+            reactions: reactions.get(row.id) ?? [],
+            replyToId: row.reply_to_id,
+          })),
+          nextCursor:
+            hasMore && page.length > 0
+              ? encodeCursor(
+                  page.at(-1)?.created_at ?? 0,
+                  page.at(-1)?.id ?? ""
+                )
+              : null,
+        });
+      }
+    )
+    .post(
+      "/communities/:slug/channels/:channelId/messages",
+      zValidator("json", communityChatMessageSchema),
+      async (c) => {
+        const user = await getAuthUser(auth, c.req.raw.headers, {
+          authoritative: true,
+        });
+        if (!user) {
+          return unauthorized(c);
+        }
+        const community = await getCommunity(c.req.param("slug"));
+        if (!community) {
+          return c.json(
+            { code: "NOT_FOUND", error: "Community not found" },
+            404
+          );
+        }
+        const membership = await getMembership(community.id, user.id);
+        if (membership?.status !== "active") {
+          return c.json(
+            { code: "FORBIDDEN", error: "Join the community to chat" },
+            403
+          );
+        }
+        const channel = await env.DB.prepare(
+          "SELECT id FROM community_channels WHERE id = ? AND community_id = ? AND is_archived = 0"
+        )
+          .bind(c.req.param("channelId"), community.id)
+          .first<{ id: string }>();
+        if (!channel) {
+          return c.json({ code: "NOT_FOUND", error: "Channel not found" }, 404);
+        }
+        const input = c.req.valid("json");
+        // The room object owns persistence, per-user rate limiting, and the
+        // live broadcast so REST and WebSocket sends share one code path.
+        const stub = env.COMMUNITY_CHANNEL_ROOMS.getByName(
+          `${community.id}:${channel.id}`
+        );
+        const upstream = await stub.fetch("https://internal/post", {
+          body: JSON.stringify({
+            body: input.body,
+            channelId: channel.id,
+            clientId: input.clientId,
+            communityId: community.id,
+            replyToId: input.replyToId ?? null,
+            type: "message",
+            userId: user.id,
+          }),
+          headers: {
+            "content-type": "application/json",
+            "x-ppal-internal": "1",
           },
-          body: row.deleted_at
-            ? "This message was deleted"
-            : escapeHtml(row.body),
-          createdAt: new Date(row.created_at).toISOString(),
-          deletedAt: row.deleted_at
-            ? new Date(row.deleted_at).toISOString()
-            : null,
-          editedAt: row.edited_at
-            ? new Date(row.edited_at).toISOString()
-            : null,
-          id: row.id,
-          mentions: JSON.parse(row.mentions) as string[],
-          replyToId: row.reply_to_id,
-        })),
-        nextCursor:
-          hasMore && page.length > 0
-            ? encodeCursor(page.at(-1)?.created_at ?? 0, page.at(-1)?.id ?? "")
-            : null,
-      });
-    })
+          method: "POST",
+        });
+        if (!upstream.ok) {
+          const failure = (await upstream.json().catch(() => null)) as {
+            code?: string;
+            error?: string;
+          } | null;
+          return c.json(
+            {
+              code: failure?.code ?? "MESSAGE_REJECTED",
+              error: failure?.error ?? "Message could not be sent",
+            },
+            upstream.status === 429 ? 429 : 403
+          );
+        }
+        const message = (await upstream.json()) as ChannelMessagePayload;
+        return c.json({ message: { ...message, reactions: [] } }, 201);
+      }
+    )
+    .post(
+      "/communities/:slug/channels/:channelId/messages/:messageId/reactions",
+      zValidator("json", messageReactionRequestSchema, (result, c) => {
+        if (result.success) {
+          return;
+        }
+        return c.json(
+          { code: "INVALID_REACTION", error: "A valid emoji is required" },
+          400
+        );
+      }),
+      async (c) => {
+        const user = await getAuthUser(auth, c.req.raw.headers, {
+          authoritative: true,
+        });
+        if (!user) {
+          return unauthorized(c);
+        }
+        const community = await getCommunity(c.req.param("slug"));
+        if (!community) {
+          return c.json(
+            { code: "NOT_FOUND", error: "Community not found" },
+            404
+          );
+        }
+        const membership = await getMembership(community.id, user.id);
+        if (membership?.status !== "active") {
+          return c.json(
+            { code: "FORBIDDEN", error: "Join the community to react" },
+            403
+          );
+        }
+        const channel = await env.DB.prepare(
+          "SELECT id FROM community_channels WHERE id = ? AND community_id = ? AND is_archived = 0"
+        )
+          .bind(c.req.param("channelId"), community.id)
+          .first<{ id: string }>();
+        if (!channel) {
+          return c.json({ code: "NOT_FOUND", error: "Channel not found" }, 404);
+        }
+        const messageId = c.req.param("messageId");
+        const target = await env.DB.prepare(
+          `SELECT m.id FROM community_messages m
+            WHERE m.id = ? AND m.channel_id = ? AND m.community_id = ?`
+        )
+          .bind(messageId, channel.id, community.id)
+          .first<{ id: string }>();
+        if (!target) {
+          return c.json({ code: "NOT_FOUND", error: "Message not found" }, 404);
+        }
+        const input = c.req.valid("json");
+        const existing = await env.DB.prepare(
+          `SELECT 1 AS present FROM community_message_reactions
+            WHERE message_id = ? AND user_id = ? AND emoji = ?`
+        )
+          .bind(messageId, user.id, input.emoji)
+          .first<{ present: number }>();
+        const statement = existing
+          ? env.DB.prepare(
+              `DELETE FROM community_message_reactions
+                WHERE message_id = ? AND user_id = ? AND emoji = ?`
+            ).bind(messageId, user.id, input.emoji)
+          : env.DB.prepare(
+              `INSERT INTO community_message_reactions (created_at, emoji, message_id, user_id)
+               VALUES (?, ?, ?, ?)
+               ON CONFLICT (message_id, user_id, emoji) DO NOTHING`
+            ).bind(Date.now(), input.emoji, messageId, user.id);
+        await statement.run();
+        const updated = await reactionsByMessage([messageId], user.id);
+        const reactions = updated.get(messageId) ?? [];
+        // Fan the updated reaction counts out to connected web clients.
+        // `mine` flags are per-viewer, so only neutral counts are broadcast
+        // and each client merges in its own reaction state.
+        const stub = env.COMMUNITY_CHANNEL_ROOMS.getByName(
+          `${community.id}:${channel.id}`
+        );
+        await stub.fetch("https://internal/post", {
+          body: JSON.stringify({
+            messageId,
+            reactions: reactions.map(({ count, emoji }) => ({
+              count,
+              emoji,
+            })),
+            type: "reaction",
+          }),
+          headers: {
+            "content-type": "application/json",
+            "x-ppal-internal": "1",
+          },
+          method: "POST",
+        });
+        return c.json({ messageId, reactions }, 200);
+      }
+    )
     .get("/communities/:slug/channels/:channelId/ws", async (c) => {
       const user = await getAuthUser(auth, c.req.raw.headers, {
         authoritative: true,
@@ -1322,14 +1621,16 @@ export const createCommunityRoutes = (auth: Auth) =>
         return c.json({ code: "NOT_FOUND", error: "Community not found" }, 404);
       }
       const membership = await getMembership(community.id, user.id);
-      if (!isModerator(membership)) {
+      // Slack-style member directory: every active member can browse the
+      // roster. Emails are deliberately excluded from the response.
+      if (membership?.status !== "active") {
         return c.json(
-          { code: "FORBIDDEN", error: "Moderator access required" },
+          { code: "FORBIDDEN", error: "Join the community to view members" },
           403
         );
       }
       const rows = await env.DB.prepare(
-        `SELECT m.role, m.status, m.joined_at, u.id, u.image, u.name, u.email, p.username
+        `SELECT m.role, m.status, m.joined_at, u.id, u.image, u.name, p.username AS pusername
            FROM community_members m JOIN user u ON u.id = m.user_id
            LEFT JOIN profiles p ON p.user_id = m.user_id
           WHERE m.community_id = ? ORDER BY m.joined_at`

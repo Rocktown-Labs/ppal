@@ -6,8 +6,9 @@ import {
   useNavigate,
   useParams,
 } from "@tanstack/react-router";
-import { Lock, MessageCircle, Send, Users } from "lucide-react";
+import { Lock, CornerUpLeft, MessageCircle, Send, Users } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import type { ReactNode } from "react";
 
 import { API_BASE_URL, api } from "@/lib/api";
 import type { CommunityChannel, CommunityMessage } from "@/lib/api";
@@ -16,11 +17,24 @@ import {
   communityDbClient,
   communityMessageCollection,
   removeCommunityMessage,
+  updateCommunityMessageReactions,
   upsertCommunityMessage,
 } from "@/lib/community-db";
 import { absoluteUrl, noIndexMeta, SITE_NAME, socialMeta } from "@/lib/seo";
 
 type CommunityPageData = Awaited<ReturnType<typeof api.community.get>>;
+
+type CommunityMembersData = Awaited<
+  ReturnType<typeof api.community.getMembers>
+>;
+
+const QUICK_REACTION_EMOJIS = ["👍", "🔥", "😂", "🎯", "💰", "👀"];
+
+/**
+ * Messages broadcast over the WebSocket carry the sender's `clientId` so
+ * optimistic rows can be reconciled; the REST history rows do not.
+ */
+type LiveMessage = CommunityMessage & { clientId?: string };
 
 const CHAT_RECONNECT_BASE_MS = 1000;
 const CHAT_RECONNECT_MAX_MS = 10_000;
@@ -32,23 +46,15 @@ const loadPublicCommunity = async (
   slug: string
 ): Promise<CommunityPageData | null> => {
   try {
-    const response = await fetch(
-      `${API_BASE_URL}/api/v1/communities/${encodeURIComponent(slug)}`,
-      { headers: { Accept: "application/json" } }
-    );
-    if (!response.ok) {
-      return null;
-    }
-    const payload = (await response.json()) as CommunityPageData;
-    return payload.community && Array.isArray(payload.channels)
-      ? payload
-      : null;
+    const response = await api.community.get(slug);
+    return response;
   } catch {
+    // Unknown or private community: fall through to the page-level loader.
     return null;
   }
 };
 
-const messageToRow = (channelId: string, message: CommunityMessage) => ({
+const messageToRow = (channelId: string, message: LiveMessage) => ({
   ...message,
   channelId,
 });
@@ -67,6 +73,10 @@ const ChannelMessages = ({
   const [connected, setConnected] = useState(false);
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [replyTo, setReplyTo] = useState<LiveMessage | null>(null);
+  const [reactionPickerFor, setReactionPickerFor] = useState<string | null>(
+    null
+  );
   const socketRef = useRef<WebSocket | null>(null);
   const { data = [] } = useLiveQuery(communityMessageCollection);
   const messages = useMemo(
@@ -76,6 +86,26 @@ const ChannelMessages = ({
         .toSorted((a, b) => a.createdAt.localeCompare(b.createdAt)),
     [channel.id, data]
   );
+
+  // Slack-style threading: roots render in the feed, replies nest under the
+  // message they answer (replyToId), mirroring the mobile app's chat.
+  const roots = useMemo(
+    () => messages.filter((message) => !message.replyToId),
+    [messages]
+  );
+  const repliesByParent = useMemo(() => {
+    const map = new Map<string, LiveMessage[]>();
+    for (const message of messages) {
+      if (!message.replyToId) {
+        continue;
+      }
+      map.set(message.replyToId, [
+        ...(map.get(message.replyToId) ?? []),
+        message,
+      ]);
+    }
+    return map;
+  }, [messages]);
 
   useEffect(() => {
     let active = true;
@@ -175,8 +205,9 @@ const ChannelMessages = ({
           const payload = JSON.parse(event.data) as {
             clientId?: string;
             error?: string;
-            message?: CommunityMessage;
+            message?: LiveMessage;
             messageId?: string;
+            reactions?: CommunityMessage["reactions"];
             type?: string;
           };
           if (payload.type === "error") {
@@ -188,6 +219,27 @@ const ChannelMessages = ({
           }
           if (payload.type === "delete" && payload.messageId) {
             removeCommunityMessage(payload.messageId);
+          }
+          if (
+            payload.type === "reaction" &&
+            payload.messageId &&
+            payload.reactions
+          ) {
+            // Broadcasts carry neutral counts; keep this viewer's own flags.
+            const existing = communityMessageCollection.get(payload.messageId);
+            const mineEmojis = new Set(
+              (existing?.reactions ?? [])
+                .filter((reaction) => reaction.mine)
+                .map((reaction) => reaction.emoji)
+            );
+            updateCommunityMessageReactions(
+              payload.messageId,
+              payload.reactions.map((reaction) => ({
+                count: reaction.count,
+                emoji: reaction.emoji,
+                mine: mineEmojis.has(reaction.emoji),
+              }))
+            );
           }
           if (payload.type === "message" && payload.message) {
             if (payload.message.clientId) {
@@ -220,7 +272,7 @@ const ChannelMessages = ({
       return;
     }
     const clientId = crypto.randomUUID();
-    const optimistic: CommunityMessage = {
+    const optimistic: LiveMessage = {
       author: { avatarUrl: null, name: "You", username: null },
       body: trimmed,
       clientId,
@@ -229,14 +281,40 @@ const ChannelMessages = ({
       editedAt: null,
       id: clientId,
       mentions: [],
-      replyToId: null,
+      reactions: [],
+      replyToId: replyTo?.id ?? null,
     };
     upsertCommunityMessage(messageToRow(channel.id, optimistic));
     setChatError(null);
     socketRef.current.send(
-      JSON.stringify({ body: trimmed, clientId, type: "message" })
+      JSON.stringify({
+        body: trimmed,
+        clientId,
+        replyToId: replyTo?.id ?? null,
+        type: "message",
+      })
     );
     setBody("");
+    setReplyTo(null);
+  };
+
+  /** Toggle an emoji reaction; the server response is authoritative. */
+  const toggleReaction = async (messageId: string, emoji: string) => {
+    setChatError(null);
+    try {
+      const response = await api.community.toggleReaction(
+        communitySlug,
+        channel.id,
+        messageId,
+        emoji
+      );
+      updateCommunityMessageReactions(messageId, response.reactions);
+      setReactionPickerFor(null);
+    } catch (error: unknown) {
+      setChatError(
+        error instanceof Error ? error.message : "Reaction could not be saved"
+      );
+    }
   };
 
   return (
@@ -286,49 +364,172 @@ const ChannelMessages = ({
             ) : null}
           </div>
         ) : (
-          messages.map((message) => (
-            <article
-              key={message.id}
-              className="rounded-xl bg-zinc-950/70 px-4 py-3"
-            >
-              <div className="flex items-baseline justify-between gap-3">
-                <span className="text-sm font-semibold text-zinc-200">
-                  {message.author.username
-                    ? `@${message.author.username}`
-                    : message.author.name}
-                </span>
-                <time className="text-[11px] text-zinc-600">
-                  {new Date(message.createdAt).toLocaleString()}
-                </time>
-              </div>
-              <p className="mt-1 text-sm break-words whitespace-pre-wrap text-zinc-300">
-                {message.body}
-              </p>
-            </article>
-          ))
+          roots.map((message) => {
+            const replies = repliesByParent.get(message.id) ?? [];
+            let reactionControl: ReactNode = null;
+            if (canChat) {
+              reactionControl =
+                reactionPickerFor === message.id ? (
+                  <span className="inline-flex items-center gap-0.5 rounded-full border border-zinc-700 bg-zinc-950 px-1 py-0.5">
+                    {QUICK_REACTION_EMOJIS.map((emoji) => (
+                      <button
+                        aria-label={`React ${emoji}`}
+                        className="rounded px-1 text-sm transition hover:bg-zinc-800"
+                        key={emoji}
+                        onClick={() => toggleReaction(message.id, emoji)}
+                        type="button"
+                      >
+                        {emoji}
+                      </button>
+                    ))}
+                    <button
+                      aria-label="Close reaction picker"
+                      className="px-1 text-xs text-zinc-500 transition hover:text-zinc-300"
+                      onClick={() => setReactionPickerFor(null)}
+                      type="button"
+                    >
+                      ×
+                    </button>
+                  </span>
+                ) : (
+                  <button
+                    aria-label="Add reaction"
+                    className="inline-flex items-center rounded-full border border-dashed border-zinc-700 px-2 py-0.5 text-xs text-zinc-500 transition hover:border-zinc-500 hover:text-zinc-300"
+                    onClick={() => setReactionPickerFor(message.id)}
+                    type="button"
+                  >
+                    ＋
+                  </button>
+                );
+            }
+            return (
+              <article
+                key={message.id}
+                className="rounded-xl bg-zinc-950/70 px-4 py-3"
+              >
+                <div className="flex items-baseline justify-between gap-3">
+                  <span className="text-sm font-semibold text-zinc-200">
+                    {message.author.username
+                      ? `@${message.author.username}`
+                      : message.author.name}
+                  </span>
+                  <time className="text-[11px] text-zinc-600">
+                    {new Date(message.createdAt).toLocaleString()}
+                  </time>
+                </div>
+                <p className="mt-1 text-sm break-words whitespace-pre-wrap text-zinc-300">
+                  {message.body}
+                </p>
+                {canChat || message.reactions.length > 0 ? (
+                  <div className="mt-1.5 flex flex-wrap items-center gap-1">
+                    {message.reactions.map((reaction) => (
+                      <button
+                        className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs transition ${
+                          reaction.mine
+                            ? "border-emerald-500/60 bg-emerald-500/10 text-emerald-300"
+                            : "border-zinc-700 bg-zinc-950 text-zinc-300 hover:border-zinc-500"
+                        }`}
+                        key={reaction.emoji}
+                        onClick={() =>
+                          toggleReaction(message.id, reaction.emoji)
+                        }
+                        type="button"
+                      >
+                        {reaction.emoji}
+                        <span className="font-mono text-[10px]">
+                          {reaction.count}
+                        </span>
+                      </button>
+                    ))}
+                    {reactionControl}
+                  </div>
+                ) : null}
+                {replies.length > 0 ? (
+                  <div className="mt-2 space-y-2 border-l-2 border-zinc-800 pl-3">
+                    {replies.map((reply) => (
+                      <div key={reply.id}>
+                        <div className="flex items-baseline justify-between gap-3">
+                          <span className="text-xs font-semibold text-zinc-400">
+                            {reply.author.username
+                              ? `@${reply.author.username}`
+                              : reply.author.name}
+                          </span>
+                          <time className="text-[10px] text-zinc-600">
+                            {new Date(reply.createdAt).toLocaleTimeString()}
+                          </time>
+                        </div>
+                        <p className="text-xs break-words whitespace-pre-wrap text-zinc-400">
+                          {reply.body}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+                {canChat ? (
+                  <button
+                    className="mt-1.5 inline-flex items-center gap-1 text-[11px] font-medium text-zinc-500 transition hover:text-emerald-400"
+                    onClick={() => setReplyTo(message)}
+                    type="button"
+                  >
+                    <CornerUpLeft className="size-3" />
+                    {replies.length > 0
+                      ? `Reply in thread (${replies.length})`
+                      : "Reply in thread"}
+                  </button>
+                ) : null}
+              </article>
+            );
+          })
         )}
       </div>
       {canChat ? (
         <form
-          className="flex gap-2 border-t border-zinc-800 p-4"
+          className="flex flex-col gap-2 border-t border-zinc-800 p-4"
           onSubmit={sendMessage}
         >
-          <input
-            aria-label="Message"
-            className="min-w-0 flex-1 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-white outline-none focus:border-emerald-500"
-            maxLength={2000}
-            onChange={(event) => setBody(event.target.value)}
-            placeholder="Message the community… use @username to mention someone"
-            value={body}
-          />
-          <button
-            className="rounded-lg bg-emerald-500 px-3 text-zinc-950 transition hover:bg-emerald-400 disabled:opacity-40"
-            disabled={!connected || !body.trim()}
-            type="submit"
-          >
-            <Send className="size-4" />
-            <span className="sr-only">Send message</span>
-          </button>
+          {replyTo ? (
+            <div className="flex items-center justify-between gap-3 rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2">
+              <p className="min-w-0 truncate text-xs text-zinc-500">
+                Replying to{" "}
+                <span className="font-semibold text-zinc-300">
+                  {replyTo.author.username
+                    ? `@${replyTo.author.username}`
+                    : replyTo.author.name}
+                </span>
+                : {replyTo.body}
+              </p>
+              <button
+                aria-label="Cancel reply"
+                className="shrink-0 text-xs font-medium text-zinc-500 hover:text-zinc-300"
+                onClick={() => setReplyTo(null)}
+                type="button"
+              >
+                Cancel
+              </button>
+            </div>
+          ) : null}
+          <div className="flex gap-2">
+            <input
+              aria-label="Message"
+              className="min-w-0 flex-1 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-white outline-none focus:border-emerald-500"
+              maxLength={2000}
+              onChange={(event) => setBody(event.target.value)}
+              placeholder={
+                replyTo
+                  ? "Reply in thread…"
+                  : "Message the community… use @username to mention someone"
+              }
+              value={body}
+            />
+            <button
+              className="rounded-lg bg-emerald-500 px-3 text-zinc-950 transition hover:bg-emerald-400 disabled:opacity-40"
+              disabled={!connected || !body.trim()}
+              type="submit"
+            >
+              <Send className="size-4" />
+              <span className="sr-only">Send message</span>
+            </button>
+          </div>
         </form>
       ) : null}
     </section>
@@ -346,6 +547,31 @@ const CommunityPage = () => {
   );
   const [error, setError] = useState<string | null>(null);
   const [joining, setJoining] = useState(false);
+  const [members, setMembers] = useState<CommunityMembersData["members"]>([]);
+
+  // Slack-style roster: any active member can browse the community list.
+  useEffect(() => {
+    let active = true;
+    if (state?.membership?.status !== "active") {
+      return;
+    }
+    const loadMembers = async () => {
+      try {
+        const response = await api.community.getMembers(slug);
+        if (active) {
+          setMembers(
+            response.members.filter((member) => member.status === "active")
+          );
+        }
+      } catch {
+        // Roster is non-critical; the sidebar simply omits it.
+      }
+    };
+    void loadMembers();
+    return () => {
+      active = false;
+    };
+  }, [slug, state?.membership?.status]);
 
   useEffect(() => {
     let active = true;
@@ -422,13 +648,13 @@ const CommunityPage = () => {
   const join = async () => {
     const session = await authClient.getSession();
     if (!session.data) {
-      await navigate({ to: "/login" });
+      await navigate({ to: "/auth/sign-in" });
       return;
     }
     setJoining(true);
     try {
       const response = await api.community.join(slug);
-      if (response.checkoutUrl) {
+      if ("checkoutUrl" in response && response.checkoutUrl) {
         window.location.href = response.checkoutUrl;
         return;
       }
@@ -494,6 +720,30 @@ const CommunityPage = () => {
               ))}
             </div>
           </div>
+          {canChat && members.length > 0 ? (
+            <div className="mt-6 border-t border-zinc-800 pt-4">
+              <p className="mb-2 text-[11px] font-semibold tracking-wider text-zinc-500 uppercase">
+                Members ({members.length})
+              </p>
+              <div className="max-h-56 space-y-1 overflow-y-auto">
+                {members.slice(0, 25).map((member) => (
+                  <div
+                    className="flex items-center justify-between rounded-lg px-3 py-1.5 text-sm"
+                    key={member.user.id}
+                  >
+                    <span className="truncate text-zinc-300">
+                      {member.user.username
+                        ? `@${member.user.username}`
+                        : member.user.name}
+                    </span>
+                    <span className="shrink-0 pl-2 text-[10px] text-zinc-600 capitalize">
+                      {member.role}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
           {state.community.rules ? (
             <div className="mt-6 border-t border-zinc-800 pt-4">
               <p className="mb-1 text-[11px] font-semibold tracking-wider text-zinc-500 uppercase">

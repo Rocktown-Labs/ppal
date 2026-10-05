@@ -50,7 +50,7 @@ const SportPageComponent = () => {
   }
 
   const relatedPages = buildRelatedPages(page);
-  const destination = session?.user ? "/dashboard" : "/login";
+  const destination = session?.user ? "/dashboard" : "/auth/sign-in";
 
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100 antialiased selection:bg-emerald-500 selection:text-black">
@@ -90,13 +90,13 @@ const SportPageComponent = () => {
               <>
                 <Link
                   className="transition-colors hover:text-white"
-                  to="/login"
+                  to="/auth/sign-in"
                 >
                   Log in
                 </Link>
                 <Link
                   className="rounded-lg bg-emerald-500 px-4 py-2 font-bold text-black transition hover:bg-emerald-400"
-                  to="/login"
+                  to="/auth/sign-in"
                 >
                   Start free
                 </Link>

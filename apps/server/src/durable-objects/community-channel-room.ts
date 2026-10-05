@@ -12,6 +12,38 @@ interface RoomAttachment {
   userId: string;
 }
 
+interface PostMessageInput {
+  body: string;
+  channelId: string;
+  clientId?: string;
+  communityId: string;
+  replyToId?: string | null;
+  userId: string;
+}
+
+type PostMessageResult =
+  | {
+      clientId?: string;
+      code: string;
+      error: string;
+      ok: false;
+      retryAfterSeconds?: number;
+    }
+  | { message: OutgoingMessage; ok: true };
+
+interface OutgoingMessage {
+  author: { avatarUrl: string | null; name: string; username: string | null };
+  body: string;
+  clientId?: string;
+  createdAt: string;
+  deletedAt: string | null;
+  editedAt: string | null;
+  id: string;
+  mentions: string[];
+  reactions: { count: number; emoji: string; mine: boolean }[];
+  replyToId: string | null;
+}
+
 const MAX_FRAME_BYTES = 64 * 1024;
 
 interface CommunityRoomEnv extends NotificationServiceEnv {
@@ -45,6 +77,10 @@ const sendErrorFrame = (
  * One hibernatable object is allocated per channel. D1 is the source of truth;
  * this object only coordinates connected clients and applies per-user chat
  * rate limits, which keeps hot communities sharded instead of global.
+ *
+ * Messages enter through two doors that share the same persistence path:
+ * the WebSocket handler (web clients) and an internal POST handler used by
+ * the REST route (native clients without WebSocket cookie support).
  */
 export class CommunityChannelRoom extends DurableObject<CommunityRoomEnv> {
   async fetch(request: Request): Promise<Response> {
@@ -52,15 +88,7 @@ export class CommunityChannelRoom extends DurableObject<CommunityRoomEnv> {
       request.method === "POST" &&
       request.headers.get("x-ppal-internal") === "1"
     ) {
-      const payload = (await request.json().catch(() => null)) as {
-        messageId?: unknown;
-        type?: unknown;
-      } | null;
-      if (payload?.type === "delete" && typeof payload.messageId === "string") {
-        this.broadcast({ messageId: payload.messageId, type: "delete" });
-        return new Response(null, { status: 204 });
-      }
-      return new Response("Bad event", { status: 400 });
+      return await this.handleInternalPost(request);
     }
 
     if (request.headers.get("upgrade")?.toLowerCase() !== "websocket") {
@@ -85,6 +113,77 @@ export class CommunityChannelRoom extends DurableObject<CommunityRoomEnv> {
     server.serializeAttachment(attachment);
     server.send(json({ channelId: attachment.channelId, type: "ready" }));
     return new Response(null, { status: 101, webSocket: client });
+  }
+
+  /**
+   * Worker-internal event channel used by the REST route: broadcasts a
+   * delete, or persists + broadcasts a chat message sent over HTTP.
+   */
+  private async handleInternalPost(request: Request): Promise<Response> {
+    const payload = (await request.json().catch(() => null)) as {
+      body?: unknown;
+      channelId?: unknown;
+      clientId?: unknown;
+      communityId?: unknown;
+      messageId?: unknown;
+      reactions?: unknown;
+      replyToId?: unknown;
+      type?: unknown;
+      userId?: unknown;
+    } | null;
+    if (payload?.type === "delete" && typeof payload.messageId === "string") {
+      this.broadcast({ messageId: payload.messageId, type: "delete" });
+      return new Response(null, { status: 204 });
+    }
+    if (payload?.type === "reaction" && typeof payload.messageId === "string") {
+      this.broadcast({
+        messageId: payload.messageId,
+        reactions: payload.reactions ?? [],
+        type: "reaction",
+      });
+      return new Response(null, { status: 204 });
+    }
+    if (payload?.type === "message") {
+      const parsed = communityChatMessageSchema.safeParse({
+        body: payload.body,
+        clientId: payload.clientId,
+        replyToId: payload.replyToId,
+        type: "message",
+      });
+      const { channelId, communityId, userId } = payload;
+      const hasContext =
+        typeof userId === "string" &&
+        typeof channelId === "string" &&
+        typeof communityId === "string";
+      if (!parsed.success || !hasContext) {
+        return Response.json(
+          { code: "INVALID_MESSAGE", error: "Invalid message payload" },
+          { status: 400 }
+        );
+      }
+      const result = await this.persistMessage({
+        body: parsed.data.body,
+        channelId,
+        clientId: parsed.data.clientId,
+        communityId,
+        replyToId: parsed.data.replyToId ?? null,
+        userId,
+      });
+      if (!result.ok) {
+        return Response.json(
+          {
+            code: result.code,
+            error: result.error,
+            ...(result.retryAfterSeconds
+              ? { retryAfterSeconds: result.retryAfterSeconds }
+              : {}),
+          },
+          { status: result.code === "RATE_LIMITED" ? 429 : 403 }
+        );
+      }
+      return Response.json(result.message, { status: 201 });
+    }
+    return new Response("Bad event", { status: 400 });
   }
 
   // oxlint-disable-next-line complexity
@@ -138,49 +237,88 @@ export class CommunityChannelRoom extends DurableObject<CommunityRoomEnv> {
       webSocket.close(1008, "Unauthorized");
       return;
     }
+    const result = await this.persistMessage({
+      body: parsed.data.body,
+      channelId: attachment.channelId,
+      clientId: parsed.data.clientId,
+      communityId: attachment.communityId,
+      replyToId: parsed.data.replyToId ?? null,
+      userId: attachment.userId,
+    });
+    if (!result.ok) {
+      sendErrorFrame(webSocket, {
+        clientId: parsed.data.clientId,
+        code: result.code,
+        error: result.error,
+        ...(result.retryAfterSeconds
+          ? { retryAfterSeconds: result.retryAfterSeconds }
+          : {}),
+      });
+    }
+  }
+
+  // oxlint-disable-next-line class-methods-use-this
+  webSocketClose(webSocket: WebSocket): void {
+    webSocket.close();
+  }
+
+  // oxlint-disable-next-line class-methods-use-this
+  webSocketError(webSocket: WebSocket): void {
+    webSocket.close(1011, "Connection error");
+  }
+
+  /**
+   * Shared persistence + broadcast for chat messages. Validates membership,
+   * applies the per-user rate limit, writes to D1, broadcasts to every
+   * connected socket, and fans out mention notifications.
+   */
+  // oxlint-disable-next-line complexity
+  private async persistMessage(
+    input: PostMessageInput
+  ): Promise<PostMessageResult> {
     const membership = await this.env.DB.prepare(
       "SELECT role, status FROM community_members WHERE community_id = ? AND user_id = ?"
     )
-      .bind(attachment.communityId, attachment.userId)
+      .bind(input.communityId, input.userId)
       .first<{ role: string; status: string }>();
     if (membership?.status !== "active") {
-      sendErrorFrame(webSocket, {
-        clientId: parsed.data.clientId,
+      return {
+        clientId: input.clientId,
         code: "MEMBERSHIP_REQUIRED",
         error: "Join the community to chat",
-      });
-      return;
+        ok: false,
+      };
     }
     const limiter = this.env.COMMUNITY_CHAT_RATE_LIMIT;
     if (limiter?.limit) {
       const rate = await limiter.limit({
-        key: `${attachment.communityId}:${attachment.userId}`,
+        key: `${input.communityId}:${input.userId}`,
       });
       if (!rate.success) {
-        sendErrorFrame(webSocket, {
-          clientId: parsed.data.clientId,
+        return {
+          clientId: input.clientId,
           code: "RATE_LIMITED",
           error: "You are sending messages too quickly",
+          ok: false,
           retryAfterSeconds: 60,
-        });
-        return;
+        };
       }
     }
     const channel = await this.env.DB.prepare(
       "SELECT 1 AS present FROM community_channels WHERE id = ? AND community_id = ? AND is_archived = 0"
     )
-      .bind(attachment.channelId, attachment.communityId)
+      .bind(input.channelId, input.communityId)
       .first<{ present: number }>();
     if (!channel) {
-      sendErrorFrame(webSocket, {
-        clientId: parsed.data.clientId,
+      return {
+        clientId: input.clientId,
         code: "CHANNEL_ARCHIVED",
         error: "This channel is no longer available",
-      });
-      return;
+        ok: false,
+      };
     }
 
-    const mentions = parseMentions(parsed.data.body);
+    const mentions = parseMentions(input.body);
     const mentionedProfiles =
       mentions.length > 0
         ? await this.env.DB.prepare(
@@ -201,40 +339,38 @@ export class CommunityChannelRoom extends DurableObject<CommunityRoomEnv> {
        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
     )
       .bind(
-        attachment.userId,
-        parsed.data.body,
-        attachment.channelId,
-        attachment.communityId,
+        input.userId,
+        input.body,
+        input.channelId,
+        input.communityId,
         createdAt,
         id,
         JSON.stringify(resolvedMentions),
-        parsed.data.replyToId ?? null
+        input.replyToId ?? null
       )
       .run();
     const author = await this.env.DB.prepare(
       "SELECT u.image, u.name, p.username FROM user u LEFT JOIN profiles p ON p.user_id = u.id WHERE u.id = ?"
     )
-      .bind(attachment.userId)
+      .bind(input.userId)
       .first<{ image: string | null; name: string; username: string | null }>();
-    const outgoing = {
-      message: {
-        author: {
-          avatarUrl: author?.image ?? null,
-          name: author?.name ?? "Member",
-          username: author?.username ?? null,
-        },
-        body: escapeHtml(parsed.data.body),
-        clientId: parsed.data.clientId,
-        createdAt: new Date(createdAt).toISOString(),
-        deletedAt: null,
-        editedAt: null,
-        id,
-        mentions: resolvedMentions,
-        replyToId: parsed.data.replyToId ?? null,
+    const outgoing: OutgoingMessage = {
+      author: {
+        avatarUrl: author?.image ?? null,
+        name: author?.name ?? "Member",
+        username: author?.username ?? null,
       },
-      type: "message",
+      body: escapeHtml(input.body),
+      clientId: input.clientId,
+      createdAt: new Date(createdAt).toISOString(),
+      deletedAt: null,
+      editedAt: null,
+      id,
+      mentions: resolvedMentions,
+      reactions: [],
+      replyToId: input.replyToId ?? null,
     };
-    this.broadcast(outgoing);
+    this.broadcast({ message: outgoing, type: "message" });
     for (const profile of mentionedProfiles.results) {
       this.ctx.waitUntil(
         publishNotification({
@@ -248,16 +384,7 @@ export class CommunityChannelRoom extends DurableObject<CommunityRoomEnv> {
         })
       );
     }
-  }
-
-  // oxlint-disable-next-line class-methods-use-this
-  webSocketClose(webSocket: WebSocket): void {
-    webSocket.close();
-  }
-
-  // oxlint-disable-next-line class-methods-use-this
-  webSocketError(webSocket: WebSocket): void {
-    webSocket.close(1011, "Connection error");
+    return { message: outgoing, ok: true };
   }
 
   private broadcast(payload: unknown): void {

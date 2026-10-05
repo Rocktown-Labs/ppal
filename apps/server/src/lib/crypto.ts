@@ -18,7 +18,7 @@
 
 const ENCRYPTED_PREFIX = "enc:";
 
-const hexToBytes = (value: string): Uint8Array => {
+const hexToBytes = (value: string): Uint8Array<ArrayBuffer> => {
   const bytes = new Uint8Array(value.length / 2);
   for (let index = 0; index < bytes.length; index += 1) {
     bytes[index] = Number.parseInt(value.slice(index * 2, index * 2 + 2), 16);
@@ -36,7 +36,7 @@ const base64UrlEncode = (bytes: Uint8Array): string => {
     .replaceAll("=", "");
 };
 
-const base64UrlDecode = (value: string): Uint8Array => {
+const base64UrlDecode = (value: string): Uint8Array<ArrayBuffer> => {
   const normalized = value.replaceAll("-", "+").replaceAll("_", "/");
   const padding = (4 - (normalized.length % 4)) % 4;
   const padded = normalized + "=".repeat(padding);
@@ -84,15 +84,17 @@ const importEncryptionKey = async ({
   if (!raw) {
     return null;
   }
-  const bytes = raw.startsWith("0x")
-    ? hexToBytes(raw.slice(2))
-    : new TextEncoder().encode(raw);
+  const bytes = new Uint8Array(
+    raw.startsWith("0x")
+      ? hexToBytes(raw.slice(2))
+      : new TextEncoder().encode(raw)
+  );
   if (bytes.length < 16) {
     throw new Error("DATA_ENCRYPTION_KEY must be at least 16 bytes");
   }
   const keyBytes =
     algorithm === "sha256"
-      ? await crypto.subtle.digest("SHA-256", bytes)
+      ? new Uint8Array(await crypto.subtle.digest("SHA-256", bytes))
       : bytes;
   return crypto.subtle.importKey("raw", keyBytes, { name: "AES-GCM" }, false, [
     "encrypt",
@@ -126,9 +128,9 @@ const rawEncryptionKey = async (): Promise<CryptoKey | null> => {
 
 const tryDecrypt = async (
   key: CryptoKey,
-  iv: Uint8Array,
-  ciphertext: Uint8Array,
-  additionalData?: Uint8Array
+  iv: Uint8Array<ArrayBuffer>,
+  ciphertext: Uint8Array<ArrayBuffer>,
+  additionalData?: Uint8Array<ArrayBuffer>
 ): Promise<string> => {
   const decrypted = await crypto.subtle.decrypt(
     { additionalData, iv, name: "AES-GCM" },

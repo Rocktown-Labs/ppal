@@ -8,6 +8,7 @@ import type {
 import { reviewTicketRequestSchema } from "@ppal/contracts/tickets";
 import { env } from "@ppal/env/server";
 import { Hono } from "hono";
+import { z } from "zod";
 
 import { getAuthUser } from "../lib/auth";
 import { safeJsonParse } from "../lib/database";
@@ -149,45 +150,61 @@ const getTicket = async (ticketId: string, userId: string) => {
 
 export const createTicketRoutes = (auth: Auth) =>
   new Hono()
-    .get("/", async (c) => {
-      const user = await getAuthUser(auth, c.req.raw.headers, {
-        authoritative: true,
-      });
-      if (!user) {
-        return c.json({ code: "UNAUTHORIZED", error: "Unauthorized" }, 401);
-      }
-      const cursor = c.req.query("cursor") ?? null;
-      if (cursor !== null && !/^\d+$/u.test(cursor)) {
-        return c.json(
-          { code: "INVALID_CURSOR", error: "Cursor must be a timestamp" },
-          400
+    .get(
+      "/",
+      zValidator(
+        "query",
+        z.object({
+          cursor: z.string().regex(/^\d+$/u).optional(),
+          limit: z.coerce.number().int().min(1).max(100).optional(),
+        }),
+        (result, c) => {
+          if (result.success) {
+            return;
+          }
+          const field = result.error.issues[0]?.path[0];
+          return c.json(
+            field === "limit"
+              ? {
+                  code: "INVALID_LIMIT",
+                  error: "Limit must be a number between 1 and 100",
+                }
+              : { code: "INVALID_CURSOR", error: "Cursor must be a timestamp" },
+            400
+          );
+        }
+      ),
+      async (c) => {
+        const user = await getAuthUser(auth, c.req.raw.headers, {
+          authoritative: true,
+        });
+        if (!user) {
+          return c.json({ code: "UNAUTHORIZED", error: "Unauthorized" }, 401);
+        }
+        // D1 rejects `undefined` bindings, so absent query params coalesce.
+        const { cursor = null, limit = 20 } = c.req.valid("query");
+        const rows = await env.DB.prepare(
+          `SELECT id, created_at FROM tickets WHERE user_id = ?
+           AND (? IS NULL OR created_at < ?)
+           ORDER BY created_at DESC LIMIT ?`
+        )
+          .bind(user.id, cursor, cursor ? Number(cursor) : null, limit + 1)
+          .all<{ created_at: number; id: string }>();
+        const hasMore = rows.results.length > limit;
+        const page = rows.results.slice(0, limit);
+        const loadedTickets = await Promise.all(
+          page.map(({ id }) => getTicket(id, user.id))
         );
+        const tickets = loadedTickets.filter(
+          (ticket): ticket is TicketContract => ticket !== null
+        );
+        const last = page.at(-1);
+        return c.json({
+          nextCursor: hasMore && last ? String(last.created_at) : null,
+          tickets,
+        });
       }
-      const limit = Math.min(
-        Math.max(Number(c.req.query("limit") ?? 20), 1),
-        100
-      );
-      const rows = await env.DB.prepare(
-        `SELECT id, created_at FROM tickets WHERE user_id = ?
-         AND (? IS NULL OR created_at < ?)
-         ORDER BY created_at DESC LIMIT ?`
-      )
-        .bind(user.id, cursor, cursor ? Number(cursor) : null, limit + 1)
-        .all<{ created_at: number; id: string }>();
-      const hasMore = rows.results.length > limit;
-      const page = rows.results.slice(0, limit);
-      const loadedTickets = await Promise.all(
-        page.map(({ id }) => getTicket(id, user.id))
-      );
-      const tickets = loadedTickets.filter(
-        (ticket): ticket is TicketContract => ticket !== null
-      );
-      const last = page.at(-1);
-      return c.json({
-        nextCursor: hasMore && last ? String(last.created_at) : null,
-        tickets,
-      });
-    })
+    )
     .get("/:ticketId", async (c) => {
       const user = await getAuthUser(auth, c.req.raw.headers, {
         authoritative: true,

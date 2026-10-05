@@ -1,6 +1,7 @@
 /* oxlint-disable no-await-in-loop -- Recovery mutates durable state before each corresponding replay. */
 
 import { zValidator } from "@hono/zod-validator";
+import type { Auth } from "@ppal/auth";
 import {
   extractionQueueMessageSchema,
   notificationQueueMessageSchema,
@@ -12,6 +13,7 @@ import { z } from "zod";
 
 import { safeJsonParse } from "../lib/database";
 import { hasOperationsAccess } from "../lib/operations-auth";
+import { seedDemoData } from "../services/demo-seed";
 
 const legacyUserSchema = z.object({
   createdAt: z.string().datetime().optional(),
@@ -42,13 +44,31 @@ const authGuard = async (
   return await next();
 };
 
-export const createOperationRoutes = () => {
+export const createOperationRoutes = (auth: Auth) => {
   const app = new Hono();
   // Scope the operations-only bearer guard to the operations namespace. The
   // route group is mounted at /api/v1 alongside user-facing routes; a global
   // wildcard here would reject every route registered after this group.
   app.use("/operations/*", authGuard);
   return app
+    .post("/operations/demo-seed", async (c) => {
+      try {
+        const summary = await seedDemoData(auth);
+        return c.json({ ...summary, seeded: true }, 200);
+      } catch (error) {
+        return c.json(
+          {
+            code: "SEED_FAILED",
+            error:
+              error instanceof Error
+                ? error.message
+                : "Demo seed could not be completed",
+            seeded: false,
+          },
+          500
+        );
+      }
+    })
     .get("/operations/health", async (c) => {
       const [failures, stuckUploads, staleLeases] = await env.DB.batch([
         env.DB.prepare(
