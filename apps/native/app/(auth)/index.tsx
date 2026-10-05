@@ -346,19 +346,21 @@ export default function AuthScreen() {
             </View>
           </GlassCard>
 
-          {/* Quick Demo Access */}
-          <View className="items-center pt-2">
-            <HapticPressable
-              className="w-full flex-row items-center justify-center gap-2 rounded-xl border border-zinc-800 bg-zinc-900/60 py-3"
-              disabled={isSubmitting}
-              onPress={handleDemoLogin}
-            >
-              <Ionicons name="sparkles" size={16} color="#34d399" />
-              <Text className="text-xs font-semibold text-zinc-300">
-                Quick Test: Explore as Verified Bettor (@cgstewart)
-              </Text>
-            </HapticPressable>
-          </View>
+          {/* Quick Demo Access — development builds only */}
+          {__DEV__ ? (
+            <View className="items-center pt-2">
+              <HapticPressable
+                className="w-full flex-row items-center justify-center gap-2 rounded-xl border border-zinc-800 bg-zinc-900/60 py-3"
+                disabled={isSubmitting}
+                onPress={handleDemoLogin}
+              >
+                <Ionicons name="sparkles" size={16} color="#34d399" />
+                <Text className="text-xs font-semibold text-zinc-300">
+                  Quick Test: Explore as Verified Bettor (@cgstewart)
+                </Text>
+              </HapticPressable>
+            </View>
+          ) : null}
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>

@@ -105,14 +105,23 @@ export const AppStateProvider = ({
         if (rawUser) {
           // Users stored before the isDemo flag existed are demo users.
           const parsed = JSON.parse(rawUser) as Partial<MobileUser>;
-          storedUser = {
+          const candidate: MobileUser = {
             email: parsed.email ?? "",
             handle: parsed.handle ?? "",
             isDemo: parsed.isDemo ?? parsed.email === DEMO_USER_EMAIL,
             name: parsed.name ?? "",
             verified: parsed.verified ?? false,
           };
-          setUser(storedUser);
+          // Release builds never run the demo tour; evict any stored demo
+          // marker so nobody is stuck in the fixture sandbox on a store build.
+          if (candidate.isDemo && !__DEV__) {
+            await SecureStore.deleteItemAsync(STORAGE_KEYS.USER).catch(
+              () => {}
+            );
+          } else {
+            storedUser = candidate;
+            setUser(storedUser);
+          }
         }
 
         if (storedOnboarded === "true") {
@@ -165,6 +174,11 @@ export const AppStateProvider = ({
   }, []);
 
   const loginAsDemo = useCallback(async () => {
+    // The fixture tour is a development affordance; release builds never
+    // fabricate a demo session.
+    if (!__DEV__) {
+      return;
+    }
     try {
       await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       setUser(DEFAULT_DEMO_USER);
