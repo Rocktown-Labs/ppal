@@ -496,7 +496,15 @@ export default function OnboardingScreen() {
                 <View className="gap-3">
                   <HapticPressable
                     className="flex-row items-center justify-between rounded-xl border border-zinc-800/80 bg-zinc-950 p-3"
-                    onPress={() => setNotifyLegHits(!notifyLegHits)}
+                    onPress={() => {
+                      const next = !notifyLegHits;
+                      setNotifyLegHits(next);
+                      // "One leg away" rides on the same leg_won server
+                      // preference, so it cannot outlive leg-hit alerts.
+                      if (!next) {
+                        setNotifyOneLegAway(false);
+                      }
+                    }}
                   >
                     <View className="flex-row items-center gap-2.5">
                       <Ionicons name="checkmark-circle" size={16} color="#34d399" />
@@ -519,13 +527,28 @@ export default function OnboardingScreen() {
 
                   <HapticPressable
                     className="flex-row items-center justify-between rounded-xl border border-zinc-800/80 bg-zinc-950 p-3"
-                    onPress={() => setNotifyOneLegAway(!notifyOneLegAway)}
+                    onPress={() => {
+                      const next = !notifyOneLegAway;
+                      // Enabling this implies leg-hit alerts; both persist to
+                      // the single leg_won preference.
+                      if (next && !notifyLegHits) {
+                        setNotifyLegHits(true);
+                      }
+                      setNotifyOneLegAway(next);
+                    }}
                   >
                     <View className="flex-row items-center gap-2.5">
                       <Ionicons name="flame" size={16} color="#f59e0b" />
-                      <Text className="text-xs font-medium text-white">
-                        One leg away
-                      </Text>
+                      <View>
+                        <Text className="text-xs font-medium text-white">
+                          One leg away
+                        </Text>
+                        {!notifyLegHits ? (
+                          <Text className="text-[10px] text-zinc-500">
+                            Requires leg hits
+                          </Text>
+                        ) : null}
+                      </View>
                     </View>
                     <View
                       className={`size-4 items-center justify-center rounded border ${

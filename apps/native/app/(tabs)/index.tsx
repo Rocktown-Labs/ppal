@@ -46,8 +46,8 @@ export default function DashboardScreen() {
 
   const inPlayCount = metrics?.activeTicketsCount ?? 0;
   const wonCount = metrics?.cashedTicketsCount ?? 0;
-  const lostCount = 6;
-  const winRate = metrics?.winRatePercent ?? 68.4;
+  const lostCount = tickets.filter((t) => t.status === "lost").length;
+  const winRate = metrics?.winRatePercent ?? 0;
 
   const isLegStarted = (leg: { status: string }) =>
     leg.status === "live" || leg.status === "won" || leg.status === "lost";

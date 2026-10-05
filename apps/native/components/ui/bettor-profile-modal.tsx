@@ -14,7 +14,9 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { HapticPressable } from "@/components/ui/haptic-pressable";
 import { TicketDetailModal } from "@/components/ui/ticket-detail-modal";
+import { client } from "@/lib/api-client";
 import type { MobileTicket } from "@/lib/api-client";
+import { isDemoUser, useAppState } from "@/lib/app-state";
 
 export interface BettorProfileData {
   avatar: string;
@@ -70,6 +72,7 @@ export function BettorProfileModal({
   const [activeTab, setActiveTab] = useState<ProfileTab>("won");
   const [isFollowing, setIsFollowing] = useState(bettor?.isFollowing ?? false);
   const [selectedTicket, setSelectedTicket] = useState<MobileTicket | null>(null);
+  const { user } = useAppState();
 
   if (!bettor) return null;
 
@@ -80,7 +83,28 @@ export function BettorProfileModal({
 
   const handleToggleFollow = async () => {
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    setIsFollowing((prev) => !prev);
+    if (isDemoUser(user)) {
+      // Demo profiles keep the local optimistic toggle.
+      setIsFollowing((prev) => !prev);
+      return;
+    }
+    const currentlyFollowing = isFollowing;
+    // Optimistically flip, then persist; revert if the server rejects.
+    setIsFollowing(!currentlyFollowing);
+    try {
+      const res = currentlyFollowing
+        ? await client.api.v1.profiles[":username"].follow.$delete({
+            param: { username: bettor.handle },
+          })
+        : await client.api.v1.profiles[":username"].follow.$post({
+            param: { username: bettor.handle },
+          });
+      if (!res.ok) {
+        setIsFollowing(currentlyFollowing);
+      }
+    } catch {
+      setIsFollowing(currentlyFollowing);
+    }
   };
 
   const handleShareProfile = async () => {

@@ -88,10 +88,19 @@ const ChannelMessages = ({
   );
 
   // Slack-style threading: roots render in the feed, replies nest under the
-  // message they answer (replyToId), mirroring the mobile app's chat.
-  const roots = useMemo(
-    () => messages.filter((message) => !message.replyToId),
+  // message they answer (replyToId), mirroring the mobile app's chat. A reply
+  // whose parent falls outside the loaded page (cursor windows) renders as
+  // a root instead of silently disappearing.
+  const loadedIds = useMemo(
+    () => new Set(messages.map((message) => message.id)),
     [messages]
+  );
+  const roots = useMemo(
+    () =>
+      messages.filter(
+        (message) => !message.replyToId || !loadedIds.has(message.replyToId)
+      ),
+    [messages, loadedIds]
   );
   const repliesByParent = useMemo(() => {
     const map = new Map<string, LiveMessage[]>();

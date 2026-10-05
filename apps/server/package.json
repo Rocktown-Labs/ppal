@@ -8,6 +8,7 @@
     "check-types": "tsc -b",
     "compile": "bun build --compile --minify --sourcemap --bytecode ./src/index.ts --outfile server",
     "db:migrate:local": "wrangler d1 migrations apply DB --local",
+    "db:seed-demo": "bun scripts/seed-demo.ts",
     "migrate:laravel:export": "bun scripts/export-laravel.ts",
     "smoke": "bun scripts/smoke-api.ts",
     "test": "bun test tests"

@@ -1524,23 +1524,34 @@ export const createCommunityRoutes = (auth: Auth) =>
           return c.json({ code: "NOT_FOUND", error: "Message not found" }, 404);
         }
         const input = c.req.valid("json");
-        const existing = await env.DB.prepare(
-          `SELECT 1 AS present FROM community_message_reactions
+        // Atomic flip: DELETE first (statement-level atomic), INSERT only when
+        // nothing was deleted. No read-then-write window for racing toggles;
+        // each request converges to exactly one state transition.
+        const removal = await env.DB.prepare(
+          `DELETE FROM community_message_reactions
             WHERE message_id = ? AND user_id = ? AND emoji = ?`
         )
           .bind(messageId, user.id, input.emoji)
-          .first<{ present: number }>();
-        const statement = existing
-          ? env.DB.prepare(
+          .run();
+        if (removal.meta.changes === 0) {
+          const insert = await env.DB.prepare(
+            `INSERT INTO community_message_reactions (created_at, emoji, message_id, user_id)
+             VALUES (?, ?, ?, ?)
+             ON CONFLICT (message_id, user_id, emoji) DO NOTHING`
+          )
+            .bind(Date.now(), input.emoji, messageId, user.id)
+            .run();
+          if (insert.meta.changes === 0) {
+            // Rare race: the row appeared between our DELETE and INSERT.
+            // Complete the flip to removed.
+            await env.DB.prepare(
               `DELETE FROM community_message_reactions
                 WHERE message_id = ? AND user_id = ? AND emoji = ?`
-            ).bind(messageId, user.id, input.emoji)
-          : env.DB.prepare(
-              `INSERT INTO community_message_reactions (created_at, emoji, message_id, user_id)
-               VALUES (?, ?, ?, ?)
-               ON CONFLICT (message_id, user_id, emoji) DO NOTHING`
-            ).bind(Date.now(), input.emoji, messageId, user.id);
-        await statement.run();
+            )
+              .bind(messageId, user.id, input.emoji)
+              .run();
+          }
+        }
         const updated = await reactionsByMessage([messageId], user.id);
         const reactions = updated.get(messageId) ?? [];
         // Fan the updated reaction counts out to connected web clients.

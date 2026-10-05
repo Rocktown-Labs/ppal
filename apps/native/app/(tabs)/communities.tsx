@@ -2054,6 +2054,7 @@ export default function CommunitiesScreen() {
         {/* INSTAGRAM-STYLE PUBLIC BETTOR PROFILE MODAL IN DISCOVERY */}
         <BettorProfileModal
           bettor={selectedBettorProfile}
+          key={selectedBettorProfile?.id ?? "none"}
           visible={selectedBettorProfile !== null}
           onClose={() => setSelectedBettorProfile(null)}
           onJoinCommunity={(hubId) => {
@@ -3592,6 +3593,7 @@ export default function CommunitiesScreen() {
       {/* INSTAGRAM-STYLE BETTOR PROFILE MODAL IN CHAT */}
       <BettorProfileModal
         bettor={selectedBettorProfile}
+        key={`chat-${selectedBettorProfile?.id ?? "none"}`}
         visible={selectedBettorProfile !== null}
         onClose={() => setSelectedBettorProfile(null)}
         onJoinCommunity={(hubId) => {

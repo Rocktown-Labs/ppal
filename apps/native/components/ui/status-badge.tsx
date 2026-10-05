@@ -6,6 +6,8 @@ export type StatusBadgeType =
   | "live"
   | "won"
   | "lost"
+  | "push"
+  | "void"
   | "scheduled"
   | "needs_review"
   | "verified"
@@ -163,6 +165,50 @@ export function StatusBadge({ label, size = "md", status }: StatusBadgeProps) {
             }`}
           >
             {label ?? "VERIFIED"}
+          </Text>
+        </View>
+      );
+
+    case "push":
+      return (
+        <View
+          className={`flex-row items-center gap-1 rounded-full border border-zinc-600/40 bg-zinc-700/20 ${
+            isSmall ? "px-2 py-0.5" : "px-2.5 py-1"
+          }`}
+        >
+          <Ionicons
+            name="remove-circle-outline"
+            size={isSmall ? 10 : 12}
+            color="#a1a1aa"
+          />
+          <Text
+            className={`font-semibold tracking-wide text-zinc-400 uppercase ${
+              isSmall ? "text-[10px]" : "text-xs"
+            }`}
+          >
+            {label ?? "PUSH"}
+          </Text>
+        </View>
+      );
+
+    case "void":
+      return (
+        <View
+          className={`flex-row items-center gap-1 rounded-full border border-zinc-600/40 bg-zinc-700/20 ${
+            isSmall ? "px-2 py-0.5" : "px-2.5 py-1"
+          }`}
+        >
+          <Ionicons
+            name="ban-outline"
+            size={isSmall ? 10 : 12}
+            color="#a1a1aa"
+          />
+          <Text
+            className={`font-semibold tracking-wide text-zinc-400 uppercase ${
+              isSmall ? "text-[10px]" : "text-xs"
+            }`}
+          >
+            {label ?? "VOID"}
           </Text>
         </View>
       );

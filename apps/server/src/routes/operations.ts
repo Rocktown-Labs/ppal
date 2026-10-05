@@ -34,6 +34,19 @@ const replaySchema = z.object({
   failureIds: z.array(z.string()).min(1).max(100),
 });
 
+/**
+ * Demo fixtures never ship to production. The seeder exists so a pulled-down
+ * repo (and preview deployments) can demo out of the box; it is hard-disabled
+ * on the production API origin.
+ */
+const isProductionDeployment = (): boolean => {
+  try {
+    return new URL(env.BETTER_AUTH_URL).hostname === "api.myparlaypal.com";
+  } catch {
+    return false;
+  }
+};
+
 const authGuard = async (
   c: Parameters<Parameters<Hono["use"]>[1]>[0],
   next: () => Promise<void>
@@ -52,6 +65,17 @@ export const createOperationRoutes = (auth: Auth) => {
   app.use("/operations/*", authGuard);
   return app
     .post("/operations/demo-seed", async (c) => {
+      if (isProductionDeployment()) {
+        return c.json(
+          {
+            code: "DEMO_SEED_DISABLED",
+            error:
+              "Demo data is disabled on production. Run it against a local dev server or a preview deployment.",
+            seeded: false,
+          },
+          403
+        );
+      }
       try {
         const summary = await seedDemoData(auth);
         return c.json({ ...summary, seeded: true }, 200);

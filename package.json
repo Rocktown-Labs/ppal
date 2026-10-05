@@ -36,6 +36,7 @@
     "build": "turbo run build",
     "check-types": "turbo run check-types",
     "db:migrate:local": "turbo run db:migrate:local -F server --",
+    "demo:seed": "turbo run db:seed-demo -F server --",
     "deploy": "turbo run deploy -F @ppal/infra --",
     "destroy": "turbo run destroy -F @ppal/infra --",
     "check": "ultracite check",

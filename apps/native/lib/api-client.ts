@@ -82,7 +82,7 @@ export interface MobileTicket {
   originalStake: number;
   sourceName: string;
   sportsEvent: string;
-  status: "live" | "won" | "lost" | "scheduled" | "needs_review";
+  status: "live" | "won" | "lost" | "push" | "void" | "scheduled" | "needs_review";
   ticketType: "parlay" | "sgp" | "single";
   verificationStatus: "verified" | "unverified";
 }
@@ -1368,13 +1368,34 @@ const toMobileLeg = (
 });
 
 const toMobileTicket = (ticket: TicketsPayload["tickets"][number]): MobileTicket => {
-  const status = ticket.status;
-  const settledStatus =
-    ticket.displayedResult === "lost"
-      ? "lost"
-      : ticket.displayedResult === "won"
-        ? "won"
-        : "won";
+  const resultStatus = (): MobileTicket["status"] => {
+    switch (ticket.status) {
+      case "draft":
+      case "needs_review":
+        return "needs_review";
+      case "scheduled":
+        return "scheduled";
+      case "live":
+        return "live";
+      case "won":
+        return "won";
+      case "lost":
+        return "lost";
+      case "push":
+        return "push";
+      case "void":
+      case "partially_void":
+        return "void";
+      default:
+        // `settled` carries the nuance on displayedResult; anything unknown
+        // was not a loss, so it renders as a push rather than a fake win.
+        return ticket.displayedResult === "lost"
+          ? "lost"
+          : ticket.displayedResult === "won"
+            ? "won"
+            : "push";
+    }
+  };
   return {
     cashoutOffer: undefined,
     createdAt: ticket.createdAt,
@@ -1384,24 +1405,7 @@ const toMobileTicket = (ticket: TicketsPayload["tickets"][number]): MobileTicket
     originalStake: 0,
     sourceName: ticket.sourceName ?? "Manual import",
     sportsEvent: "",
-    status: (() => {
-      switch (status) {
-        case "draft":
-        case "needs_review":
-          return "needs_review" as const;
-        case "scheduled":
-          return "scheduled" as const;
-        case "live":
-          return "live" as const;
-        case "won":
-          return "won" as const;
-        case "lost":
-          return "lost" as const;
-        default:
-          // settled / push / void / partially_void collapse to a result badge
-          return settledStatus as "won" | "lost";
-      }
-    })(),
+    status: resultStatus(),
     ticketType:
       ticket.ticketType === "sgp"
         ? "sgp"
