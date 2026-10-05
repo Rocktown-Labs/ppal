@@ -8,6 +8,7 @@
     "./api": "./src/api.ts",
     "./billing": "./src/billing.ts",
     "./catalog": "./src/catalog.ts",
+    "./bloom-filter": "./src/bloom-filter.ts",
     "./community": "./src/community.ts",
     "./imports": "./src/imports.ts",
     "./markets": "./src/markets.ts",

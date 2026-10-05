@@ -15,6 +15,7 @@ import {
   LayoutDashboard,
   LogOut,
   Menu,
+  Plus,
   Settings,
   ShieldCheck,
   Ticket,
@@ -136,7 +137,7 @@ const DashboardLayoutContent = () => {
     {
       icon: MessagesSquare,
       label: "Communities",
-      to: "/dashboard/communities",
+      to: "/communities",
     },
     {
       icon: User,
@@ -305,9 +306,73 @@ const DashboardLayoutContent = () => {
         ) : null}
 
         {/* Page View Slot */}
-        <main className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4 sm:p-6 lg:p-8">
+        <main className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4 pb-24 sm:p-6 lg:p-8 lg:pb-8">
           <Outlet />
         </main>
+
+        {/* Mobile Liquid Glass Bottom Navigation Bar */}
+        <nav
+          aria-label="Mobile Navigation"
+          className="fixed inset-x-0 bottom-0 z-40 flex h-16 items-center justify-around border-t border-zinc-800/80 bg-zinc-950/85 px-2 backdrop-blur-lg lg:hidden"
+        >
+          <Link
+            to="/dashboard"
+            className={`flex flex-col items-center gap-1 py-1 text-[11px] font-medium transition ${
+              isNavItemActive("/dashboard", currentPath, true)
+                ? "text-emerald-400"
+                : "text-zinc-400 hover:text-zinc-200"
+            }`}
+          >
+            <LayoutDashboard className="size-5" />
+            <span>Home</span>
+          </Link>
+
+          <Link
+            to="/dashboard/analytics"
+            className={`flex flex-col items-center gap-1 py-1 text-[11px] font-medium transition ${
+              isNavItemActive("/dashboard/analytics", currentPath)
+                ? "text-emerald-400"
+                : "text-zinc-400 hover:text-zinc-200"
+            }`}
+          >
+            <Activity className="size-5" />
+            <span>Analytics</span>
+          </Link>
+
+          {/* Centered Upload Action Button */}
+          <Link
+            to="/dashboard/tickets/upload"
+            className="-mt-5 flex size-12 items-center justify-center rounded-full bg-emerald-500 text-zinc-950 shadow-lg shadow-emerald-500/20 transition active:scale-95"
+            aria-label="Upload Slip"
+          >
+            <Plus className="size-6 stroke-[2.5]" />
+          </Link>
+
+          <Link
+            to="/communities"
+            className={`flex flex-col items-center gap-1 py-1 text-[11px] font-medium transition ${
+              isNavItemActive("/communities", currentPath)
+                ? "text-emerald-400"
+                : "text-zinc-400 hover:text-zinc-200"
+            }`}
+          >
+            <MessagesSquare className="size-5" />
+            <span>Community</span>
+          </Link>
+
+          <Link
+            to="/dashboard/profile"
+            className={`flex flex-col items-center gap-1 py-1 text-[11px] font-medium transition ${
+              isNavItemActive("/dashboard/profile", currentPath) ||
+              isNavItemActive("/dashboard/settings", currentPath)
+                ? "text-emerald-400"
+                : "text-zinc-400 hover:text-zinc-200"
+            }`}
+          >
+            <User className="size-5" />
+            <span>Me</span>
+          </Link>
+        </nav>
       </div>
     </div>
   );
@@ -326,7 +391,7 @@ export const Route = createFileRoute("/dashboard")({
     const session = await authClient.getSession();
     if (!session.data) {
       throw redirect({
-        to: "/login",
+        to: "/auth/sign-in",
       });
     }
 

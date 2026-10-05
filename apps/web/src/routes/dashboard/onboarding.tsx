@@ -1,3 +1,4 @@
+import { validateUsernameWithBloomFilter } from "@ppal/contracts/bloom-filter";
 import { useForm } from "@tanstack/react-form";
 import { Link, createFileRoute, useNavigate } from "@tanstack/react-router";
 import {
@@ -148,10 +149,9 @@ const OnboardingWizardComponent = () => {
       return;
     }
 
-    const valid = /^[a-z0-9_]{3,30}$/iu.test(usernameVal);
-    if (!valid) {
-      const msg =
-        "Username must be 3–30 characters and contain only letters, numbers, and underscores.";
+    const validation = validateUsernameWithBloomFilter(usernameVal);
+    if (!validation.available) {
+      const msg = validation.reason ?? "Username is not available.";
       setUsernameError(msg);
       toast.error(msg);
       return;
@@ -497,8 +497,10 @@ const OnboardingWizardComponent = () => {
                           if (!value.trim()) {
                             return "Username is required to complete profile onboarding";
                           }
-                          if (!/^[a-z0-9_]{3,30}$/iu.test(value)) {
-                            return "3–30 characters, letters, numbers, and underscores only";
+                          const validation =
+                            validateUsernameWithBloomFilter(value);
+                          if (!validation.available) {
+                            return validation.reason;
                           }
                         },
                       }}
@@ -561,7 +563,7 @@ const OnboardingWizardComponent = () => {
                           <p className="text-xs font-bold tracking-[0.16em] text-zinc-400 uppercase">
                             Who can see your record?
                           </p>
-                          <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                          <div className="mt-3 grid grid-cols-2 gap-3">
                             <button
                               type="button"
                               onClick={() => field.handleChange("private")}
@@ -1166,7 +1168,7 @@ const OnboardingWizardComponent = () => {
                     we’ll turn it into a live tracker in seconds.
                   </p>
 
-                  <div className="mx-auto mt-8 grid max-w-lg gap-3 text-left sm:grid-cols-3">
+                  <div className="mx-auto mt-8 grid max-w-lg grid-cols-3 gap-2 text-left sm:gap-3">
                     <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
                       <p className="text-lg">✦</p>
                       <p className="mt-3 text-xs font-semibold text-zinc-300">

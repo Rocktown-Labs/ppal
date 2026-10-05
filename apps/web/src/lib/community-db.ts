@@ -52,3 +52,15 @@ export const removeCommunityMessage = (id: string): void => {
     communityMessageCollection.delete(id);
   }
 };
+
+/** Patch a message row's reactions without replacing the whole row. */
+export const updateCommunityMessageReactions = (
+  id: string,
+  reactions: CommunityMessageRow["reactions"]
+): void => {
+  if (communityMessageCollection.get(id)) {
+    communityMessageCollection.update(id, (draft) => {
+      draft.reactions = reactions;
+    });
+  }
+};

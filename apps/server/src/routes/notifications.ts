@@ -28,16 +28,20 @@ const isTrustedPushEndpoint = (endpoint: string): boolean => {
   );
 };
 
-const preferenceSelect = `SELECT email_enabled, in_app_enabled, leg_lost,
-  leg_won, push_enabled, ticket_lost, ticket_won
-  FROM notification_preferences WHERE user_id = ?`;
+const preferenceSelect = `SELECT n.email_enabled, n.in_app_enabled, n.leg_lost,
+  n.leg_won, n.push_enabled, n.sms_enabled, n.ticket_lost, n.ticket_won,
+  u.phone_number
+  FROM notification_preferences n JOIN user u ON u.id = n.user_id
+  WHERE n.user_id = ?`;
 
 interface PreferenceRow {
   email_enabled: number;
   in_app_enabled: number;
   leg_lost: number;
   leg_won: number;
+  phone_number: string | null;
   push_enabled: number;
+  sms_enabled: number;
   ticket_lost: number;
   ticket_won: number;
 }
@@ -47,7 +51,9 @@ const mapPreferences = (row?: PreferenceRow | null) => ({
   inAppEnabled: (row?.in_app_enabled ?? 1) === 1,
   legLost: (row?.leg_lost ?? 1) === 1,
   legWon: (row?.leg_won ?? 1) === 1,
+  phoneNumber: row?.phone_number ?? null,
   pushEnabled: (row?.push_enabled ?? 1) === 1,
+  smsEnabled: (row?.sms_enabled ?? 0) === 1,
   ticketLost: (row?.ticket_lost ?? 1) === 1,
   ticketWon: (row?.ticket_won ?? 1) === 1,
 });
@@ -195,6 +201,20 @@ export const createNotificationRoutes = (auth: Auth) =>
       return result.meta.changes > 0
         ? c.json({ read: true }, 200)
         : c.json({ code: "NOT_FOUND", error: "Notification not found" }, 404);
+    })
+    .patch("/notifications/read-all", async (c) => {
+      const user = await getAuthUser(auth, c.req.raw.headers, {
+        authoritative: true,
+      });
+      if (!user) {
+        return c.json({ code: "UNAUTHORIZED", error: "Unauthorized" }, 401);
+      }
+      await env.DB.prepare(
+        "UPDATE notifications SET read_at = COALESCE(read_at, ?) WHERE user_id = ?"
+      )
+        .bind(Date.now(), user.id)
+        .run();
+      return c.json({ success: true }, 200);
     })
     .get("/settings/notifications", async (c) => {
       const user = await getAuthUser(auth, c.req.raw.headers, {

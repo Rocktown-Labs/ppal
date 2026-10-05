@@ -7,7 +7,9 @@
       "packages/*"
     ],
     "catalog": {
+      "@hono/zod-validator": "^0.7.6",
       "dotenv": "^17.4.2",
+      "hono": "^4.13.10",
       "zod": "^4.4.3",
       "@types/node": "^26.2.0",
       "@cloudflare/workers-types": "^5.20260728.1",
@@ -29,10 +31,12 @@
     "dev:web": "turbo run dev -F web --",
     "dev:server": "turbo run dev -F server --",
     "dev:native": "turbo run dev -F native --",
+    "dev:mobile": "turbo run dev -F native -F server",
     "dev:infra": "turbo run dev -F @ppal/infra --",
     "build": "turbo run build",
     "check-types": "turbo run check-types",
     "db:migrate:local": "turbo run db:migrate:local -F server --",
+    "demo:seed": "turbo run db:seed-demo -F server --",
     "deploy": "turbo run deploy -F @ppal/infra --",
     "destroy": "turbo run destroy -F @ppal/infra --",
     "check": "ultracite check",

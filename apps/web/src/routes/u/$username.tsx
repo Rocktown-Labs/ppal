@@ -56,7 +56,7 @@ const PublicProfileComponent = () => {
   const [isFollowing, setIsFollowing] = useState(false);
   const [isFollowLoading, setIsFollowLoading] = useState(false);
   const [session, setSession] = useState<unknown>(null);
-  const avatarSource = resolveApiAsset(profile?.avatarUrl ?? profile?.image);
+  const avatarSource = resolveApiAsset(profile?.avatarUrl);
 
   useEffect(() => {
     let active = true;
@@ -87,7 +87,7 @@ const PublicProfileComponent = () => {
   const handleToggleFollow = async () => {
     if (!session) {
       toast.info("Sign in to follow bettor scorecards");
-      window.location.href = "/login";
+      window.location.href = "/auth/sign-in";
       return;
     }
 
@@ -97,12 +97,11 @@ const PublicProfileComponent = () => {
         await api.community.unfollow(username);
         setIsFollowing(false);
         if (profile) {
-          const current = profile.followerCount ?? profile.followers ?? 0;
+          const current = profile.followerCount ?? 0;
           const updated = Math.max(current - 1, 0);
           setProfile({
             ...profile,
             followerCount: updated,
-            followers: updated,
           });
         }
         toast.success(`Unfollowed @${username}`);
@@ -110,12 +109,11 @@ const PublicProfileComponent = () => {
         await api.community.follow(username);
         setIsFollowing(true);
         if (profile) {
-          const current = profile.followerCount ?? profile.followers ?? 0;
+          const current = profile.followerCount ?? 0;
           const updated = current + 1;
           setProfile({
             ...profile,
             followerCount: updated,
-            followers: updated,
           });
         }
         toast.success(`Following @${username}`);
@@ -185,7 +183,7 @@ const PublicProfileComponent = () => {
               </Link>
             ) : (
               <Link
-                to="/login"
+                to="/auth/sign-in"
                 className="rounded-xl bg-emerald-500 px-3.5 py-1.5 text-xs font-bold text-black shadow-lg shadow-emerald-500/20 transition hover:bg-emerald-400"
               >
                 Sign In / Sign Up
@@ -322,7 +320,7 @@ const PublicProfileComponent = () => {
               <Users className="size-4 text-zinc-400" />
             </div>
             <p className="mt-2 font-mono text-3xl font-black text-white">
-              {profile.followerCount ?? profile.followers ?? 0}
+              {profile.followerCount ?? 0}
             </p>
             <p className="mt-1 text-[11px] text-zinc-500">
               Tracking this record
@@ -356,7 +354,7 @@ const PublicProfileComponent = () => {
             and BetMGM and track every leg live as game stats tick.
           </p>
           <Link
-            to="/login"
+            to="/auth/sign-in"
             className="inline-flex cursor-pointer items-center gap-2 rounded-xl bg-emerald-500 px-6 py-2.5 text-xs font-bold text-black shadow-lg shadow-emerald-500/20 transition hover:bg-emerald-400"
           >
             <span>Create Your Free Account</span>

@@ -158,12 +158,12 @@ const HomeComponent = () => {
             ) : (
               <>
                 <Link
-                  to="/login"
+                  to="/auth/sign-in"
                   className="px-3 py-2 text-xs font-semibold text-zinc-300 transition-colors hover:text-white"
                 >
                   Log In
                 </Link>
-                <Link to="/login">
+                <Link to="/auth/sign-in">
                   <button
                     type="button"
                     className="cursor-pointer rounded-lg bg-emerald-500 px-4 py-2 text-xs font-bold text-black shadow-md shadow-emerald-500/25 transition hover:bg-emerald-400"
@@ -216,7 +216,7 @@ const HomeComponent = () => {
                   </Link>
                 ) : (
                   <>
-                    <Link to="/login" className="w-full sm:w-auto">
+                    <Link to="/auth/sign-in" className="w-full sm:w-auto">
                       <button
                         type="button"
                         className="w-full cursor-pointer rounded-xl bg-emerald-500 px-6 py-3.5 text-sm font-bold text-black shadow-xl shadow-emerald-500/25 transition hover:bg-emerald-400 sm:w-auto"
@@ -670,7 +670,7 @@ const HomeComponent = () => {
               </div>
 
               <div className="border-t border-zinc-800 pt-4">
-                <Link to={isAuthenticated ? "/dashboard" : "/login"}>
+                <Link to={isAuthenticated ? "/dashboard" : "/auth/sign-in"}>
                   <button
                     type="button"
                     className="w-full cursor-pointer rounded-xl border border-zinc-700 bg-zinc-800/80 px-4 py-2.5 text-xs font-bold text-white transition hover:bg-zinc-700"
@@ -736,7 +736,7 @@ const HomeComponent = () => {
               </div>
 
               <div className="border-t border-zinc-800 pt-4">
-                <Link to={isAuthenticated ? "/dashboard" : "/login"}>
+                <Link to={isAuthenticated ? "/dashboard" : "/auth/sign-in"}>
                   <button
                     type="button"
                     className="w-full cursor-pointer rounded-xl bg-emerald-500 px-4 py-2.5 text-xs font-bold text-black shadow-lg shadow-emerald-500/25 transition hover:bg-emerald-400"
@@ -806,7 +806,7 @@ const HomeComponent = () => {
               </div>
 
               <div className="border-t border-zinc-800 pt-4">
-                <Link to={isAuthenticated ? "/dashboard" : "/login"}>
+                <Link to={isAuthenticated ? "/dashboard" : "/auth/sign-in"}>
                   <button
                     type="button"
                     className="w-full cursor-pointer rounded-xl bg-purple-600 px-4 py-2.5 text-xs font-bold text-white shadow-lg shadow-purple-500/25 transition hover:bg-purple-500"
@@ -868,7 +868,7 @@ const HomeComponent = () => {
           </p>
 
           <div className="flex flex-col items-center justify-center gap-4 pt-2 sm:flex-row">
-            <Link to={isAuthenticated ? "/dashboard" : "/login"}>
+            <Link to={isAuthenticated ? "/dashboard" : "/auth/sign-in"}>
               <button
                 type="button"
                 className="cursor-pointer rounded-xl bg-emerald-500 px-8 py-3.5 text-sm font-bold text-black shadow-xl shadow-emerald-500/30 transition hover:bg-emerald-400"

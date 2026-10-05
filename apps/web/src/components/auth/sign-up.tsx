@@ -207,52 +207,6 @@ export function SignUp({
 
       <CardContent>
         <div className="flex flex-col gap-6">
-          <Field
-            className="items-start"
-            data-invalid={termsError}
-            orientation="horizontal"
-          >
-            <Checkbox
-              aria-invalid={termsError}
-              aria-required="true"
-              checked={termsAccepted}
-              disabled={isPending}
-              id="termsAccepted"
-              name="termsAccepted"
-              onBlur={() => setTermsError(!termsAccepted)}
-              onCheckedChange={(checked) => {
-                const accepted = checked === true;
-                setTermsAccepted(accepted);
-                setTermsError(!accepted);
-              }}
-            />
-            <FieldContent>
-              <FieldLabel
-                className="text-xs leading-5 text-zinc-400"
-                htmlFor="termsAccepted"
-              >
-                I agree to the{" "}
-                <Link
-                  className="text-emerald-400 underline underline-offset-4 hover:text-emerald-300"
-                  href="/terms"
-                >
-                  Terms of Service
-                </Link>{" "}
-                and{" "}
-                <Link
-                  className="text-emerald-400 underline underline-offset-4 hover:text-emerald-300"
-                  href="/privacy"
-                >
-                  Privacy Policy
-                </Link>
-                .
-              </FieldLabel>
-              {termsError ? (
-                <FieldError>Please confirm the terms to continue.</FieldError>
-              ) : null}
-            </FieldContent>
-          </Field>
-
           {socialPosition === "top" && (
             <>
               {socialProviders && socialProviders.length > 0 && (
@@ -606,6 +560,54 @@ export function SignUp({
                         </form.AppField>
                       )
                   )}
+
+                  <Field
+                    className="items-start"
+                    data-invalid={termsError}
+                    orientation="horizontal"
+                  >
+                    <Checkbox
+                      aria-invalid={termsError}
+                      aria-required="true"
+                      checked={termsAccepted}
+                      disabled={isPending}
+                      id="termsAccepted"
+                      name="termsAccepted"
+                      onBlur={() => setTermsError(!termsAccepted)}
+                      onCheckedChange={(checked) => {
+                        const accepted = checked === true;
+                        setTermsAccepted(accepted);
+                        setTermsError(!accepted);
+                      }}
+                    />
+                    <FieldContent>
+                      <FieldLabel
+                        className="text-xs leading-5 text-zinc-400"
+                        htmlFor="termsAccepted"
+                      >
+                        I agree to the{" "}
+                        <Link
+                          className="text-emerald-400 underline underline-offset-4 hover:text-emerald-300"
+                          href="/terms"
+                        >
+                          Terms of Service
+                        </Link>{" "}
+                        and{" "}
+                        <Link
+                          className="text-emerald-400 underline underline-offset-4 hover:text-emerald-300"
+                          href="/privacy"
+                        >
+                          Privacy Policy
+                        </Link>
+                        .
+                      </FieldLabel>
+                      {termsError ? (
+                        <FieldError>
+                          Please confirm the terms to continue.
+                        </FieldError>
+                      ) : null}
+                    </FieldContent>
+                  </Field>
 
                   {Captcha && (
                     <div className="flex justify-center">{Captcha}</div>

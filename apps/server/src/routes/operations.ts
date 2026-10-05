@@ -1,6 +1,7 @@
 /* oxlint-disable no-await-in-loop -- Recovery mutates durable state before each corresponding replay. */
 
 import { zValidator } from "@hono/zod-validator";
+import type { Auth } from "@ppal/auth";
 import {
   extractionQueueMessageSchema,
   notificationQueueMessageSchema,
@@ -12,6 +13,7 @@ import { z } from "zod";
 
 import { safeJsonParse } from "../lib/database";
 import { hasOperationsAccess } from "../lib/operations-auth";
+import { seedDemoData } from "../services/demo-seed";
 
 const legacyUserSchema = z.object({
   createdAt: z.string().datetime().optional(),
@@ -32,6 +34,19 @@ const replaySchema = z.object({
   failureIds: z.array(z.string()).min(1).max(100),
 });
 
+/**
+ * Demo fixtures never ship to production. The seeder exists so a pulled-down
+ * repo (and preview deployments) can demo out of the box; it is hard-disabled
+ * on the production API origin.
+ */
+const isProductionDeployment = (): boolean => {
+  try {
+    return new URL(env.BETTER_AUTH_URL).hostname === "api.myparlaypal.com";
+  } catch {
+    return false;
+  }
+};
+
 const authGuard = async (
   c: Parameters<Parameters<Hono["use"]>[1]>[0],
   next: () => Promise<void>
@@ -42,13 +57,42 @@ const authGuard = async (
   return await next();
 };
 
-export const createOperationRoutes = () => {
+export const createOperationRoutes = (auth: Auth) => {
   const app = new Hono();
   // Scope the operations-only bearer guard to the operations namespace. The
   // route group is mounted at /api/v1 alongside user-facing routes; a global
   // wildcard here would reject every route registered after this group.
   app.use("/operations/*", authGuard);
   return app
+    .post("/operations/demo-seed", async (c) => {
+      if (isProductionDeployment()) {
+        return c.json(
+          {
+            code: "DEMO_SEED_DISABLED",
+            error:
+              "Demo data is disabled on production. Run it against a local dev server or a preview deployment.",
+            seeded: false,
+          },
+          403
+        );
+      }
+      try {
+        const summary = await seedDemoData(auth);
+        return c.json({ ...summary, seeded: true }, 200);
+      } catch (error) {
+        return c.json(
+          {
+            code: "SEED_FAILED",
+            error:
+              error instanceof Error
+                ? error.message
+                : "Demo seed could not be completed",
+            seeded: false,
+          },
+          500
+        );
+      }
+    })
     .get("/operations/health", async (c) => {
       const [failures, stuckUploads, staleLeases] = await env.DB.batch([
         env.DB.prepare(

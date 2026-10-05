@@ -1,4 +1,3 @@
-import { notificationSchema } from "@ppal/contracts/notifications";
 import {
   createContext,
   useCallback,
@@ -11,8 +10,8 @@ import {
 import type { ReactNode } from "react";
 import { toast } from "sonner";
 
-import { API_BASE_URL, api } from "@/lib/api";
 import type { NotificationItem } from "@/lib/api";
+import { API_BASE_URL, api } from "@/lib/api";
 
 interface NotificationContextValue {
   addNotification: (notification: NotificationItem) => void;
@@ -136,10 +135,9 @@ export const NotificationProvider = ({ children }: { children: ReactNode }) => {
     const handleNotification = (event: Event) => {
       const message = event as MessageEvent<string>;
       try {
-        const parsed = notificationSchema.safeParse(JSON.parse(message.data));
-        if (parsed.success) {
-          addNotification(parsed.data);
-        }
+        // Stream frames are produced by the same server mapper as the
+        // notifications list endpoint, so they are NotificationItems.
+        addNotification(JSON.parse(message.data) as NotificationItem);
       } catch {
         // Ignore malformed events and allow EventSource to continue reconnecting.
       }

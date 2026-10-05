@@ -3,15 +3,29 @@ import type { ReactNode } from "react";
 
 interface AuthShellProps {
   children: ReactNode;
+  description?: string;
+  eyebrow?: string;
+  title?: string;
 }
 
-export function AuthShell({ children }: AuthShellProps) {
+/**
+ * Auth controls share the marketing site's rounded look. Descendant
+ * selectors round the form card, every button and input rendered by the auth views.
+ *
+ * On touch devices the inputs bump to a 16px font so iOS Safari does not
+ * zoom the page each time a field takes focus.
+ */
+const ROUNDED_CONTROLS =
+  "[&_[data-slot=card]]:rounded-2xl [&_form]:rounded-2xl [&_button]:rounded-lg [&_input]:rounded-lg [&_[data-slot=input-group]]:rounded-lg [&_[data-slot=checkbox]]:rounded-md [@media(pointer:coarse)]:[&_input]:text-base";
+
+export function AuthShell({
+  children,
+  description,
+  eyebrow,
+  title,
+}: AuthShellProps) {
   return (
     <main className="relative min-h-svh overflow-hidden bg-[#070a09] text-zinc-100 selection:bg-emerald-400 selection:text-black">
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_12%_15%,rgba(16,185,129,0.15),transparent_31%),radial-gradient(circle_at_86%_84%,rgba(16,185,129,0.09),transparent_27%)]"
-      />
       <div
         aria-hidden="true"
         className="pointer-events-none absolute inset-0 [background-image:linear-gradient(rgba(255,255,255,0.8)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.8)_1px,transparent_1px)] [background-size:48px_48px] opacity-[0.035]"
@@ -29,11 +43,7 @@ export function AuthShell({ children }: AuthShellProps) {
             </Link>
 
             <div className="my-auto max-w-xl py-16">
-              <p className="inline-flex items-center gap-2 text-[11px] font-bold tracking-[0.2em] text-emerald-400 uppercase">
-                <span className="size-1.5 rounded-full bg-emerald-400 shadow-[0_0_14px_rgba(52,211,153,0.9)]" />
-                Live betting desk
-              </p>
-              <h1 className="mt-6 max-w-lg text-5xl leading-[0.98] font-semibold tracking-[-0.055em] text-white xl:text-7xl">
+              <h1 className="max-w-lg text-5xl leading-[0.98] font-semibold tracking-[-0.055em] text-white xl:text-7xl">
                 Keep the ticket
                 <span className="block text-emerald-400">moving.</span>
               </h1>
@@ -54,7 +64,7 @@ export function AuthShell({ children }: AuthShellProps) {
                     </p>
                   </div>
                   <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-400/20 bg-emerald-400/10 px-2.5 py-1 text-[10px] font-bold tracking-wider text-emerald-300 uppercase">
-                    <span className="size-1.5 animate-pulse rounded-full bg-emerald-400" />
+                    <span className="size-1.5 rounded-full bg-emerald-400 motion-safe:animate-pulse" />
                     Live
                   </span>
                 </div>
@@ -119,17 +129,18 @@ export function AuthShell({ children }: AuthShellProps) {
 
             <div className="mb-7">
               <p className="text-[11px] font-bold tracking-[0.2em] text-emerald-400 uppercase">
-                Welcome back
+                {eyebrow ?? "Welcome back"}
               </p>
               <h2 className="mt-3 text-3xl font-semibold tracking-[-0.045em] text-white sm:text-4xl">
-                Pick up where you left off.
+                {title ?? "Pick up where you left off."}
               </h2>
               <p className="mt-3 max-w-sm text-sm leading-6 text-zinc-500">
-                Sign in to see your live tickets, progress, and notifications.
+                {description ??
+                  "Sign in to see your live tickets, progress, and notifications."}
               </p>
             </div>
 
-            {children}
+            <div className={ROUNDED_CONTROLS}>{children}</div>
 
             <p className="mt-6 text-center text-[11px] leading-5 text-zinc-600">
               By creating an account, you agree to the ParlayPal{" "}

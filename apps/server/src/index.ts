@@ -61,6 +61,38 @@ const WEB_ORIGIN = (() => {
   }
 })();
 
+const isLoopbackHostname = (hostname: string): boolean =>
+  hostname === "localhost" || hostname === "127.0.0.1";
+
+/**
+ * Origins allowed to make state-changing requests.
+ *
+ * Browsers always attach a genuine `Origin` header to cross-site unsafe
+ * requests and page scripts cannot forge it, so membership in this set is
+ * the CSRF boundary. Native clients send no `Origin` and pass through.
+ *
+ * Loopback hostnames are interchangeable for local development, but browsers
+ * treat `localhost` and `127.0.0.1` as different sites, so each configured
+ * loopback origin is mirrored across both spellings. Without this, the local
+ * web app (e.g. `localhost:3001`) is rejected as cross-site when the Worker
+ * binds to the other loopback address (`127.0.0.1:3000`).
+ */
+const TRUSTED_ORIGINS = new Set(
+  [API_ORIGIN, WEB_ORIGIN].flatMap((origin) => {
+    if (!origin) {
+      return [];
+    }
+    if (!isLoopbackHostname(new URL(origin).hostname)) {
+      return [origin];
+    }
+    return ["localhost", "127.0.0.1"].map((hostname) => {
+      const variant = new URL(origin);
+      variant.hostname = hostname;
+      return variant.origin;
+    });
+  })
+);
+
 const contentSecurityPolicy = {
   connectSrc: [
     "'self'",
@@ -100,8 +132,7 @@ app.use("*", async (c, next) => {
     return await next();
   }
   const origin = c.req.header("origin");
-  const fetchSite = c.req.header("sec-fetch-site");
-  if (fetchSite === "cross-site" || (origin && origin !== env.CORS_ORIGIN)) {
+  if (origin && !TRUSTED_ORIGINS.has(origin)) {
     return c.json(
       { code: "INVALID_ORIGIN", error: "Request origin is not allowed" },
       403
@@ -205,7 +236,7 @@ const routes = app
   .route("/api/v1/tickets", createTicketRoutes(auth))
   .route("/api/v1", createHistoricalImportRoutes(auth))
   .route("/api/v1", createReferralRoutes(auth))
-  .route("/api/v1", createOperationRoutes())
+  .route("/api/v1", createOperationRoutes(auth))
   .route("/api/v1", createAdminBillingRoutes(auth))
   .route("/api/v1", createBillingRoutes(auth))
   .route("/api/v1", createCommunityRoutes(auth))
