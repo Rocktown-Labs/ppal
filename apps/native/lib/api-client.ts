@@ -24,6 +24,15 @@ const sessionCookieFetch: typeof fetch = async (input, init) => {
   } catch {
     // No stored session yet; the request proceeds unauthenticated.
   }
+  const origin = headers.get("origin");
+  if (
+    origin &&
+    (origin.startsWith("exp://") ||
+      origin.startsWith("http://localhost") ||
+      origin.startsWith("http://127.0.0.1"))
+  ) {
+    headers.set("origin", "https://myparlaypal.com");
+  }
   return fetch(input, { ...init, headers });
 };
 

@@ -9,7 +9,10 @@
     "userInterfaceStyle": "automatic",
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.anonymous.ppal"
+      "bundleIdentifier": "com.anonymous.ppal",
+      "infoPlist": {
+        "NSFaceIDUsageDescription": "Use Face ID to quickly and securely sign in to your ParlayPal account."
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -38,6 +41,19 @@
           "dark": {
             "backgroundColor": "#000000"
           }
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow ParlayPal to access your photos to select bet slip screenshots and set your profile avatar."
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/icon.png",
+          "color": "#34d399"
         }
       ]
     ],

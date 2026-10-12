@@ -1,9 +1,14 @@
 import { Ionicons } from "@expo/vector-icons";
 import { validateUsernameWithBloomFilter } from "@ppal/contracts/bloom-filter";
+import { env } from "@ppal/env/native";
 import * as Haptics from "expo-haptics";
+import * as ImagePicker from "expo-image-picker";
+import * as Notifications from "expo-notifications";
 import { router } from "expo-router";
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
+  Alert,
+  Image,
   Platform,
   ScrollView,
   StyleSheet,
@@ -16,6 +21,7 @@ import { GlassCard } from "@/components/ui/glass-card";
 import { HapticPressable } from "@/components/ui/haptic-pressable";
 import { client } from "@/lib/api-client";
 import { isDemoUser, useAppState } from "@/lib/app-state";
+import { authClient } from "@/lib/auth-client";
 
 const SPORTS_LIST = [
   { detail: "NBA · WNBA · NCAA", icon: "basketball-outline" as const, id: "basketball", name: "Basketball" },
@@ -36,15 +42,16 @@ const PLANS = {
     color: "zinc",
     features: [
       { bold: false, included: true, text: "5 tracked tickets / mo" },
-      { bold: false, included: true, text: "Real-time in-app updates" },
-      { bold: false, included: false, text: "Basic analytics only" },
+      { bold: false, included: true, text: "Instant Gemini slip scanning" },
+      { bold: false, included: true, text: "Real-time push alerts on hits" },
+      { bold: false, included: false, text: "Advanced analytics & trends" },
     ],
     name: "Free",
     num: "01",
     period: "/ forever",
     popular: false,
     price: "$0",
-    tagline: "A clean place to start.",
+    tagline: "Track your weekend slips.",
   },
   pro: {
     badge: "PRO TRACKER",
@@ -52,15 +59,16 @@ const PLANS = {
     color: "emerald",
     features: [
       { bold: true, included: true, text: "500 tickets / month" },
-      { bold: false, included: true, text: "Fast 5-minute game updates" },
-      { bold: false, included: true, text: "Full analytics & email alerts" },
+      { bold: true, included: true, text: "Fast 5-minute game updates" },
+      { bold: false, included: true, text: "Instant push & lock-screen alerts" },
+      { bold: false, included: true, text: "Historical ROI & market trends" },
     ],
     name: "ParlayPal Pro",
     num: "02",
     period: "/ mo",
     popular: true,
     price: "$12.99",
-    tagline: "More volume. More signal.",
+    tagline: "For active daily bettors.",
   },
   creator: {
     badge: "CREATOR",
@@ -68,41 +76,65 @@ const PLANS = {
     color: "fuchsia",
     features: [
       { bold: true, included: true, text: "1,000 tickets / month" },
-      { bold: true, included: true, text: "Bulk archive imports" },
-      { bold: false, included: true, text: "Highest priority queue" },
+      { bold: true, included: true, text: "Bulk screenshot batch import" },
+      { bold: false, included: true, text: "Highest priority extraction queue" },
+      { bold: false, included: true, text: "Public verified card & syndicate badge" },
     ],
     name: "ParlayPal Creator",
     num: "03",
     period: "/ mo",
     popular: false,
     price: "$24.99",
-    tagline: "Built for the full card.",
+    tagline: "Built for syndicates & cappers.",
   },
 } as const;
 
 type PlanKey = keyof typeof PLANS;
 
 export default function OnboardingScreen() {
-  const { completeOnboarding, setPermission, user } = useAppState();
+  const { completeOnboarding, logout, setPermission, user } = useAppState();
 
   const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
 
   // Step 1: Profile state
+  const [avatarUri, setAvatarUri] = useState<string | null>(null);
   const [username, setUsername] = useState("sharp_baller");
   const [profileVisibility, setProfileVisibility] = useState<"private" | "public">("private");
 
-  // Step 2: Preferences state
+  // Step 2: Preferences & Mobile Push Notifications state
   const [selectedSports, setSelectedSports] = useState<string[]>(["basketball", "football"]);
   const [notifyLegHits, setNotifyLegHits] = useState(true);
   const [notifyOneLegAway, setNotifyOneLegAway] = useState(true);
   const [notifyEmail, setNotifyEmail] = useState(true);
-  const [phoneNumber, setPhoneNumber] = useState("");
-  const [notifySms, setNotifySms] = useState(false);
+  const [pushPermissionStatus, setPushPermissionStatus] = useState<
+    "granted" | "denied" | "undetermined"
+  >("undetermined");
 
   // Step 3: Plan state
   const [selectedPlan, setSelectedPlan] = useState<PlanKey>("free");
 
   const [isFinishing, setIsFinishing] = useState(false);
+
+  // Check initial notification permission on mount
+  useEffect(() => {
+    async function checkExistingPerms() {
+      if (Platform.OS !== "web") {
+        try {
+          const { status } = await Notifications.getPermissionsAsync();
+          setPushPermissionStatus(
+            status === "granted"
+              ? "granted"
+              : status === "denied"
+                ? "denied"
+                : "undetermined"
+          );
+        } catch {
+          // Unsupported environment fallback
+        }
+      }
+    }
+    void checkExistingPerms();
+  }, []);
 
   // Bloom Filter availability validation for username
   const usernameValidation = useMemo(() => {
@@ -110,10 +142,129 @@ export default function OnboardingScreen() {
   }, [username]);
 
   const toggleSport = (sportId: string) => {
-    Haptics.selectionAsync().catch(() => {});
+    void Haptics.selectionAsync().catch(() => {});
     setSelectedSports((prev) =>
       prev.includes(sportId) ? prev.filter((id) => id !== sportId) : [...prev, sportId]
     );
+  };
+
+  // Exit & Sign Out Confirmation (Apple HIG: Clear wayfinding & agency)
+  const handleExitOnboarding = () => {
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    Alert.alert(
+      "Sign Out & Exit?",
+      "You will be signed out and returned to the sign-in screen. You can sign back in anytime to complete your setup.",
+      [
+        { style: "cancel", text: "Stay" },
+        {
+          onPress: async () => {
+            await logout();
+            router.replace("/(auth)");
+          },
+          style: "destructive",
+          text: "Sign Out",
+        },
+      ]
+    );
+  };
+
+  // Avatar Image Picker: direct, zero-latency opening (Apple HIG response)
+  const handlePickFromLibrary = async () => {
+    try {
+      await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      const permResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permResult.granted) {
+        Alert.alert(
+          "Photos Permission Needed",
+          "Please allow photo access in Settings so you can choose a profile photo and upload bet slips.",
+          [{ text: "OK" }]
+        );
+        return;
+      }
+      await setPermission("photos", true);
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        allowsEditing: true,
+        aspect: [1, 1],
+        mediaTypes: ["images"],
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets?.[0]?.uri) {
+        setAvatarUri(result.assets[0].uri);
+        await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      }
+    } catch {
+      Alert.alert("Photo Library Error", "Could not access photos. Please try again.");
+    }
+  };
+
+  const handleTakePhoto = async () => {
+    try {
+      await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      const permResult = await ImagePicker.requestCameraPermissionsAsync();
+      if (!permResult.granted) {
+        Alert.alert(
+          "Camera Permission Needed",
+          "Please allow camera access in Settings to take a profile photo.",
+          [{ text: "OK" }]
+        );
+        return;
+      }
+
+      const result = await ImagePicker.launchCameraAsync({
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets?.[0]?.uri) {
+        setAvatarUri(result.assets[0].uri);
+        await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      }
+    } catch {
+      Alert.alert("Camera Error", "Could not capture photo. Please try again.");
+    }
+  };
+
+  const registerDeviceToken = async () => {
+    if (Platform.OS === "web" || isDemoUser(user)) return;
+    try {
+      const tokenData = await Notifications.getExpoPushTokenAsync();
+      if (tokenData?.data) {
+        await client.api.v1.me["device-tokens"].$post({
+          json: {
+            platform: Platform.OS === "ios" ? "ios" : "android",
+            token: tokenData.data,
+          },
+        });
+      }
+    } catch {
+      // Fallback gracefully (e.g. simulator without APNs entitlement)
+    }
+  };
+
+  // Push Notifications Permission Request
+  const requestPushPermission = async () => {
+    if (Platform.OS === "web") {
+      setPushPermissionStatus("granted");
+      await setPermission("notifications", true);
+      return true;
+    }
+    try {
+      await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      const { status } = await Notifications.requestPermissionsAsync();
+      const granted = status === "granted";
+      setPushPermissionStatus(granted ? "granted" : "denied");
+      await setPermission("notifications", granted);
+      if (granted) {
+        await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        void registerDeviceToken();
+      }
+      return granted;
+    } catch {
+      return false;
+    }
   };
 
   const handleNextStep = async () => {
@@ -122,8 +273,10 @@ export default function OnboardingScreen() {
       if (!usernameValidation.available) return;
       setStep(2);
     } else if (step === 2) {
-      // Trigger notification permission request in this step as required
-      await setPermission("notifications", true);
+      // If user selected notifications and hasn't answered yet, prompt system dialog
+      if ((notifyLegHits || notifyOneLegAway) && pushPermissionStatus === "undetermined") {
+        await requestPushPermission();
+      }
       setStep(3);
     } else if (step === 3) {
       setStep(4);
@@ -133,16 +286,40 @@ export default function OnboardingScreen() {
   const handleBackStep = async () => {
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     if (step > 1) {
-      setStep((prev) => (prev - 1) as any);
+      setStep((prev) => (prev - 1) as 1 | 2 | 3 | 4);
     }
   };
 
   const handleFinishOnboarding = async () => {
     setIsFinishing(true);
     await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+
     if (!isDemoUser(user)) {
-      // Real accounts persist their profile and notification preferences so
-      // the rest of the app (and web) sees the same setup.
+      // 1. Upload chosen avatar to server if selected
+      if (avatarUri) {
+        try {
+          const formData = new FormData();
+          const filename = avatarUri.split("/").pop() ?? "avatar.jpg";
+          const match = /\.(\w+)$/.exec(filename);
+          const type = match ? `image/${match[1]}` : "image/jpeg";
+          formData.append("avatar", {
+            name: filename,
+            type,
+            uri: avatarUri,
+          } as unknown as Blob);
+
+          const cookie = await authClient.getCookie();
+          await fetch(`${env.EXPO_PUBLIC_SERVER_URL}/api/v1/me/avatar`, {
+            body: formData,
+            headers: cookie ? { cookie } : {},
+            method: "POST",
+          });
+        } catch {
+          // Graceful fallback for offline / mock
+        }
+      }
+
+      // 2. Persist profile handle & push notification preferences
       await Promise.allSettled([
         client.api.v1.me.$patch({
           json: {
@@ -156,15 +333,17 @@ export default function OnboardingScreen() {
             inAppEnabled: true,
             legLost: true,
             legWon: notifyLegHits || notifyOneLegAway,
-            phoneNumber: notifySms && phoneNumber ? phoneNumber : null,
-            pushEnabled: true,
-            smsEnabled: notifySms,
+            phoneNumber: null,
+            pushEnabled: pushPermissionStatus === "granted" || notifyLegHits,
+            smsEnabled: false,
             ticketLost: true,
             ticketWon: true,
           },
         }),
       ]);
+      void registerDeviceToken();
     }
+
     await completeOnboarding(selectedSports);
     setIsFinishing(false);
     router.replace("/(tabs)");
@@ -173,18 +352,32 @@ export default function OnboardingScreen() {
   return (
     <SafeAreaView
       className="flex-1 bg-zinc-950"
-      style={{ flex: 1, backgroundColor: "#09090b" }}
+      style={{ backgroundColor: "#09090b", flex: 1 }}
     >
-      <View className="flex-1 px-5 pt-3">
-        {/* Top Stepper Header */}
-        <View className="mb-6">
+      <View className="flex-1 px-5 pt-2">
+        {/* Top Stepper Header & Exit/Sign Out Button */}
+        <View className="mb-5">
           <View className="flex-row items-center justify-between">
-            <Text className="text-[11px] font-bold tracking-[0.2em] text-emerald-400 uppercase">
-              GET SET UP
-            </Text>
-            <Text className="font-mono text-xs text-zinc-500">
-              0{step} / 04
-            </Text>
+            <View className="flex-row items-center gap-2">
+              <Text className="text-[11px] font-bold tracking-[0.2em] text-emerald-400 uppercase">
+                GET SET UP
+              </Text>
+              <Text className="font-mono text-xs text-zinc-500">
+                · 0{step} / 04
+              </Text>
+            </View>
+
+            {/* Exit / Sign Out Button */}
+            <HapticPressable
+              accessibilityLabel="Sign out and exit setup"
+              className="flex-row items-center gap-1.5 rounded-full border border-zinc-800 bg-zinc-900/90 px-3 py-1.5 active:bg-zinc-800"
+              onPress={handleExitOnboarding}
+            >
+              <Ionicons name="log-out-outline" size={13} color="#a1a1aa" />
+              <Text className="text-xs font-semibold text-zinc-300">
+                Sign Out
+              </Text>
+            </HapticPressable>
           </View>
 
           {/* Stepper circles connected by lines */}
@@ -249,30 +442,80 @@ export default function OnboardingScreen() {
                 record stays private unless you decide to publish it.
               </Text>
 
-              {/* Avatar Box */}
+              {/* Avatar Box with Real Image Selection */}
               <GlassCard className="my-5 items-center p-6 text-center">
-                <View className="relative mb-3 size-20 items-center justify-center rounded-full border border-zinc-700 bg-zinc-800/80">
-                  <Ionicons name="camera" size={26} color="#a1a1aa" />
-                  <View className="absolute right-0 bottom-0 size-6 items-center justify-center rounded-full bg-emerald-400">
-                    <Ionicons name="checkmark" size={14} color="#000000" />
-                  </View>
+                <View className="relative mb-3 size-24 items-center justify-center">
+                  <HapticPressable
+                    accessibilityLabel="Choose profile photo from library"
+                    className="size-full items-center justify-center overflow-hidden rounded-full border-2 border-zinc-700 bg-zinc-800/80 active:opacity-90"
+                    onPress={handlePickFromLibrary}
+                  >
+                    {avatarUri ? (
+                      <Image
+                        className="size-full"
+                        resizeMode="cover"
+                        source={{ uri: avatarUri }}
+                      />
+                    ) : (
+                      <Ionicons color="#71717a" name="person" size={40} />
+                    )}
+                  </HapticPressable>
+
+                  {/* Fully visible camera badge with zero clipping */}
+                  <HapticPressable
+                    accessibilityLabel="Take a photo with camera"
+                    className="absolute -right-1 -bottom-1 z-10 size-8 items-center justify-center rounded-full border-2 border-zinc-950 bg-emerald-400 shadow-md active:bg-emerald-300"
+                    onPress={handleTakePhoto}
+                  >
+                    <Ionicons
+                      color="#000000"
+                      name="camera"
+                      size={14}
+                    />
+                  </HapticPressable>
                 </View>
+
                 <Text className="text-sm font-semibold text-white">
-                  Add a profile photo
+                  {avatarUri ? "Profile photo set" : "Add a profile photo"}
                 </Text>
                 <Text className="mt-1 text-center text-xs text-zinc-400">
-                  A photo makes your profile easier for friends to recognize.
+                  {avatarUri
+                    ? "Tap the circle to change photo, or camera to retake."
+                    : "A photo makes your profile easier for friends to recognize."}
                 </Text>
-                <HapticPressable
-                  className="mt-3.5 rounded-xl border border-zinc-700 bg-zinc-800 px-4 py-2"
-                  onPress={() => Haptics.selectionAsync()}
-                >
-                  <Text className="text-xs font-semibold text-zinc-200">
-                    Choose image
-                  </Text>
-                </HapticPressable>
+
+                <View className="mt-3.5 flex-row gap-2">
+                  <HapticPressable
+                    className="rounded-xl border border-zinc-700 bg-zinc-800 px-4 py-2"
+                    onPress={handlePickFromLibrary}
+                  >
+                    <Text className="text-xs font-semibold text-zinc-200">
+                      {avatarUri ? "Change photo" : "Choose image"}
+                    </Text>
+                  </HapticPressable>
+                  <HapticPressable
+                    accessibilityLabel="Take photo with camera"
+                    className="rounded-xl border border-zinc-700 bg-zinc-800 px-3 py-2"
+                    onPress={handleTakePhoto}
+                  >
+                    <Ionicons color="#e4e4e7" name="camera-outline" size={16} />
+                  </HapticPressable>
+                  {avatarUri && (
+                    <HapticPressable
+                      className="rounded-xl border border-zinc-800 bg-zinc-900/80 px-3 py-2"
+                      onPress={() => {
+                        void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                        setAvatarUri(null);
+                      }}
+                    >
+                      <Text className="text-xs font-semibold text-rose-400">
+                        Remove
+                      </Text>
+                    </HapticPressable>
+                  )}
+                </View>
                 <Text className="mt-2 text-[10px] text-zinc-500">
-                  Optional · JPG, PNG, or WebP · 5MB max
+                  Optional · Camera or Photos · JPG, PNG, or WebP
                 </Text>
               </GlassCard>
 
@@ -290,7 +533,7 @@ export default function OnboardingScreen() {
                   <TextInput
                     autoCapitalize="none"
                     autoCorrect={false}
-                    className="flex-1 py-2.5 px-2 text-sm text-white"
+                    className="flex-1 px-2 py-2.5 text-sm text-white"
                     onChangeText={(val) =>
                       setUsername(val.toLowerCase().replace(/[^a-z0-9_]/g, ""))
                     }
@@ -303,9 +546,9 @@ export default function OnboardingScreen() {
                     usernameValidation.available ? (
                       <View className="flex-row items-center gap-1 rounded bg-emerald-500/10 px-2 py-0.5">
                         <Ionicons
+                          color="#34d399"
                           name="checkmark-circle"
                           size={12}
-                          color="#34d399"
                         />
                         <Text className="text-[10px] font-bold text-emerald-400">
                           Available
@@ -314,9 +557,9 @@ export default function OnboardingScreen() {
                     ) : (
                       <View className="flex-row items-center gap-1 rounded bg-rose-500/10 px-2 py-0.5">
                         <Ionicons
+                          color="#fb7185"
                           name="alert-circle"
                           size={12}
-                          color="#fb7185"
                         />
                         <Text className="text-[10px] font-bold text-rose-400">
                           Reserved
@@ -336,7 +579,7 @@ export default function OnboardingScreen() {
                   Required · 3–30 characters · letters, numbers, and underscores.
                 </Text>
 
-                {/* Who can see your record (Side-by-Side as requested) */}
+                {/* Who can see your record */}
                 <Text className="mt-5 mb-2 text-xs font-bold tracking-wider text-zinc-400 uppercase">
                   WHO CAN SEE YOUR RECORD?
                 </Text>
@@ -397,21 +640,31 @@ export default function OnboardingScreen() {
                 </View>
               </GlassCard>
 
-              {/* Action Button */}
-              <HapticPressable
-                className="flex-row items-center justify-center gap-2 rounded-2xl bg-emerald-400 py-4"
-                disabled={!usernameValidation.available}
-                onPress={handleNextStep}
-              >
-                <Text className="text-sm font-bold text-zinc-950">
-                  Continue to preferences
-                </Text>
-                <Ionicons name="arrow-forward" size={16} color="#09090b" />
-              </HapticPressable>
+              {/* Side-by-Side Action Bar: Continue to preferences + Exit */}
+              <View className="flex-row gap-3">
+                <HapticPressable
+                  className="flex-1 flex-row items-center justify-center gap-2 rounded-2xl bg-emerald-400 py-3.5 active:bg-emerald-300"
+                  disabled={!usernameValidation.available}
+                  onPress={handleNextStep}
+                >
+                  <Text className="text-sm font-bold text-zinc-950">
+                    Continue to preferences
+                  </Text>
+                  <Ionicons color="#09090b" name="arrow-forward" size={16} />
+                </HapticPressable>
+
+                <HapticPressable
+                  accessibilityLabel="Exit setup and sign out"
+                  className="items-center justify-center rounded-2xl border border-zinc-800 bg-zinc-900 px-5 py-3.5 active:bg-zinc-800"
+                  onPress={handleExitOnboarding}
+                >
+                  <Text className="text-xs font-semibold text-zinc-300">Exit</Text>
+                </HapticPressable>
+              </View>
             </View>
           )}
 
-          {/* ================= STEP 2: PREFERENCES ================= */}
+          {/* ================= STEP 2: PREFERENCES & PUSH NOTIFICATIONS ================= */}
           {step === 2 && (
             <View>
               <Text className="text-[11px] font-bold tracking-[0.16em] text-zinc-500 uppercase">
@@ -440,19 +693,19 @@ export default function OnboardingScreen() {
                   const isSelected = selectedSports.includes(sport.id);
                   return (
                     <HapticPressable
-                      key={sport.id}
                       className={`w-[31.5%] rounded-2xl border p-2.5 ${
                         isSelected
                           ? "border-emerald-400/60 bg-emerald-400/10"
                           : "border-zinc-800 bg-zinc-900/60"
                       }`}
+                      key={sport.id}
                       onPress={() => toggleSport(sport.id)}
                     >
                       <View className="flex-row items-center justify-between">
                         <Ionicons
+                          color={isSelected ? "#34d399" : "#a1a1aa"}
                           name={sport.icon}
                           size={18}
-                          color={isSelected ? "#34d399" : "#a1a1aa"}
                         />
                         <View
                           className={`size-3.5 items-center justify-center rounded-full border ${
@@ -463,9 +716,9 @@ export default function OnboardingScreen() {
                         >
                           {isSelected && (
                             <Ionicons
+                              color="#000000"
                               name="checkmark"
                               size={10}
-                              color="#000000"
                             />
                           )}
                         </View>
@@ -484,33 +737,84 @@ export default function OnboardingScreen() {
                 })}
               </View>
 
-              {/* Stay In The Loop Card (Notifications) */}
+              {/* Mobile-Native Push Notifications Card */}
               <GlassCard className="mb-5 p-5">
-                <Text className="text-xs font-bold tracking-wider text-zinc-400 uppercase">
-                  Stay in the loop
-                </Text>
-                <Text className="mt-1 mb-4 text-xs text-zinc-500">
-                  Choose the moments worth interrupting your day for.
-                </Text>
+                <View className="flex-row items-center justify-between">
+                  <View className="flex-row items-center gap-2.5">
+                    <View className="size-8 items-center justify-center rounded-xl bg-emerald-500/10">
+                      <Ionicons color="#34d399" name="notifications" size={18} />
+                    </View>
+                    <View>
+                      <Text className="text-sm font-bold text-white">
+                        Live Push Alerts
+                      </Text>
+                      <Text className="text-[11px] text-zinc-400">
+                        Instant native lock-screen updates
+                      </Text>
+                    </View>
+                  </View>
 
-                <View className="gap-3">
+                  {pushPermissionStatus === "granted" ? (
+                    <View className="flex-row items-center gap-1 rounded-full bg-emerald-500/10 px-2.5 py-1">
+                      <Ionicons color="#34d399" name="checkmark-circle" size={12} />
+                      <Text className="text-[10px] font-bold text-emerald-400">
+                        Enabled
+                      </Text>
+                    </View>
+                  ) : pushPermissionStatus === "denied" ? (
+                    <View className="flex-row items-center gap-1 rounded-full bg-amber-500/10 px-2.5 py-1">
+                      <Ionicons color="#f59e0b" name="warning" size={12} />
+                      <Text className="text-[10px] font-bold text-amber-400">
+                        Off
+                      </Text>
+                    </View>
+                  ) : (
+                    <HapticPressable
+                      className="rounded-full bg-emerald-400 px-3 py-1.5 active:bg-emerald-300"
+                      onPress={requestPushPermission}
+                    >
+                      <Text className="text-[11px] font-bold text-black">
+                        Enable
+                      </Text>
+                    </HapticPressable>
+                  )}
+                </View>
+
+                {pushPermissionStatus !== "granted" && (
+                  <View className="mt-3 rounded-xl border border-zinc-800/80 bg-zinc-950/60 p-3">
+                    <Text className="text-xs leading-4 text-zinc-400">
+                      Push notifications are free and real-time. Know the second your
+                      player hits their line without refreshing the app.
+                    </Text>
+                    {pushPermissionStatus === "denied" && (
+                      <Text className="mt-1.5 text-[11px] text-amber-400">
+                        Notifications disabled in device settings. You can re-enable anytime in iOS Settings &gt; ParlayPal.
+                      </Text>
+                    )}
+                  </View>
+                )}
+
+                <View className="mt-4 gap-2.5 border-t border-zinc-800/80 pt-4">
                   <HapticPressable
                     className="flex-row items-center justify-between rounded-xl border border-zinc-800/80 bg-zinc-950 p-3"
                     onPress={() => {
                       const next = !notifyLegHits;
                       setNotifyLegHits(next);
-                      // "One leg away" rides on the same leg_won server
-                      // preference, so it cannot outlive leg-hit alerts.
                       if (!next) {
                         setNotifyOneLegAway(false);
                       }
                     }}
                   >
                     <View className="flex-row items-center gap-2.5">
-                      <Ionicons name="checkmark-circle" size={16} color="#34d399" />
-                      <Text className="text-xs font-medium text-white">
-                        Leg hits
-                      </Text>
+                      <Ionicons color="#34d399" name="checkmark-circle" size={16} />
+                      <View>
+                        <Text className="text-xs font-medium text-white">
+                          Leg hit alerts
+                        </Text>
+                        <Text className="text-[10px] text-zinc-500">
+                          Instant buzz when a player clears a line
+                        </Text>
+                      </View>
                     </View>
                     <View
                       className={`size-4 items-center justify-center rounded border ${
@@ -520,7 +824,7 @@ export default function OnboardingScreen() {
                       }`}
                     >
                       {notifyLegHits && (
-                        <Ionicons name="checkmark" size={12} color="#000000" />
+                        <Ionicons color="#000000" name="checkmark" size={12} />
                       )}
                     </View>
                   </HapticPressable>
@@ -529,8 +833,6 @@ export default function OnboardingScreen() {
                     className="flex-row items-center justify-between rounded-xl border border-zinc-800/80 bg-zinc-950 p-3"
                     onPress={() => {
                       const next = !notifyOneLegAway;
-                      // Enabling this implies leg-hit alerts; both persist to
-                      // the single leg_won preference.
                       if (next && !notifyLegHits) {
                         setNotifyLegHits(true);
                       }
@@ -538,16 +840,14 @@ export default function OnboardingScreen() {
                     }}
                   >
                     <View className="flex-row items-center gap-2.5">
-                      <Ionicons name="flame" size={16} color="#f59e0b" />
+                      <Ionicons color="#f59e0b" name="flame" size={16} />
                       <View>
                         <Text className="text-xs font-medium text-white">
-                          One leg away
+                          One leg away sweat alerts
                         </Text>
-                        {!notifyLegHits ? (
-                          <Text className="text-[10px] text-zinc-500">
-                            Requires leg hits
-                          </Text>
-                        ) : null}
+                        <Text className="text-[10px] text-zinc-500">
+                          Heads up when your parlay is down to the final leg
+                        </Text>
                       </View>
                     </View>
                     <View
@@ -558,7 +858,7 @@ export default function OnboardingScreen() {
                       }`}
                     >
                       {notifyOneLegAway && (
-                        <Ionicons name="checkmark" size={12} color="#000000" />
+                        <Ionicons color="#000000" name="checkmark" size={12} />
                       )}
                     </View>
                   </HapticPressable>
@@ -568,10 +868,15 @@ export default function OnboardingScreen() {
                     onPress={() => setNotifyEmail(!notifyEmail)}
                   >
                     <View className="flex-row items-center gap-2.5">
-                      <Ionicons name="mail" size={16} color="#60a5fa" />
-                      <Text className="text-xs font-medium text-white">
-                        Email alerts
-                      </Text>
+                      <Ionicons color="#60a5fa" name="mail" size={16} />
+                      <View>
+                        <Text className="text-xs font-medium text-white">
+                          Weekly email recap
+                        </Text>
+                        <Text className="text-[10px] text-zinc-500">
+                          Digest of settled slips & hit rates
+                        </Text>
+                      </View>
                     </View>
                     <View
                       className={`size-4 items-center justify-center rounded border ${
@@ -581,54 +886,11 @@ export default function OnboardingScreen() {
                       }`}
                     >
                       {notifyEmail && (
-                        <Ionicons name="checkmark" size={12} color="#000000" />
+                        <Ionicons color="#000000" name="checkmark" size={12} />
                       )}
                     </View>
                   </HapticPressable>
                 </View>
-
-                {/* Optional Phone / SMS */}
-                <View className="mt-4">
-                  <Text className="mb-1 text-xs text-zinc-400">
-                    Phone number (optional)
-                  </Text>
-                  <TextInput
-                    className="rounded-xl border border-zinc-800 bg-zinc-950 px-3.5 py-2.5 text-white"
-                    keyboardType="phone-pad"
-                    onChangeText={setPhoneNumber}
-                    placeholder="+14155550123"
-                    placeholderTextColor="#71717a"
-                    style={styles.input}
-                    value={phoneNumber}
-                  />
-                </View>
-
-                <HapticPressable
-                  className="mt-3 flex-row items-center justify-between rounded-xl border border-zinc-800/80 bg-zinc-950 p-3"
-                  onPress={() => setNotifySms(!notifySms)}
-                >
-                  <View className="flex-row items-center gap-2.5">
-                    <Ionicons
-                      name="chatbubble-ellipses"
-                      size={16}
-                      color="#a1a1aa"
-                    />
-                    <Text className="text-xs font-medium text-white">
-                      SMS alerts <Text className="text-zinc-500">(Pro)</Text>
-                    </Text>
-                  </View>
-                  <View
-                    className={`size-4 items-center justify-center rounded border ${
-                      notifySms
-                        ? "border-emerald-400 bg-emerald-400"
-                        : "border-zinc-700 bg-transparent"
-                    }`}
-                  >
-                    {notifySms && (
-                      <Ionicons name="checkmark" size={12} color="#000000" />
-                    )}
-                  </View>
-                </HapticPressable>
               </GlassCard>
 
               {/* Side-by-Side Action Bar */}
@@ -648,7 +910,7 @@ export default function OnboardingScreen() {
                   <Text className="text-sm font-bold text-zinc-950">
                     Continue to plans
                   </Text>
-                  <Ionicons name="arrow-forward" size={16} color="#09090b" />
+                  <Ionicons color="#09090b" name="arrow-forward" size={16} />
                 </HapticPressable>
               </View>
             </View>
@@ -664,11 +926,11 @@ export default function OnboardingScreen() {
                 Choose your membership
               </Text>
               <Text className="mt-2 text-xs leading-5 text-zinc-400">
-                Start free, or unlock the tools that keep up with a serious tracking
-                habit. You can change your plan later.
+                Start free, or unlock higher tracking volume and faster live game
+                syncing. You can change your plan anytime.
               </Text>
 
-              {/* Active Plan Details Card (Changes dynamically above selector buttons) */}
+              {/* Active Plan Details Card */}
               <GlassCard
                 className={`my-5 p-6 ${
                   selectedPlan === "pro"
@@ -740,10 +1002,8 @@ export default function OnboardingScreen() {
                 {/* Features List */}
                 <View className="gap-2.5 border-t border-zinc-800/80 pt-4">
                   {PLANS[selectedPlan].features.map((feat, idx) => (
-                    <View key={idx} className="flex-row items-center gap-2.5">
+                    <View className="flex-row items-center gap-2.5" key={idx}>
                       <Ionicons
-                        name={feat.included ? "checkmark-circle" : "close-circle"}
-                        size={16}
                         color={
                           feat.included
                             ? selectedPlan === "creator"
@@ -751,6 +1011,8 @@ export default function OnboardingScreen() {
                               : "#34d399"
                             : "#71717a"
                         }
+                        name={feat.included ? "checkmark-circle" : "close-circle"}
+                        size={16}
                       />
                       <Text
                         className={`text-xs ${
@@ -772,7 +1034,6 @@ export default function OnboardingScreen() {
 
                   return (
                     <HapticPressable
-                      key={key}
                       className={`flex-1 items-center rounded-2xl border py-3 ${
                         isActive
                           ? key === "pro"
@@ -782,6 +1043,7 @@ export default function OnboardingScreen() {
                               : "border-white bg-zinc-800"
                           : "border-zinc-800 bg-zinc-900/60"
                       }`}
+                      key={key}
                       onPress={() => setSelectedPlan(key)}
                     >
                       <Text
@@ -839,7 +1101,7 @@ export default function OnboardingScreen() {
           {step === 4 && (
             <View className="items-center text-center">
               <View className="mb-4 size-20 items-center justify-center rounded-full border border-emerald-400/30 bg-emerald-400/10">
-                <Ionicons name="checkmark" size={36} color="#34d399" />
+                <Ionicons color="#34d399" name="checkmark" size={36} />
               </View>
 
               <Text className="text-[11px] font-bold tracking-[0.2em] text-emerald-400 uppercase">
@@ -853,35 +1115,35 @@ export default function OnboardingScreen() {
                 turn it into a live tracker in seconds.
               </Text>
 
-              {/* 3 Side-by-Side Feature Cards as requested */}
+              {/* 3 Side-by-Side Feature Cards */}
               <View className="my-6 w-full flex-row gap-2">
                 <View className="flex-1 rounded-2xl border border-zinc-800/80 bg-zinc-900/60 p-3.5 text-left">
                   <Text className="text-base text-emerald-400">✦</Text>
                   <Text className="mt-2 text-xs font-bold text-zinc-100">
-                    Upload once
+                    Drop in slips
                   </Text>
                   <Text className="mt-1 text-[10px] leading-4 text-zinc-500">
-                    Drop in your slip.
+                    Instant AI extraction.
                   </Text>
                 </View>
 
                 <View className="flex-1 rounded-2xl border border-zinc-800/80 bg-zinc-900/60 p-3.5 text-left">
                   <Text className="text-base text-emerald-400">◌</Text>
                   <Text className="mt-2 text-xs font-bold text-zinc-100">
-                    Track live
+                    Live tracking
                   </Text>
                   <Text className="mt-1 text-[10px] leading-4 text-zinc-500">
-                    Follow every leg.
+                    Play-by-play companion.
                   </Text>
                 </View>
 
                 <View className="flex-1 rounded-2xl border border-zinc-800/80 bg-zinc-900/60 p-3.5 text-left">
-                  <Text className="text-base text-emerald-400">✓</Text>
+                  <Text className="text-base text-emerald-400">🔔</Text>
                   <Text className="mt-2 text-xs font-bold text-zinc-100">
-                    Know sooner
+                    Push alerts
                   </Text>
                   <Text className="mt-1 text-[10px] leading-4 text-zinc-500">
-                    See what hits.
+                    Buzz when legs hit.
                   </Text>
                 </View>
               </View>
@@ -895,7 +1157,7 @@ export default function OnboardingScreen() {
                 <Text className="text-sm font-bold text-zinc-950">
                   {isFinishing ? "Finalizing Account..." : "Go to dashboard"}
                 </Text>
-                <Ionicons name="arrow-forward" size={16} color="#09090b" />
+                <Ionicons color="#09090b" name="arrow-forward" size={16} />
               </HapticPressable>
             </View>
           )}
@@ -907,6 +1169,6 @@ export default function OnboardingScreen() {
 
 const styles = StyleSheet.create({
   input: {
-    fontSize: 16,
+    fontSize: 16, // mobile-native requirement: >= 16px to prevent iOS auto-zoom
   },
 });
