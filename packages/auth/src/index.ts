@@ -238,10 +238,10 @@ export const createAuth = () => {
       env.CORS_ORIGIN,
       "https://myparlaypal.com",
       "ppal://",
-      ...(env.BETTER_AUTH_URL.startsWith("http://localhost:") ||
-      env.BETTER_AUTH_URL.startsWith("http://127.0.0.1:")
-        ? ["exp://", "http://localhost:8081"]
-        : []),
+      "exp://",
+      "http://localhost:8081",
+      "http://127.0.0.1:8081",
+      "http://localhost:19006",
     ],
     emailAndPassword: {
       enabled: true,

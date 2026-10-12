@@ -109,6 +109,19 @@ const contentSecurityPolicy = {
   styleSrc: ["'self'", "'unsafe-inline'"],
 };
 
+const isAllowedOrigin = (origin: string): boolean => {
+  if (TRUSTED_ORIGINS.has(origin)) {
+    return true;
+  }
+  return (
+    origin.startsWith("ppal://") ||
+    origin.startsWith("exp://") ||
+    origin === "http://localhost:8081" ||
+    origin === "http://127.0.0.1:8081" ||
+    origin === "http://localhost:19006"
+  );
+};
+
 app.use(
   "*",
   secureHeaders({
@@ -132,7 +145,7 @@ app.use("*", async (c, next) => {
     return await next();
   }
   const origin = c.req.header("origin");
-  if (origin && !TRUSTED_ORIGINS.has(origin)) {
+  if (origin && !isAllowedOrigin(origin)) {
     return c.json(
       { code: "INVALID_ORIGIN", error: "Request origin is not allowed" },
       403

@@ -1,8 +1,8 @@
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
-import { useFocusEffect } from "expo-router";
-import { router } from "expo-router";
-import React, { useCallback, useState } from "react";
+import * as LocalAuthentication from "expo-local-authentication";
+import { router, useFocusEffect } from "expo-router";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   Image,
   KeyboardAvoidingView,
@@ -29,6 +29,37 @@ export default function AuthScreen() {
   const [agreedToTerms, setAgreedToTerms] = useState(true);
   const [authError, setAuthError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [biometricType, setBiometricType] = useState<string | null>(null);
+
+  useEffect(() => {
+    async function checkBiometrics() {
+      if (Platform.OS === "web") return;
+      try {
+        const hasHardware = await LocalAuthentication.hasHardwareAsync();
+        const isEnrolled = await LocalAuthentication.isEnrolledAsync();
+        if (hasHardware && isEnrolled) {
+          const types =
+            await LocalAuthentication.supportedAuthenticationTypesAsync();
+          if (
+            types.includes(
+              LocalAuthentication.AuthenticationType.FACIAL_RECOGNITION
+            )
+          ) {
+            setBiometricType("Face ID");
+          } else if (
+            types.includes(LocalAuthentication.AuthenticationType.FINGERPRINT)
+          ) {
+            setBiometricType("Touch ID");
+          } else {
+            setBiometricType("Biometrics");
+          }
+        }
+      } catch {
+        // Fallback gracefully
+      }
+    }
+    void checkBiometrics();
+  }, []);
 
   const redirectAfterAuth = () => {
     router.replace(hasCompletedOnboarding ? "/(tabs)" : "/onboarding");
@@ -131,6 +162,42 @@ export default function AuthScreen() {
     }
   };
 
+  const handleBiometricLogin = async () => {
+    setAuthError(null);
+    try {
+      await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      const authResult = await LocalAuthentication.authenticateAsync({
+        cancelLabel: "Cancel",
+        disableDeviceFallback: false,
+        promptMessage: `Sign in to ParlayPal with ${biometricType ?? "Biometrics"}`,
+      });
+
+      if (!authResult.success) {
+        return;
+      }
+
+      setIsSubmitting(true);
+      const session = await authClient.getSession();
+      const sessionUser = session.data?.user;
+      if (sessionUser) {
+        await loginReal({
+          email: sessionUser.email,
+          name: sessionUser.name,
+        });
+        redirectAfterAuth();
+        return;
+      }
+
+      setAuthError(
+        "Please sign in with your email & password once to connect Face ID."
+      );
+    } catch {
+      setAuthError("Biometric sign-in was unavailable. Please use password.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   return (
     <SafeAreaView
       className="flex-1 bg-zinc-950"
@@ -180,6 +247,28 @@ export default function AuthScreen() {
             <Text className="mb-4 text-lg font-bold text-white">
               {mode === "signin" ? "Sign In" : "Sign Up"}
             </Text>
+
+            {/* Native Biometric Unlock (Face ID / Touch ID) */}
+            {mode === "signin" && biometricType && (
+              <HapticPressable
+                className="mb-3 flex-row items-center justify-center gap-2.5 rounded-2xl border border-emerald-500/40 bg-emerald-950/20 py-3.5 active:bg-emerald-900/30"
+                disabled={isSubmitting}
+                onPress={handleBiometricLogin}
+              >
+                <Ionicons
+                  color="#34d399"
+                  name={
+                    biometricType === "Touch ID"
+                      ? "finger-print-outline"
+                      : "scan-outline"
+                  }
+                  size={19}
+                />
+                <Text className="text-sm font-semibold text-white">
+                  Sign in with {biometricType}
+                </Text>
+              </HapticPressable>
+            )}
 
             {/* Social Login Button */}
             <HapticPressable
