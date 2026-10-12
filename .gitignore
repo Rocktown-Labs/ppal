@@ -56,6 +56,14 @@ lerna-debug.log*
 coverage
 .nyc_output
 
+# Eval outputs
+evals/extraction/results
+# Personal real-slip fixtures and their labels: this repo is public, so local
+# betting history must never be committed.
+evals/extraction/fixtures/IMG_*
+evals/extraction/fixtures/labels.local.jsonl
+evals/extraction/fixtures/.converted
+
 # Misc
 *.tgz
 .cache

@@ -1,10 +1,15 @@
 import { extractionQueueMessageSchema } from "@ppal/contracts/queues";
 import type { ExtractionResult } from "@ppal/contracts/uploads";
 
-import { extractTicketWithGemini } from "./gemini";
 import { refreshHistoricalBatch } from "./historical-imports";
 import { publishNotification } from "./notifications";
 import { resolveExtractedLeg } from "./ticket-resolution";
+import {
+  applySettledOverride,
+  extractTicketFromPdf,
+  extractTicketWithWorkersAI,
+  qualifySlipImage,
+} from "./workers-ai";
 
 const hashAnalyticsIdentifier = async (value: string): Promise<string> => {
   const digest = await crypto.subtle.digest(
@@ -141,6 +146,38 @@ const createTicketStatements = async ({
   return statements;
 };
 
+/**
+ * Rejects an upload that clef determined is not a betting slip. The verdict
+ * is deterministic, so the upload is failed terminally (no queue retries) and
+ * the friendly reason is surfaced to the client via the extraction row.
+ */
+const rejectNonSlipUpload = async (
+  workerEnv: Env,
+  extractionId: string,
+  reason: string,
+  upload: UploadRow
+): Promise<void> => {
+  await workerEnv.DB.batch([
+    workerEnv.DB.prepare(
+      `UPDATE extractions SET status = 'failed', error_message = ?, updated_at = ?
+       WHERE id = ?`
+    ).bind(reason, Date.now(), extractionId),
+    workerEnv.DB.prepare(
+      "UPDATE uploads SET status = 'failed', updated_at = ? WHERE id = ?"
+    ).bind(Date.now(), upload.id),
+    workerEnv.DB.prepare(
+      `UPDATE usage_events SET status = 'released', updated_at = ?
+       WHERE idempotency_key = ? AND status = 'reserved'`
+    ).bind(Date.now(), upload.usage_reservation_key),
+  ]);
+  if (upload.historical_import_batch_id) {
+    await refreshHistoricalBatch(
+      workerEnv.DB,
+      upload.historical_import_batch_id
+    );
+  }
+};
+
 export const processExtractionMessage = async (
   body: unknown,
   workerEnv: Env
@@ -179,7 +216,7 @@ export const processExtractionMessage = async (
   await workerEnv.DB.prepare(
     `INSERT INTO extractions (
       id, provider, schema_version, status, updated_at, upload_id
-    ) VALUES (?, 'gemini', '2', 'pending', ?, ?)`
+    ) VALUES (?, 'workers-ai', '2', 'pending', ?, ?)`
   )
     .bind(extractionId, Date.now(), upload.id)
     .run();
@@ -189,11 +226,33 @@ export const processExtractionMessage = async (
     if (!object) {
       throw new Error(`R2 object missing for upload ${upload.id}`);
     }
-    const extracted = await extractTicketWithGemini({
-      apiKey: workerEnv.GEMINI_API_KEY,
-      bytes: await object.arrayBuffer(),
-      mimeType: upload.mime_type,
-    });
+    const bytes = await object.arrayBuffer();
+    const isPdf = upload.mime_type === "application/pdf";
+    // Best-effort pre-gate: if clef is unavailable, extraction proceeds.
+    // clef only accepts image/* inputs, so PDFs skip the gate (the converted
+    // text + downstream review still guard quality).
+    const qualification = isPdf
+      ? null
+      : await qualifySlipImage(workerEnv, bytes, upload.mime_type).catch(
+          () => null
+        );
+    if (qualification && qualification.isBettingSlip < 0.5) {
+      await rejectNonSlipUpload(
+        workerEnv,
+        extractionId,
+        "Image doesn't look like a sportsbook bet slip — upload a screenshot of your bet from a sportsbook or picks app.",
+        upload
+      );
+      return;
+    }
+    const extracted = isPdf
+      ? await extractTicketFromPdf({ bytes, workerEnv })
+      : await extractTicketWithWorkersAI({
+          bytes,
+          mimeType: upload.mime_type,
+          workerEnv,
+        });
+    applySettledOverride(extracted.result, qualification);
     if (upload.historical_import_batch_id) {
       const activeBatch = await workerEnv.DB.prepare(
         `SELECT id FROM historical_import_batches
@@ -231,7 +290,10 @@ export const processExtractionMessage = async (
         "UPDATE extractions SET model = ?, raw_response = ?, updated_at = ? WHERE id = ?"
       ).bind(
         extracted.model,
-        JSON.stringify(extracted.raw),
+        JSON.stringify({
+          clef: qualification?.raw ?? null,
+          extraction: extracted.raw,
+        }),
         Date.now(),
         extractionId
       )

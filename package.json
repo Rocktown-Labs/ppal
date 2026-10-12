@@ -40,6 +40,7 @@
     "deploy": "turbo run deploy -F @ppal/infra --",
     "destroy": "turbo run destroy -F @ppal/infra --",
     "check": "ultracite check",
+    "eval:extraction": "bun evals/extraction/run.ts",
     "fix": "ultracite fix",
     "prepare": "husky"
   },

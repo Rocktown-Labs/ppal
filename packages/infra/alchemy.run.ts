@@ -79,6 +79,7 @@ export const server = Cloudflare.Worker("server", {
   // account-wide Zone Read access to discover it.
   routes: [{ pattern: `${apiDomain}/*`, zoneId: cloudflareZoneId }],
   env: {
+    AI: Cloudflare.Workers.AI(),
     ANALYTICS: analytics,
     API_RATE_LIMIT: Cloudflare.RateLimit("api-rate-limit", {
       namespaceId: rateLimitNamespaceOffset + 1001,
@@ -132,7 +133,6 @@ export const server = Cloudflare.Worker("server", {
     FACEBOOK_CLIENT_SECRET: Config.redacted("FACEBOOK_CLIENT_SECRET").pipe(
       Config.withDefault(Redacted.make(""))
     ),
-    GEMINI_API_KEY: Config.redacted("GEMINI_API_KEY"),
     GOOGLE_CLIENT_ID: Config.string("GOOGLE_CLIENT_ID").pipe(
       Config.withDefault("")
     ),
