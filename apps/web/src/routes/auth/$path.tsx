@@ -1,7 +1,8 @@
-import { createFileRoute, useParams } from "@tanstack/react-router";
+import { createFileRoute, notFound, useParams } from "@tanstack/react-router";
 
 import { Auth } from "@/components/auth/auth";
 import { AuthShell } from "@/components/auth/auth-shell";
+import { isAuthViewPath } from "@/lib/auth/auth-view-paths";
 import { redirectSignedInVisitor } from "@/lib/auth/redirect-signed-in-visitor";
 import { noIndexMeta } from "@/lib/seo";
 
@@ -37,6 +38,12 @@ const ENTRY_VIEW_PATHS = new Set(["sign-in", "sign-up"]);
 
 export const Route = createFileRoute("/auth/$path")({
   beforeLoad: async ({ params }) => {
+    // Unknown segments have no `<Auth>` view and would throw during SSR.
+    // Render a not-found (404) instead of a 500.
+    if (!isAuthViewPath(params.path)) {
+      throw notFound();
+    }
+
     if (ENTRY_VIEW_PATHS.has(params.path)) {
       await redirectSignedInVisitor();
     }

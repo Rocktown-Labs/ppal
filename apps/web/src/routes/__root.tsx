@@ -13,6 +13,7 @@ import { evlogErrorHandler } from "evlog/nitro/v3";
 
 import { AuthProvider } from "@/components/auth/auth-provider";
 import { authClient } from "@/lib/auth-client";
+import { AUTH_UI_PLUGINS } from "@/lib/auth/auth-view-paths";
 import {
   SITE_DESCRIPTION,
   SITE_LOGO_ICON_URL,
@@ -47,6 +48,7 @@ const RootDocument = () => {
       <body className="min-h-screen bg-zinc-950 font-sans text-zinc-100 antialiased selection:bg-emerald-500 selection:text-black">
         <AuthProvider
           Link={TanStackLinkAdapter}
+          plugins={AUTH_UI_PLUGINS}
           authClient={authClient}
           basePaths={{ settings: "/dashboard" }}
           baseURL={authBaseURL}
