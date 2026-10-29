@@ -1,5 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
+import * as LocalAuthentication from "expo-local-authentication";
 import { router, useFocusEffect } from "expo-router";
 import React, { useCallback, useState } from "react";
 import {
@@ -23,6 +24,7 @@ import {
 import type { MobileTicket } from "@/lib/api-client";
 import { useProfileData } from "@/lib/api-client";
 import { useAppState } from "@/lib/app-state";
+import { authClient } from "@/lib/auth-client";
 
 type ProfileTab = "profile" | "billing" | "notifications" | "referrals";
 
@@ -421,6 +423,7 @@ export default function ProfileScreen() {
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmNewPassword, setConfirmNewPassword] = useState("");
+  const [isUpdatingPassword, setIsUpdatingPassword] = useState(false);
 
   // Sign Out Modal State
   const [isSignOutModalOpen, setIsSignOutModalOpen] = useState(false);
@@ -530,13 +533,36 @@ export default function ProfileScreen() {
   };
 
   const handleAuthenticateSecurity = async () => {
-    await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    setIsSecurityAuthValid(true);
-    setIsAuthPromptModalOpen(false);
-    setIsSecurityModalOpen(true);
+    try {
+      const result = await LocalAuthentication.authenticateAsync({
+        cancelLabel: "Cancel",
+        disableDeviceFallback: false,
+        promptMessage: "Verify your identity to change your password",
+      });
+      if (!result.success) {
+        Alert.alert(
+          "Authentication failed",
+          "Your identity could not be verified. Please try again."
+        );
+        return;
+      }
+      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      setIsSecurityAuthValid(true);
+      setIsAuthPromptModalOpen(false);
+      setIsSecurityModalOpen(true);
+    } catch {
+      Alert.alert(
+        "Authentication unavailable",
+        "Biometric authentication is not available on this device."
+      );
+    }
   };
 
   const handleUpdatePassword = async () => {
+    if (!currentPassword) {
+      Alert.alert("Password Required", "Please enter your current password.");
+      return;
+    }
     if (!newPassword.trim()) {
       Alert.alert("Password Required", "Please enter a new password.");
       return;
@@ -545,15 +571,39 @@ export default function ProfileScreen() {
       Alert.alert("Mismatch", "New passwords do not match.");
       return;
     }
-    await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    setCurrentPassword("");
-    setNewPassword("");
-    setConfirmNewPassword("");
-    setIsSecurityModalOpen(false);
-    Alert.alert(
-      "Password Changed",
-      "Your password has been successfully updated."
-    );
+    setIsUpdatingPassword(true);
+    try {
+      const result = await authClient.changePassword({
+        currentPassword,
+        newPassword,
+        revokeOtherSessions: true,
+      });
+      if (result.error) {
+        Alert.alert(
+          "Password not changed",
+          result.error.message ?? "The password could not be updated."
+        );
+        return;
+      }
+      await Haptics.notificationAsync(
+        Haptics.NotificationFeedbackType.Success
+      );
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmNewPassword("");
+      setIsSecurityModalOpen(false);
+      Alert.alert(
+        "Password Changed",
+        "Your password has been successfully updated."
+      );
+    } catch {
+      Alert.alert(
+        "Password not changed",
+        "The password could not be updated. Please try again."
+      );
+    } finally {
+      setIsUpdatingPassword(false);
+    }
   };
 
   const handleConfirmSignOut = async () => {
@@ -1657,10 +1707,11 @@ export default function ProfileScreen() {
 
               <HapticPressable
                 className="mt-4 items-center rounded-xl bg-emerald-500 py-3.5 shadow-md shadow-emerald-500/25"
+                disabled={isUpdatingPassword}
                 onPress={handleUpdatePassword}
               >
                 <Text className="text-xs font-bold text-zinc-950">
-                  Update Password
+                  {isUpdatingPassword ? "Updating…" : "Update Password"}
                 </Text>
               </HapticPressable>
             </View>

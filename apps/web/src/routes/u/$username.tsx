@@ -22,6 +22,7 @@ import { toast } from "sonner";
 import { API_BASE_URL, api, resolveApiAsset } from "@/lib/api";
 import type { PublicProfile } from "@/lib/api";
 import { authClient } from "@/lib/auth-client";
+import { serializeJsonLd } from "@/lib/json-ld";
 import { absoluteUrl, noIndexMeta, SITE_NAME, socialMeta } from "@/lib/seo";
 
 const copyProfileLink = () => {
@@ -386,7 +387,7 @@ export const Route = createFileRoute("/u/$username")({
       scripts: loaderData
         ? [
             {
-              children: JSON.stringify({
+              children: serializeJsonLd({
                 "@context": "https://schema.org",
                 "@type": "ProfilePage",
                 mainEntity: {

@@ -9,6 +9,7 @@ import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { secureHeaders } from "hono/secure-headers";
 
+import { getRateLimitKey } from "./lib/rate-limit";
 import { createAdminBillingRoutes } from "./routes/admin-billing";
 import { createAnalyticsRoutes } from "./routes/analytics";
 import { createBillingRoutes } from "./routes/billing";
@@ -161,28 +162,11 @@ app.use("*", async (c, next) => {
   await identifyUser(c.get("log"), c.req.raw.headers, c.req.path);
   return next();
 });
-const getRateLimitKey = async (request: Request): Promise<string> => {
-  const address = request.headers.get("cf-connecting-ip") ?? "local";
-  const sessionIdentity =
-    request.headers.get("cookie") ?? request.headers.get("authorization");
-  if (!sessionIdentity) {
-    return address;
-  }
-  const digest = await crypto.subtle.digest(
-    "SHA-256",
-    new TextEncoder().encode(sessionIdentity)
-  );
-  const fingerprint = Array.from(new Uint8Array(digest).slice(0, 8), (byte) =>
-    byte.toString(16).padStart(2, "0")
-  ).join("");
-  return `${address}:${fingerprint}`;
-};
-
 app.use("/api/auth/*", async (c, next) => {
   const limiter = env.AUTH_RATE_LIMIT;
   if (limiter?.limit) {
     const { success } = await limiter.limit({
-      key: `${await getRateLimitKey(c.req.raw)}:auth`,
+      key: `${getRateLimitKey(c.req.raw)}:auth`,
     });
     if (!success) {
       return c.json({ code: "RATE_LIMITED", error: "Too many requests" }, 429, {
@@ -194,7 +178,7 @@ app.use("/api/auth/*", async (c, next) => {
 });
 
 app.use("/api/v1/*", async (c, next) => {
-  const clientKey = await getRateLimitKey(c.req.raw);
+  const clientKey = getRateLimitKey(c.req.raw);
   const isUploadMutation =
     c.req.method !== "GET" &&
     (c.req.path.includes("/uploads") ||

@@ -1,11 +1,21 @@
 import { z } from "zod";
 
+const E164_PHONE_NUMBER = /^\+[1-9]\d{7,14}$/u;
+
 export const notificationPreferencesSchema = z.object({
   emailEnabled: z.boolean(),
   inAppEnabled: z.boolean(),
   legLost: z.boolean(),
   legWon: z.boolean(),
-  phoneNumber: z.string().nullable(),
+  phoneNumber: z
+    .string()
+    .trim()
+    .max(32)
+    .nullable()
+    .transform((value) => (value === "" ? null : value))
+    .refine((value) => value === null || E164_PHONE_NUMBER.test(value), {
+      message: "Phone number must use E.164 format (for example +14155550123)",
+    }),
   pushEnabled: z.boolean(),
   smsEnabled: z.boolean(),
   ticketLost: z.boolean(),

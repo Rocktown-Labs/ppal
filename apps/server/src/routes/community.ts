@@ -19,6 +19,12 @@ import StripeSdk from "stripe";
 import { z } from "zod";
 
 import { getAuthUser } from "../lib/auth";
+import {
+  canActivatePaidMembership,
+  canLeaveCommunity,
+  canReadCommunityContent,
+  canViewCommunity,
+} from "../lib/community-access";
 import { encryptValue, hashValue } from "../lib/crypto";
 import { escapeLikePattern } from "../lib/database";
 import { escapeHtml } from "../lib/html";
@@ -182,12 +188,6 @@ const getMembership = (
   )
     .bind(communityId, userId)
     .first<MembershipRow>();
-
-const canViewCommunity = (
-  community: CommunityRow,
-  membership: MembershipRow | null
-): boolean =>
-  community.visibility === "public" || membership?.status === "active";
 
 const isModerator = (membership: MembershipRow | null): boolean =>
   membership?.status === "active" &&
@@ -1207,6 +1207,16 @@ export const createCommunityRoutes = (auth: Auth) =>
             503
           );
         }
+        const membership = await getMembership(community.id, user.id);
+        if (!canActivatePaidMembership(membership)) {
+          return c.json(
+            {
+              code: "MEMBERSHIP_RESTRICTED",
+              error: "This membership cannot be reactivated",
+            },
+            403
+          );
+        }
         const session = await stripe.checkout.sessions.retrieve(sessionId);
         const paidAmount =
           env.STRIPE_TAX_ENABLED === "true"
@@ -1270,6 +1280,15 @@ export const createCommunityRoutes = (auth: Auth) =>
           400
         );
       }
+      if (membership && !canLeaveCommunity(membership)) {
+        return c.json(
+          {
+            code: "MEMBERSHIP_RESTRICTED",
+            error: "A moderated membership cannot be removed by the member",
+          },
+          409
+        );
+      }
       await env.DB.prepare(
         "DELETE FROM community_members WHERE community_id = ? AND user_id = ?"
       )
@@ -1312,7 +1331,7 @@ export const createCommunityRoutes = (auth: Auth) =>
         const membership = user
           ? await getMembership(community.id, user.id)
           : null;
-        if (!canViewCommunity(community, membership)) {
+        if (!canReadCommunityContent(community, membership)) {
           return c.json(
             { code: "NOT_FOUND", error: "Community not found" },
             404

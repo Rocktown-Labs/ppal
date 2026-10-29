@@ -4,6 +4,7 @@ import { Check } from "lucide-react";
 import { UserButton } from "@/components/auth/user/user-button";
 import { SPORT_PAGES } from "@/data/sports";
 import { authClient } from "@/lib/auth-client";
+import { serializeJsonLd } from "@/lib/json-ld";
 import {
   SITE_DESCRIPTION,
   SITE_OG_IMAGE_URL,
@@ -1002,7 +1003,7 @@ export const Route = createFileRoute("/")({
     ],
     scripts: [
       {
-        children: JSON.stringify({
+        children: serializeJsonLd({
           "@context": "https://schema.org",
           "@type": "SoftwareApplication",
           applicationCategory: "SportsApplication",
@@ -1035,7 +1036,7 @@ export const Route = createFileRoute("/")({
         type: "application/ld+json",
       },
       {
-        children: JSON.stringify({
+        children: serializeJsonLd({
           "@context": "https://schema.org",
           "@type": "FAQPage",
           mainEntity: FAQ_ITEMS.map((item) => ({
