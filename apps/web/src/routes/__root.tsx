@@ -27,6 +27,24 @@ import appCss from "../index.css?url";
 
 export type RouterAppContext = Record<string, unknown>;
 
+const securityHeaders = createMiddleware().server(async ({ next }) => {
+  // oxlint-disable-next-line node/callback-return -- headers are applied after the response resolves.
+  const result = await next();
+  const { headers } = result.response;
+  headers.set("referrer-policy", "strict-origin-when-cross-origin");
+  headers.set("x-content-type-options", "nosniff");
+  headers.set("x-frame-options", "DENY");
+  headers.set(
+    "permissions-policy",
+    "camera=(), microphone=(), geolocation=(), payment=()"
+  );
+  headers.set(
+    "strict-transport-security",
+    "max-age=31536000; includeSubDomains"
+  );
+  return result;
+});
+
 const TanStackLinkAdapter = ({
   href,
   ...props
@@ -144,6 +162,6 @@ export const Route = createRootRouteWithContext<RouterAppContext>()({
   }),
 
   server: {
-    middleware: [createMiddleware().server(evlogErrorHandler)],
+    middleware: [securityHeaders, createMiddleware().server(evlogErrorHandler)],
   },
 });
