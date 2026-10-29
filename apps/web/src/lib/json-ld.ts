@@ -14,7 +14,7 @@ const JSON_LD_ESCAPES: Record<string, string> = {
  * escapes keep the payload valid JSON while making it inert inside HTML.
  */
 export const serializeJsonLd = (value: unknown): string =>
-  JSON.stringify(value).replaceAll(
+  (JSON.stringify(value) ?? "null").replaceAll(
     /[<>&\u2028\u2029]/gu,
     (character) => JSON_LD_ESCAPES[character] ?? character
   );
