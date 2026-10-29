@@ -30,6 +30,10 @@ describe("community access", () => {
 
   test("private community content requires a membership", () => {
     expect(canViewCommunity(privateFree, null)).toBe(false);
+    expect(canViewCommunity(privateFree, pending)).toBe(false);
+    expect(canViewCommunity(privateFree, active)).toBe(true);
+    expect(canViewCommunity(privateFree, muted)).toBe(true);
+    expect(canViewCommunity(privateFree, banned)).toBe(false);
     expect(canReadCommunityContent(privateFree, null)).toBe(false);
     expect(canReadCommunityContent(privateFree, pending)).toBe(false);
     expect(canReadCommunityContent(privateFree, active)).toBe(true);

@@ -25,13 +25,16 @@ export interface MembershipState {
  * Whether the community landing page (name, description, channel list) may be
  * shown. Paid public communities are discoverable so visitors can start a
  * checkout; their message history is still protected by
- * `canReadCommunityContent`.
+ * `canReadCommunityContent`. Muted members keep their UI entry point because a
+ * mute restricts posting, not viewing.
  */
 export const canViewCommunity = (
   community: CommunityAccessRecord,
   membership: MembershipState | null
 ): boolean =>
-  community.visibility === "public" || membership?.status === "active";
+  community.visibility === "public" ||
+  membership?.status === "active" ||
+  membership?.status === "muted";
 
 /**
  * Whether the community's channels and message history may be read.
