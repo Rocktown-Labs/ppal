@@ -113,7 +113,7 @@ export const notificationDeliveries = sqliteTable(
   (table) => [
     check(
       "notification_deliveries_channel_check",
-      sql`${table.channel} in ('push', 'email', 'web_push')`
+      sql`${table.channel} in ('push', 'email', 'web_push', 'sms')`
     ),
     check(
       "notification_deliveries_status_check",
