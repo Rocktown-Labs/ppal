@@ -37,14 +37,15 @@ export const canViewCommunity = (
  * Whether the community's channels and message history may be read.
  *
  * Public free communities are readable by anyone. Paid communities and private
- * communities require an active membership, so a public paid community cannot
- * be used to bypass its paywall.
+ * communities require a paid/active membership (a mute restricts posting, not
+ * reading), so a public paid community cannot be used to bypass its paywall.
  */
 export const canReadCommunityContent = (
   community: CommunityAccessRecord,
   membership: MembershipState | null
 ): boolean =>
   membership?.status === "active" ||
+  membership?.status === "muted" ||
   (community.access === "free" && community.visibility === "public");
 
 /**

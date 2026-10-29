@@ -21,17 +21,19 @@ describe("community access", () => {
     expect(canReadCommunityContent(publicFree, null)).toBe(true);
   });
 
-  test("paid community content requires an active membership even when public", () => {
+  test("paid community content requires a membership even when public", () => {
     expect(canViewCommunity(publicPaid, null)).toBe(true);
     expect(canReadCommunityContent(publicPaid, null)).toBe(false);
     expect(canReadCommunityContent(publicPaid, active)).toBe(true);
+    expect(canReadCommunityContent(publicPaid, muted)).toBe(true);
   });
 
-  test("private community content requires an active membership", () => {
+  test("private community content requires a membership", () => {
     expect(canViewCommunity(privateFree, null)).toBe(false);
     expect(canReadCommunityContent(privateFree, null)).toBe(false);
     expect(canReadCommunityContent(privateFree, pending)).toBe(false);
     expect(canReadCommunityContent(privateFree, active)).toBe(true);
+    expect(canReadCommunityContent(privateFree, muted)).toBe(true);
   });
 
   test("moderated members cannot erase their status by leaving", () => {
