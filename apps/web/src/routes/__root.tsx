@@ -13,6 +13,7 @@ import { evlogErrorHandler } from "evlog/nitro/v3";
 
 import { AuthProvider } from "@/components/auth/auth-provider";
 import { authClient } from "@/lib/auth-client";
+import { serializeJsonLd } from "@/lib/json-ld";
 import {
   SITE_DESCRIPTION,
   SITE_LOGO_ICON_URL,
@@ -116,7 +117,7 @@ export const Route = createRootRouteWithContext<RouterAppContext>()({
     ],
     scripts: [
       {
-        children: JSON.stringify({
+        children: serializeJsonLd({
           "@context": "https://schema.org",
           "@graph": [
             {

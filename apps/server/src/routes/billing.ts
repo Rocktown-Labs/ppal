@@ -46,12 +46,13 @@ const verifyRevenueCatWebhook = async (
   request: Request,
   rawBody: string
 ): Promise<boolean> => {
+  const secret = env.REVENUECAT_WEBHOOK_SECRET?.trim();
+  if (!secret) {
+    return false;
+  }
   const authorization = request.headers.get("authorization");
   const bearerToken = authorization?.replace(/^Bearer\s+/iu, "");
-  if (
-    bearerToken &&
-    constantTimeEqual(bearerToken, env.REVENUECAT_WEBHOOK_SECRET)
-  ) {
+  if (bearerToken && constantTimeEqual(bearerToken, secret)) {
     return true;
   }
   const signature = request.headers.get("x-revenuecat-webhook-signature");
@@ -72,7 +73,7 @@ const verifyRevenueCatWebhook = async (
   }
   const key = await crypto.subtle.importKey(
     "raw",
-    new TextEncoder().encode(env.REVENUECAT_WEBHOOK_SECRET),
+    new TextEncoder().encode(secret),
     { hash: "SHA-256", name: "HMAC" },
     false,
     ["sign"]

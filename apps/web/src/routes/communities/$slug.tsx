@@ -20,6 +20,7 @@ import {
   updateCommunityMessageReactions,
   upsertCommunityMessage,
 } from "@/lib/community-db";
+import { serializeJsonLd } from "@/lib/json-ld";
 import { absoluteUrl, noIndexMeta, SITE_NAME, socialMeta } from "@/lib/seo";
 
 type CommunityPageData = Awaited<ReturnType<typeof api.community.get>>;
@@ -806,7 +807,7 @@ export const Route = createFileRoute("/communities/$slug")({
       scripts: loaderData
         ? [
             {
-              children: JSON.stringify({
+              children: serializeJsonLd({
                 "@context": "https://schema.org",
                 "@type": "DiscussionForumPosting",
                 about: loaderData.community.name,

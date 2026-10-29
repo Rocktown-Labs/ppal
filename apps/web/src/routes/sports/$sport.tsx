@@ -5,6 +5,7 @@ import { UserButton } from "@/components/auth/user/user-button";
 import { getSportPage } from "@/data/sports";
 import type { SportPage } from "@/data/sports";
 import { authClient } from "@/lib/auth-client";
+import { serializeJsonLd } from "@/lib/json-ld";
 import {
   absoluteUrl,
   noIndexMeta,
@@ -338,7 +339,7 @@ export const Route = createFileRoute("/sports/$sport")({
       ],
       scripts: [
         {
-          children: JSON.stringify({
+          children: serializeJsonLd({
             "@context": "https://schema.org",
             "@type": "WebPage",
             about: {
@@ -359,7 +360,7 @@ export const Route = createFileRoute("/sports/$sport")({
           type: "application/ld+json",
         },
         {
-          children: JSON.stringify({
+          children: serializeJsonLd({
             "@context": "https://schema.org",
             "@type": "BreadcrumbList",
             itemListElement: [
@@ -380,7 +381,7 @@ export const Route = createFileRoute("/sports/$sport")({
           type: "application/ld+json",
         },
         {
-          children: JSON.stringify({
+          children: serializeJsonLd({
             "@context": "https://schema.org",
             "@type": "FAQPage",
             mainEntity: page.faq.map((item) => ({

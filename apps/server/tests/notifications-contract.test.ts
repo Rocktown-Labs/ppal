@@ -1,6 +1,9 @@
 import { describe, expect, test } from "bun:test";
 
-import { webPushSubscriptionSchema } from "@ppal/contracts/notifications";
+import {
+  notificationPreferencesSchema,
+  webPushSubscriptionSchema,
+} from "@ppal/contracts/notifications";
 
 import { shouldSendSms } from "../src/services/notifications";
 
@@ -61,6 +64,55 @@ describe("browser push subscription contract", () => {
       webPushSubscriptionSchema.parse({
         endpoint: "https://fcm.googleapis.com/fcm/send/example",
         keys: { auth: "", p256dh: "public-key" },
+      })
+    ).toThrow();
+  });
+});
+
+describe("notification phone destinations", () => {
+  const basePreferences = {
+    emailEnabled: true,
+    inAppEnabled: true,
+    legLost: true,
+    legWon: true,
+    pushEnabled: true,
+    smsEnabled: true,
+    ticketLost: true,
+    ticketWon: true,
+  };
+
+  test("accepts an E.164 destination and normalizes a cleared field", () => {
+    expect(
+      notificationPreferencesSchema.parse({
+        ...basePreferences,
+        phoneNumber: "+14155550123",
+      }).phoneNumber
+    ).toBe("+14155550123");
+    expect(
+      notificationPreferencesSchema.parse({
+        ...basePreferences,
+        phoneNumber: "",
+      }).phoneNumber
+    ).toBeNull();
+    expect(
+      notificationPreferencesSchema.parse({
+        ...basePreferences,
+        phoneNumber: null,
+      }).phoneNumber
+    ).toBeNull();
+  });
+
+  test("rejects free-form or overlong destinations before they reach the SMS provider", () => {
+    expect(() =>
+      notificationPreferencesSchema.parse({
+        ...basePreferences,
+        phoneNumber: "call me at 555",
+      })
+    ).toThrow();
+    expect(() =>
+      notificationPreferencesSchema.parse({
+        ...basePreferences,
+        phoneNumber: `+1${"5".repeat(40)}`,
       })
     ).toThrow();
   });
