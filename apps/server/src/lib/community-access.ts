@@ -2,7 +2,7 @@
  * Community authorization rules shared by the REST routes.
  *
  * `visibility` controls discovery: a public community can be viewed by anyone,
- * while a private community is only visible to active members. `access`
+ * while a private community is visible to active or muted members. `access`
  * controls whether the community's content (channels and messages) is free or
  * paid. Paid content is always members-only, even when the community itself is
  * publicly discoverable.

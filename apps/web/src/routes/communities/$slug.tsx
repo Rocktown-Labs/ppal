@@ -648,12 +648,23 @@ const CommunityPage = () => {
     state.channels.find((channel) => channel.id === activeChannelId) ??
     state.channels[0];
   const canChat = state.membership?.status === "active";
+  const isMuted = state.membership?.status === "muted";
+  const isBanned = state.membership?.status === "banned";
+  const isRestricted = isMuted || isBanned;
   let joinLabel = "Join community";
   if (state.membership?.status === "pending") {
     joinLabel = "Request pending";
   }
   if (joining) {
     joinLabel = "Opening…";
+  }
+  let accessSummary = "Free to join";
+  if (isMuted) {
+    accessSummary = "You are muted in this community";
+  } else if (isBanned) {
+    accessSummary = "You are banned from this community";
+  } else if (state.community.access === "paid") {
+    accessSummary = `$${((state.community.priceCents ?? 0) / 100).toFixed(2)} to join`;
   }
   const join = async () => {
     const session = await authClient.getSession();
@@ -698,15 +709,12 @@ const CommunityPage = () => {
             ) : null}
           </div>
           <div className="mt-4 flex items-center gap-3 text-xs text-zinc-500">
-            <Users className="size-4" />{" "}
-            {state.community.access === "paid"
-              ? `$${((state.community.priceCents ?? 0) / 100).toFixed(2)} to join`
-              : "Free to join"}
+            <Users className="size-4" /> {accessSummary}
           </div>
-          {!canChat && (
+          {!canChat && !isRestricted && (
             <button
               className="mt-5 w-full rounded-lg bg-emerald-500 px-4 py-2 text-sm font-semibold text-zinc-950 hover:bg-emerald-400 disabled:opacity-50"
-              disabled={joining}
+              disabled={joining || state.membership?.status === "pending"}
               onClick={join}
               type="button"
             >
