@@ -81,10 +81,11 @@ ppal/
 │   ├── server/              # Hono API, event services, and Durable Objects
 │   └── native/              # Expo / React Native app
 ├── packages/
+│   ├── config/              # Shared TypeScript configuration
 │   ├── api/                 # Shared API contracts
 │   ├── auth/                # Better Auth setup
 │   ├── contracts/           # Shared domain contracts
-│   ├── db/                  # D1 schema, migrations, and upload encryption
+│   ├── db/                  # D1 schema, migrations, and Better Auth credential-column encryption
 │   ├── domain/              # Shared tracking domain logic
 │   ├── env/                 # Runtime environment validation
 │   ├── infra/               # Alchemy Cloudflare resources
@@ -132,7 +133,7 @@ Migrations are forward-only SQL under `packages/db/src/migrations/<timestamp>_<n
 | `bun run build` | Build configured workspaces |
 | `bun run check-types` | Type-check workspaces |
 | `bun run check` | Run Ultracite checks |
-| `bun run test` | Run configured tests |
+| `bun test packages/domain apps/server/tests` | Run the domain and server test suites |
 | `bun run db:migrate:local` | Apply local D1 migrations |
 | `bun run demo:seed` | Seed local demo data |
 | `bun run deploy` | Deploy the selected Alchemy stage |
@@ -140,15 +141,24 @@ Migrations are forward-only SQL under `packages/db/src/migrations/<timestamp>_<n
 
 ## 7. Deployment & Configuration
 
-Alchemy provisions the web app and Hono Worker, D1, R2, Queues, Analytics Engine, and related Cloudflare resources. Local Alchemy credentials are stored in the active Alchemy profile; do not place provider tokens in source control.
+Alchemy provisions the web app and Hono Worker, D1, R2, Queues, Analytics Engine, and related Cloudflare resources. Set up local Cloudflare authentication with `cd packages/infra && bun alchemy profile edit --add Cloudflare`; Alchemy stores the credential in its local profile. For local Alchemy deployment, copy `packages/infra/.env.example` to `packages/infra/.env` and never commit it.
 
-Production uses `myparlaypal.com` for the web app and `api.myparlaypal.com` for the API. Pull request previews use a per-PR origin. Production deployment is stage-specific and requires the configured production workflow approval.
+GitHub Actions keeps preview and production secrets in separate GitHub Environments. Production deploys require the configured workflow dispatch and environment approval. Production uses `myparlaypal.com` for the TanStack app and `api.myparlaypal.com` for the Hono Worker; pull request previews use `pr-<number>.myparlaypal.com` and `api-pr-<number>.myparlaypal.com`.
 
-Optional integrations include:
+Scope the Cloudflare deployment token to the target account and the `myparlaypal.com` zone. Grant only the edit/read permissions needed for Workers Scripts, D1, R2, Queues, Analytics Engine, and Workers Routes. The workflow pins the zone ID (`f982a1aacdf38eb2657092788c32d113`); `CLOUDFLARE_ZONE_ID` can override the repository variable if the zone changes. An R2 S3 access key is not a Cloudflare API token.
 
-- **Browser push:** configure a VAPID key pair in the preview and production environments. The private key remains server-side.
-- **Stripe:** configure the API secret and webhook signing secret for subscriptions.
-- **RevenueCat:** point its webhook at the server and use the Better Auth user ID as the App User ID.
+Browser push is opt-in from Dashboard → Settings. Add `WEB_PUSH_VAPID_PRIVATE_KEY` as a secret and `WEB_PUSH_VAPID_PUBLIC_KEY` as an environment variable in both the `preview` and `production` environments. Generate the key pair locally with:
+
+```bash
+bun -e 'import { generateVapidKeys } from "@mmmike/web-push/vapid"; console.log(await generateVapidKeys())'
+```
+
+The public key is returned to authenticated browsers; the private key stays server-side. Configure the production provider webhooks after deployment:
+
+- Stripe: `https://api.myparlaypal.com/api/auth/stripe/webhook`
+- RevenueCat: `https://api.myparlaypal.com/api/v1/webhooks/revenuecat`
+
+Use the Better Auth user ID as RevenueCat's App User ID; anonymous IDs are not trusted for server entitlements. The Stripe catalog is managed from Dashboard → Admin → Stripe catalog. Keep the Stripe API secret and webhook signing secret in the production Worker environment.
 
 ## 8. Security & Quality
 
@@ -159,9 +169,13 @@ Run the repository checks before proposing changes:
 ```bash
 bun run check
 bun run check-types
-bun run test
+bun test packages/domain apps/server/tests
 bun run build
 ```
+
+## 9. UI Customization and Git Hooks
+
+Web apps share shadcn/ui primitives through `packages/ui`. Edit tokens in `packages/ui/src/styles/globals.css`, shared primitives in `packages/ui/src/components/`, and aliases in `packages/ui/components.json` and `apps/web/components.json`. Add shared components from the repository root with `npx shadcn@latest add accordion dialog popover sheet table -c packages/ui`. Initialize Git hooks with `bun run prepare`.
 
 <div align="center">
   <sub>Built to make sports activity easier to follow and review.</sub>
