@@ -1,152 +1,182 @@
-# ppal
+# ParlayPal
 
-This project was created with [Better-T-Stack](https://github.com/AmanVarshney01/create-better-t-stack), a modern TypeScript stack that combines React, TanStack Start, Hono, and more.
+<div align="center">
+  <h3>Sports tracking, ticket history, and community in one place</h3>
+  <p>Follow sporting events, organize tracked tickets, and review how your activity settles over time across web and mobile.</p>
+</div>
 
-## Features
+[myparlaypal.com](https://myparlaypal.com)
 
-- **TypeScript** - For type safety and improved developer experience
-- **TanStack Start** - SSR framework with TanStack Router
-- **React Native** - Build mobile apps using React
-- **Expo** - Tools for React Native development
-- **TailwindCSS** - Utility-first CSS for rapid UI development
-- **Shared UI package** - shadcn/ui primitives live in `packages/ui`
-- **Hono** - Lightweight, performant server framework
-- **workers** - Runtime environment
-- **Drizzle** - TypeScript-first ORM
-- **Cloudflare D1** - Database engine
-- **Authentication** - Better-Auth
-- **Billing** - Better Auth Stripe plugin + RevenueCat entitlement webhooks
-- **Uploads** - private R2 objects with SHA-256 verification
-- **Async processing** - Cloudflare Queues with dead-letter queues
-- **Sports tracking** - shared Sportradar event polling and deterministic settlement
-- **Turborepo** - Optimized monorepo build system
-- **Oxlint** - Oxlint + Oxfmt (linting & formatting)
-- **Husky** - Git hooks for code quality
+---
 
-## Getting Started
+## 1. Product Overview
 
-First, install the dependencies:
+**ParlayPal** is a sports tracking and community application with web, API, and Expo mobile workspaces. The platform brings together event data, ticket records, notifications, user billing, and community features. A shared event polling service consumes Sportradar data, while deterministic settlement logic updates tracked outcomes from the same event source.
+
+The repository is designed for a Cloudflare edge deployment: the web application and Hono API use D1 for runtime data, private R2 objects for uploads, and Cloudflare Queues for asynchronous work.
+
+## 2. System Architecture
+
+```text
+Web (TanStack Start)         Mobile (Expo / React Native)
+             └──────────────────┬──────────────────┘
+                                │
+                         Hono API Worker
+                                │
+           ┌────────────────────┼───────────────────┐
+           ▼                    ▼                   ▼
+      Cloudflare D1        Private R2          Queues + DLQ
+       Drizzle ORM       verified uploads    async processing
+                                │
+                                ▼
+                     Sportradar event polling
+                       and ticket settlement
+```
+
+| Layer | Technologies |
+| --- | --- |
+| Web | React, TanStack Start, TanStack Router |
+| Native | Expo / React Native |
+| API | Hono on Cloudflare Workers |
+| Database | Cloudflare D1 with Drizzle ORM and forward-only SQL migrations |
+| Authentication | Better Auth |
+| Billing | Stripe through Better Auth and RevenueCat entitlement webhooks |
+| File storage | Private Cloudflare R2 objects with SHA-256 verification |
+| Background work | Cloudflare Queues and dead-letter queues |
+| Sports data | Sportradar polling and deterministic settlement |
+| Workspace | Bun and Turborepo |
+
+## 3. Product Capabilities
+
+### Sports tracking
+
+- Follow event activity through shared sports-data polling.
+- Record and review sports tickets in the web and mobile experiences.
+- Settle tracked outcomes deterministically from the event data pipeline.
+- Use analytics and operational tools to support event ingestion and ongoing service health.
+
+### Community and account experience
+
+- Explore community surfaces and user profiles.
+- Use notifications and account features across the web and native app.
+- Opt in to browser push notifications from Dashboard → Settings.
+- Keep subscriptions and entitlements synchronized through Better Auth, Stripe, and RevenueCat webhook paths.
+
+### Uploads and asynchronous work
+
+- Store uploads as private R2 objects.
+- Verify upload integrity with SHA-256 checks.
+- Process queued work outside the request path and route failed messages to dead-letter queues.
+
+### Billing
+
+The subscription catalog is managed from the administration area. Stripe product and price synchronization uses stable lookup keys so product pricing does not need to be embedded in the client. RevenueCat webhook processing is associated with the Better Auth user ID; anonymous RevenueCat identifiers are not trusted for server entitlements.
+
+## 4. Monorepo Structure
+
+```text
+ppal/
+├── apps/
+│   ├── web/                 # Web app, dashboard, community, and sports pages
+│   ├── server/              # Hono API, event services, and Durable Objects
+│   └── native/              # Expo / React Native app
+├── packages/
+│   ├── config/              # Shared TypeScript configuration
+│   ├── api/                 # Shared API contracts
+│   ├── auth/                # Better Auth setup
+│   ├── contracts/           # Shared domain contracts
+│   ├── db/                  # D1 schema, migrations, and Better Auth credential-column encryption
+│   ├── domain/              # Shared tracking domain logic
+│   ├── env/                 # Runtime environment validation
+│   ├── infra/               # Alchemy Cloudflare resources
+│   └── ui/                  # Shared UI components and styles
+└── evals/                   # Extraction evaluation utilities
+```
+
+## 5. Local Development
+
+### Prerequisites
+
+- Bun 1.3.10
+- Cloudflare / Alchemy credentials when deploying or working against remote services
+- Xcode or Android Studio for local native builds
+
+Install the workspace and start web plus API development:
 
 ```bash
 bun install
-```
-
-## Database Setup
-
-This project uses Cloudflare D1 (SQLite) with Drizzle ORM for runtime queries.
-
-Runtime database access uses the Cloudflare `DB` binding from `packages/infra/alchemy.run.ts`. If a local `DATABASE_URL` is present, it is only for database tooling.
-
-Alchemy provisions the D1 database and applies the forward-only SQL migrations under `packages/db/src/migrations/<timestamp>_<name>/migration.sql` during `deploy`. Apply the same migrations to a local Wrangler D1 database with:
-
-```bash
-bun run db:migrate:local
-```
-
-The migration directory intentionally uses Alchemy's recursive Drizzle-v1 layout; do not run `drizzle-kit generate` against it. Add a new forward-only SQL migration directory instead so Alchemy and Wrangler share one source of truth.
-
-Then, run the development server:
-
-```bash
 bun run dev
 ```
 
-Open [http://127.0.0.1:3001](http://127.0.0.1:3001) in your browser to see the web application. Keeping both development servers on `127.0.0.1` preserves the Better Auth same-site cookie boundary. Use the Expo Go app to run the mobile application. The local API is running at [http://127.0.0.1:3000](http://127.0.0.1:3000).
-
-## UI Customization
-
-React web apps in this stack share shadcn/ui primitives through `packages/ui`.
-
-- Change design tokens and global styles in `packages/ui/src/styles/globals.css`
-- Update shared primitives in `packages/ui/src/components/*`
-- Adjust shadcn aliases or style config in `packages/ui/components.json` and `apps/web/components.json`
-
-### Add more shared components
-
-Run this from the project root to add more primitives to the shared UI package:
+The web app is served at `http://127.0.0.1:3001` and the local API at `http://127.0.0.1:3000`. Keeping both on `127.0.0.1` preserves the Better Auth same-site cookie boundary. To start native development:
 
 ```bash
-npx shadcn@latest add accordion dialog popover sheet table -c packages/ui
+bun run dev:native
 ```
 
-Import shared components like this:
+Run local D1 migrations and seed demo data with:
 
-```tsx
-import { Button } from "@ppal/ui/components/button";
+```bash
+bun run db:migrate:local
+bun run demo:seed
 ```
 
-### Add app-specific blocks
+Migrations are forward-only SQL under `packages/db/src/migrations/<timestamp>_<name>/migration.sql`. Add a new migration directory for schema changes; do not run `drizzle-kit generate` against the Alchemy recursive migration layout.
 
-If you want to add app-specific blocks instead of shared primitives, run the shadcn CLI from `apps/web`.
+## 6. Useful Commands
 
-## Deployment
+| Command | Purpose |
+| --- | --- |
+| `bun run dev` | Start the web app and API |
+| `bun run dev:web` / `bun run dev:server` | Start one web or server workspace |
+| `bun run dev:native` | Start the Expo app |
+| `bun run build` | Build configured workspaces |
+| `bun run check-types` | Type-check workspaces |
+| `bun run check` | Run Ultracite checks |
+| `bun test packages/domain apps/server/tests` | Run the domain and server test suites |
+| `bun run db:migrate:local` | Apply local D1 migrations |
+| `bun run demo:seed` | Seed local demo data |
+| `bun run deploy` | Deploy the selected Alchemy stage |
+| `bun run destroy` | Destroy the selected Alchemy stage |
 
-### Alchemy
+## 7. Deployment & Configuration
 
-- Target: web on Cloudflare + server on Cloudflare
-- Configure Cloudflare provider login: `cd packages/infra && bun alchemy profile edit --add Cloudflare`
-- Dev: bun run dev
-- Deploy: bun run deploy
-- Destroy: bun run destroy
+Alchemy provisions the web app and Hono Worker, D1, R2, Queues, Analytics Engine, and related Cloudflare resources. Set up local Cloudflare authentication with `cd packages/infra && bun alchemy profile edit --add Cloudflare`; Alchemy stores the credential in its local profile. For local Alchemy deployment, copy `packages/infra/.env.example` to `packages/infra/.env` and never commit it.
 
-`alchemy profile edit --add Cloudflare` stores the OAuth or API-token credential in the active Alchemy profile under `~/.alchemy`; no `CLOUDFLARE_ACCOUNT_ID` or `CLOUDFLARE_API_TOKEN` export is required for local deploys.
+GitHub Actions keeps preview and production secrets in separate GitHub Environments. Production deploys require the configured workflow dispatch and environment approval. Production uses `myparlaypal.com` for the TanStack app and `api.myparlaypal.com` for the Hono Worker; pull request previews use `pr-<number>.myparlaypal.com` and `api-pr-<number>.myparlaypal.com`.
 
-Copy `packages/infra/.env.example` to `packages/infra/.env` only for a local Alchemy deployment. Never commit that file. GitHub Actions uses separate `preview` and `production` Environment secrets; production deploys require a manual workflow dispatch and environment approval. Production uses `myparlaypal.com` for the TanStack app and `api.myparlaypal.com` for the Hono Worker. PR environments use `pr-<number>.myparlaypal.com` and `api-pr-<number>.myparlaypal.com`.
+Scope the Cloudflare deployment token to the target account and the `myparlaypal.com` zone. Grant only the edit/read permissions needed for Workers Scripts, D1, R2, Queues, Analytics Engine, and Workers Routes. The workflow pins the zone ID (`f982a1aacdf38eb2657092788c32d113`); `CLOUDFLARE_ZONE_ID` can override the repository variable if the zone changes. An R2 S3 access key is not a Cloudflare API token.
 
-The Cloudflare deployment token must be scoped to the target account and the `myparlaypal.com` zone. Grant only the edit/read permissions Alchemy needs for Workers Scripts, D1, R2, Queues, Analytics Engine, and Workers Routes. The workflow pins the zone ID (`f982a1aacdf38eb2657092788c32d113`) so the token does not need account-wide Zone Read; `CLOUDFLARE_ZONE_ID` may override that repository variable if the zone ever changes. A token copied from an R2 S3 access-key flow is not a Cloudflare API token and will fail authentication.
-
-Browser push is opt-in from Dashboard → Settings. Generate one VAPID key pair and add `WEB_PUSH_VAPID_PRIVATE_KEY` as a secret and `WEB_PUSH_VAPID_PUBLIC_KEY` as an environment variable in both the `preview` and `production` GitHub environments. The optional subject defaults to `mailto:support@myparlaypal.com`. Generate keys locally with:
+Browser push is opt-in from Dashboard → Settings. Add `WEB_PUSH_VAPID_PRIVATE_KEY` as a secret and `WEB_PUSH_VAPID_PUBLIC_KEY` as an environment variable in both the `preview` and `production` environments. Generate the key pair locally with:
 
 ```bash
 bun -e 'import { generateVapidKeys } from "@mmmike/web-push/vapid"; console.log(await generateVapidKeys())'
 ```
 
-The public key is returned only to an authenticated browser. The private key stays in the Worker binding and is never exposed to the web bundle.
-
-Configure provider webhooks after the first production deployment:
+The public key is returned to authenticated browsers; the private key stays server-side. Configure the production provider webhooks after deployment:
 
 - Stripe: `https://api.myparlaypal.com/api/auth/stripe/webhook`
 - RevenueCat: `https://api.myparlaypal.com/api/v1/webhooks/revenuecat`
 
-Use the Better Auth subscription endpoints under `/api/auth/subscription/*` for Checkout and the Stripe billing portal. Configure RevenueCat to use the Better Auth user ID as its App User ID; anonymous RevenueCat IDs are deliberately not trusted for server entitlements.
+Use the Better Auth user ID as RevenueCat's App User ID; anonymous IDs are not trusted for server entitlements. The Stripe catalog is managed from Dashboard → Admin → Stripe catalog. Keep the Stripe API secret and webhook signing secret in the production Worker environment.
 
-The web subscription catalog is managed from Dashboard → Admin → Stripe catalog. The Sync Stripe action reuses matching products/prices and creates missing Pro and Creator monthly/yearly prices with stable lookup keys, so price IDs do not need to be hard-coded into the web bundle. The Stripe secret and webhook signing secret still need to be configured in the production Worker environment.
+## 8. Security & Quality
 
-Deploys are staged and default to a personal `dev_<username>` stage. For production, run the deploy with an explicit stage from `packages/infra`:
+The API uses secure, HTTP-only, SameSite cookies and validates cross-site unsafe requests. Uploads remain private and are checked before processing. Keep database, billing, webhook, and provider credentials in environment stores.
+
+Run the repository checks before proposing changes:
 
 ```bash
-cd packages/infra && bun alchemy deploy --stage production
+bun run check
+bun run check-types
+bun test packages/domain apps/server/tests
+bun run build
 ```
 
-### Production origins
+## 9. UI Customization and Git Hooks
 
-Alchemy fixes production CORS to `https://myparlaypal.com` by default and derives the exact PR origin for every preview. Better Auth keeps secure, HTTP-only, `SameSite=Lax` cookies; the API also rejects cross-site unsafe requests using Origin and Fetch Metadata validation.
+Web apps share shadcn/ui primitives through `packages/ui`. Edit tokens in `packages/ui/src/styles/globals.css`, shared primitives in `packages/ui/src/components/`, and aliases in `packages/ui/components.json` and `apps/web/components.json`. Add shared components from the repository root with `npx shadcn@latest add accordion dialog popover sheet table -c packages/ui`. Initialize Git hooks with `bun run prepare`.
 
-## Git Hooks and Formatting
-
-- Initialize hooks: `bun run prepare`
-- Run checks: `bun run check`
-
-## Project Structure
-
-```
-ppal/
-├── apps/
-│   ├── web/         # Frontend application (React + TanStack Start)
-│   ├── native/      # Mobile application (React Native, Expo)
-│   └── server/      # Backend API (Hono)
-├── packages/
-│   ├── ui/          # Shared shadcn/ui components and styles
-│   ├── auth/        # Authentication configuration & logic
-│   └── db/          # Database schema & queries
-```
-
-## Available Scripts
-
-- `bun run dev`: Start all applications in development mode
-- `bun run build`: Build all applications
-- `bun run dev:web`: Start only the web application
-- `bun run dev:server`: Start only the server
-- `bun run check-types`: Check TypeScript types across all apps
-- `bun run dev:native`: Start the React Native/Expo development server
-- `bun run check`: Run Oxlint and Oxfmt
+<div align="center">
+  <sub>Built to make sports activity easier to follow and review.</sub>
+</div>
