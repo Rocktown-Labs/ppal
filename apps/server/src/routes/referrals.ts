@@ -30,11 +30,24 @@ const mapReferral = (row: ReferralRow) => ({
 });
 
 const randomCode = (): string => {
-  const bytes = crypto.getRandomValues(new Uint8Array(CODE_LENGTH));
-  return Array.from(
-    bytes,
-    (byte) => CODE_ALPHABET[byte % CODE_ALPHABET.length]
-  ).join("");
+  const maxUnbiased =
+    Math.floor(256 / CODE_ALPHABET.length) * CODE_ALPHABET.length;
+  const chars: string[] = [];
+  while (chars.length < CODE_LENGTH) {
+    const bytes = crypto.getRandomValues(new Uint8Array(CODE_LENGTH * 2));
+    for (const byte of bytes) {
+      if (byte < maxUnbiased) {
+        const char = CODE_ALPHABET[byte % CODE_ALPHABET.length];
+        if (char) {
+          chars.push(char);
+        }
+        if (chars.length === CODE_LENGTH) {
+          break;
+        }
+      }
+    }
+  }
+  return chars.join("");
 };
 
 const ensureReferralCode = async (userId: string): Promise<string> => {

@@ -172,6 +172,7 @@ const ChannelMessages = ({
       return;
     }
     let active = true;
+    let hasConnectedOnce = false;
     let reconnectAttempt = 0;
     let reconnectTimer: number | null = null;
 
@@ -185,9 +186,30 @@ const ChannelMessages = ({
       socketRef.current = socket;
 
       socket.addEventListener("open", () => {
+        const isReconnect = hasConnectedOnce;
+        hasConnectedOnce = true;
         reconnectAttempt = 0;
         setChatError(null);
         setConnected(true);
+        if (isReconnect) {
+          void (async () => {
+            try {
+              const response = await api.community.getMessages(
+                communitySlug,
+                channel.id,
+                { limit: 100 }
+              );
+              if (!active) {
+                return;
+              }
+              for (const message of response.messages) {
+                upsertCommunityMessage(messageToRow(channel.id, message));
+              }
+            } catch {
+              // Best-effort history catch-up on reconnect.
+            }
+          })();
+        }
       });
       socket.addEventListener("close", (event) => {
         if (socketRef.current === socket) {

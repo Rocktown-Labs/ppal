@@ -333,27 +333,44 @@ export class CommunityChannelRoom extends DurableObject<CommunityRoomEnv> {
     );
     const id = crypto.randomUUID();
     const createdAt = Date.now();
-    await this.env.DB.prepare(
-      `INSERT INTO community_messages
-         (author_user_id, body, channel_id, community_id, created_at, id, mentions, reply_to_id)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
-    )
-      .bind(
-        input.userId,
-        input.body,
-        input.channelId,
-        input.communityId,
-        createdAt,
-        id,
-        JSON.stringify(resolvedMentions),
-        input.replyToId ?? null
+    let author: {
+      image: string | null;
+      name: string;
+      username: string | null;
+    } | null = null;
+    try {
+      await this.env.DB.prepare(
+        `INSERT INTO community_messages
+           (author_user_id, body, channel_id, community_id, created_at, id, mentions, reply_to_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
       )
-      .run();
-    const author = await this.env.DB.prepare(
-      "SELECT u.image, u.name, p.username FROM user u LEFT JOIN profiles p ON p.user_id = u.id WHERE u.id = ?"
-    )
-      .bind(input.userId)
-      .first<{ image: string | null; name: string; username: string | null }>();
+        .bind(
+          input.userId,
+          input.body,
+          input.channelId,
+          input.communityId,
+          createdAt,
+          id,
+          JSON.stringify(resolvedMentions),
+          input.replyToId ?? null
+        )
+        .run();
+      author = await this.env.DB.prepare(
+        "SELECT u.image, u.name, p.username FROM user u LEFT JOIN profiles p ON p.user_id = u.id WHERE u.id = ?"
+      )
+        .bind(input.userId)
+        .first<{
+          image: string | null;
+          name: string;
+          username: string | null;
+        }>();
+    } catch {
+      return {
+        code: "MESSAGE_FAILED",
+        error: "Could not save message. Please try again.",
+        ok: false,
+      };
+    }
     const outgoing: OutgoingMessage = {
       author: {
         avatarUrl: author?.image ?? null,

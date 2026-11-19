@@ -37,7 +37,9 @@ const ProfileComponent = () => {
           setIsPublic(res.user.profile.isPublic || false);
         }
       } catch {
-        // profile might not exist yet
+        if (active) {
+          toast.error("Could not load your profile. Please refresh.");
+        }
       }
 
       if (active) {
@@ -55,11 +57,12 @@ const ProfileComponent = () => {
   const handleSave = async () => {
     setIsSaving(true);
     try {
+      const normalizedUsername = username.trim().toLowerCase();
       await api.community.updateMe({
         bio: bio.trim() || null,
         isPublic,
         name: name.trim(),
-        username: username.trim().toLowerCase(),
+        ...(normalizedUsername ? { username: normalizedUsername } : {}),
       });
       toast.success("Profile saved successfully");
       setIsSaving(false);

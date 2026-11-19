@@ -45,12 +45,8 @@ const ReferralLandingComponent = () => {
           return;
         }
 
-        if (res.referral.available) {
-          setIsValid(true);
-        }
-        if (active) {
-          setIsLoading(false);
-        }
+        setIsValid(Boolean(res.referral.available));
+        setIsLoading(false);
       } catch {
         if (active) {
           setIsValid(false);
@@ -81,12 +77,9 @@ const ReferralLandingComponent = () => {
         await navigate({ to: "/dashboard" });
         return;
       }
-      await navigate({ to: "/auth/sign-in" });
-    } catch (error) {
-      clearReferralIntent();
-      toast.error(
-        error instanceof Error ? error.message : "Referral could not be applied"
-      );
+      await navigate({ params: { path: "sign-up" }, to: "/auth/$path" });
+    } catch {
+      toast.error("Referral could not be applied right now. Please try again.");
       setIsApplying(false);
     }
   };

@@ -97,8 +97,21 @@ export const createHistoricalImportRoutes = (auth: Auth) =>
           .first<{ id: string }>();
         if (existing) {
           const batch = await loadBatch(existing.id, user.id);
+          const existingUploads = await env.DB.prepare(
+            `SELECT id FROM uploads
+             WHERE historical_import_batch_id = ? AND user_id = ? AND deleted_at IS NULL
+             ORDER BY created_at`
+          )
+            .bind(existing.id, user.id)
+            .all<{ id: string }>();
           return c.json(
-            { batch: batch ? mapBatch(batch) : null, uploads: [] },
+            {
+              batch: batch ? mapBatch(batch) : null,
+              uploads: existingUploads.results.map((row) => ({
+                id: row.id,
+                uploadUrl: `/api/v1/uploads/${row.id}/content`,
+              })),
+            },
             200
           );
         }
@@ -266,8 +279,16 @@ export const createHistoricalImportRoutes = (auth: Auth) =>
         ).bind(batch.id),
       ]);
       for (const upload of pending.results) {
-        await env.R2_UPLOADS.delete(upload.object_key);
-        await releaseUploadUsage(env.DB, upload.usage_reservation_key);
+        try {
+          await env.R2_UPLOADS.delete(upload.object_key);
+        } catch {
+          // Continue releasing reservations even if an R2 object delete fails.
+        }
+        try {
+          await releaseUploadUsage(env.DB, upload.usage_reservation_key);
+        } catch {
+          // Continue releasing remaining reservations on transient DB errors.
+        }
       }
       const cancelledBatch = await loadBatch(batch.id, user.id);
       return c.json({

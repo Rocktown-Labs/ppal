@@ -135,7 +135,9 @@ export const createAnalyticsRoutes = (auth: Auth) =>
           SUM(CASE WHEN l.status = 'won' THEN 1 ELSE 0 END) AS won,
           SUM(CASE WHEN l.status = 'lost' THEN 1 ELSE 0 END) AS lost
          FROM ticket_legs l JOIN tickets t ON t.id = l.ticket_id LEFT JOIN markets m ON m.id = l.market_id
-         WHERE t.user_id = ? AND l.participant_id = ? GROUP BY COALESCE(m.name, l.raw_market_name, 'Other')
+         WHERE t.user_id = ? AND l.participant_id = ? AND l.subject_type = 'player'
+           AND t.status NOT IN ('draft', 'needs_review')
+         GROUP BY COALESCE(m.name, l.raw_market_name, 'Other')
          ORDER BY selections DESC`
       )
         .bind(user.id, participantId)
@@ -147,7 +149,8 @@ export const createAnalyticsRoutes = (auth: Auth) =>
         }>();
       const recent = await env.DB.prepare(
         `SELECT l.status FROM ticket_legs l JOIN tickets t ON t.id = l.ticket_id
-         WHERE t.user_id = ? AND l.participant_id = ? AND l.status IN ('won', 'lost')
+         WHERE t.user_id = ? AND l.participant_id = ? AND l.subject_type = 'player'
+           AND t.status NOT IN ('draft', 'needs_review') AND l.status IN ('won', 'lost')
          ORDER BY l.settled_at DESC LIMIT 5`
       )
         .bind(user.id, participantId)
