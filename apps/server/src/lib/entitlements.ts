@@ -21,14 +21,19 @@ export const getUserPlan = async (
   db: D1Database,
   userId: string
 ): Promise<Plan> => {
+  const now = Date.now();
   const row = await db
     .prepare(
       `SELECT plan, status, expires_at FROM billing_entitlements
        WHERE user_id = ?
-       ORDER BY expires_at DESC NULLS LAST
+         AND status IN ('trialing', 'active', 'grace_period')
+         AND (expires_at IS NULL OR expires_at > ?)
+       ORDER BY
+         CASE plan WHEN 'creator' THEN 3 WHEN 'pro' THEN 2 ELSE 1 END DESC,
+         expires_at DESC NULLS LAST
        LIMIT 1`
     )
-    .bind(userId)
+    .bind(userId, now)
     .first<{
       expires_at: number | null;
       plan: Plan;
@@ -43,7 +48,7 @@ export const getUserPlan = async (
     return "free";
   }
 
-  if (row.expires_at !== null && row.expires_at <= Date.now()) {
+  if (row.expires_at !== null && row.expires_at <= now) {
     return "free";
   }
 

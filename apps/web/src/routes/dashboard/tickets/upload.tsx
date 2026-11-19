@@ -31,6 +31,10 @@ const sleep = (ms: number) =>
   });
 /* oxlint-enable promise/avoid-new */
 
+class UploadExtractionFailedError extends Error {
+  public override readonly name = "UploadExtractionFailedError";
+}
+
 const pollTicketId = async (
   uploadId: string,
   initialTicketId?: string | null
@@ -53,10 +57,12 @@ const pollTicketId = async (
         return currentUpload.upload.ticketId;
       }
       if (currentUpload.upload.status === "failed") {
-        throw new Error(currentUpload.upload.error || "Slip parsing failed");
+        throw new UploadExtractionFailedError(
+          currentUpload.upload.error || "Slip parsing failed"
+        );
       }
     } catch (error) {
-      if (error instanceof Error && error.message.includes("parsing failed")) {
+      if (error instanceof UploadExtractionFailedError) {
         throw error;
       }
     }

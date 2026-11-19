@@ -5,19 +5,49 @@ import { AuthShell } from "@/components/auth/auth-shell";
 import { redirectSignedInVisitor } from "@/lib/auth/redirect-signed-in-visitor";
 import { noIndexMeta } from "@/lib/seo";
 
+const AUTH_VIEW_COPY: Record<
+  string,
+  { description: string; eyebrow: string; pageTitle: string; title: string }
+> = {
+  "forgot-password": {
+    description:
+      "Enter your email address and we'll send you a link to reset your password.",
+    eyebrow: "ACCOUNT RECOVERY",
+    pageTitle: "Reset Password | ParlayPal",
+    title: "Reset your password.",
+  },
+  "reset-password": {
+    description: "Choose a strong new password for your ParlayPal account.",
+    eyebrow: "ACCOUNT RECOVERY",
+    pageTitle: "Set New Password | ParlayPal",
+    title: "Set a new password.",
+  },
+  "sign-up": {
+    description:
+      "Upload your slips, follow every leg live, and build your personal hit-rate scorecard.",
+    eyebrow: "GET STARTED",
+    pageTitle: "Sign Up | ParlayPal",
+    title: "Create your account.",
+  },
+};
+
+const DEFAULT_AUTH_COPY = {
+  description: "Sign in to see your live tickets, progress, and notifications.",
+  eyebrow: "WELCOME BACK",
+  pageTitle: "Sign In | ParlayPal",
+  title: "Pick up where you left off.",
+};
+
 const AuthRouteComponent = () => {
   const { path } = useParams({ from: "/auth/$path" });
-  const isSignUp = path === "sign-up";
+  const copy = AUTH_VIEW_COPY[path] ?? DEFAULT_AUTH_COPY;
 
   return (
     <AuthShell
-      eyebrow={isSignUp ? "GET STARTED" : "WELCOME BACK"}
-      title={isSignUp ? "Create your account." : "Pick up where you left off."}
-      description={
-        isSignUp
-          ? "Track every leg, score, and cashout opportunity in real time."
-          : "Sign in to see your live tickets, progress, and notifications."
-      }
+      description={copy.description}
+      eyebrow={copy.eyebrow}
+      showLegalFooter={false}
+      title={copy.title}
     >
       <Auth
         className="rounded-2xl border-white/10 bg-[#101412] shadow-2xl shadow-black/30"
@@ -41,6 +71,11 @@ export const Route = createFileRoute("/auth/$path")({
       await redirectSignedInVisitor();
     }
   },
-  head: () => ({ meta: [noIndexMeta] }),
+  head: ({ params }) => ({
+    meta: [
+      { title: (AUTH_VIEW_COPY[params.path] ?? DEFAULT_AUTH_COPY).pageTitle },
+      noIndexMeta,
+    ],
+  }),
   component: AuthRouteComponent,
 });

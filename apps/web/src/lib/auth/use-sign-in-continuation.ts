@@ -28,8 +28,12 @@ import {
  *
  * @returns A callback taking the resolved data of a sign-in mutation.
  */
+const sanitizeRedirectTo = (target: string | undefined): string =>
+  target && target.startsWith("/") && !target.startsWith("//") ? target : "/";
+
 export const useSignInContinuation = () => {
   const { basePaths, navigate, plugins, redirectTo } = useAuth();
+  const safeRedirectTo = sanitizeRedirectTo(redirectTo);
 
   const twoFactorPath = plugins.find(
     (plugin) => plugin.id === TWO_FACTOR_PLUGIN_ID
@@ -41,13 +45,13 @@ export const useSignInContinuation = () => {
         storeTwoFactorMethods(data.twoFactorMethods);
 
         navigate({
-          to: `${basePaths.auth}/${twoFactorPath}?redirectTo=${encodeURIComponent(redirectTo)}`,
+          to: `${basePaths.auth}/${twoFactorPath}?redirectTo=${encodeURIComponent(safeRedirectTo)}`,
         });
         return;
       }
 
-      navigate({ to: redirectTo });
+      navigate({ to: safeRedirectTo });
     },
-    [basePaths.auth, navigate, redirectTo, twoFactorPath]
+    [basePaths.auth, navigate, safeRedirectTo, twoFactorPath]
   );
 };

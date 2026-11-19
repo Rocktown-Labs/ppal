@@ -210,5 +210,22 @@ describe("security boundaries", () => {
       expect(await decryptValue(encrypted)).toBe(original);
       clearEncryptionKeyCache();
     });
+
+    test("async encryption fails closed on invalid or too-short keys", async () => {
+      setEncryptionKeyValue("too-short");
+      await expect(encryptValue("secret")).rejects.toThrow(
+        /at least 16 bytes/u
+      );
+      clearEncryptionKeyCache();
+
+      setEncryptionKeyValue("0xzzzz");
+      await expect(encryptValue("secret")).rejects.toThrow(
+        /hex value is invalid/u
+      );
+      clearEncryptionKeyCache();
+
+      // After clearing the override cache, passthrough works when env key is unset.
+      expect(await encryptValue("plain")).toBe("plain");
+    });
   });
 });

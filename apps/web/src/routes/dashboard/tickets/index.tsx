@@ -60,6 +60,7 @@ const TicketsIndexComponent = () => {
   const [tickets, setTickets] = useState<TicketContract[]>([]);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [activeTab, setActiveTab] = useState<FilterTab>("all");
   const [searchQuery, setSearchQuery] = useState("");
@@ -68,7 +69,12 @@ const TicketsIndexComponent = () => {
   >({});
 
   const fetchTickets = async (cursor?: string, append = false) => {
-    if (!append) {
+    if (append) {
+      if (isLoadingMore) {
+        return;
+      }
+      setIsLoadingMore(true);
+    } else {
       setIsLoading(true);
     }
     try {
@@ -76,9 +82,11 @@ const TicketsIndexComponent = () => {
       setTickets((prev) => (append ? [...prev, ...res.tickets] : res.tickets));
       setNextCursor(res.nextCursor);
       setIsLoading(false);
+      setIsLoadingMore(false);
       setIsRefreshing(false);
     } catch {
       setIsLoading(false);
+      setIsLoadingMore(false);
       setIsRefreshing(false);
     }
   };
@@ -459,10 +467,11 @@ const TicketsIndexComponent = () => {
         <div className="flex justify-center pt-4">
           <button
             type="button"
+            disabled={isLoadingMore}
             onClick={() => fetchTickets(nextCursor, true)}
-            className="cursor-pointer rounded-xl border border-zinc-800 bg-zinc-900 px-6 py-2.5 text-xs font-bold text-zinc-300 transition hover:border-zinc-700 hover:text-white"
+            className="cursor-pointer rounded-xl border border-zinc-800 bg-zinc-900 px-6 py-2.5 text-xs font-bold text-zinc-300 transition hover:border-zinc-700 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
           >
-            Load More Tickets
+            {isLoadingMore ? "Loading..." : "Load More Tickets"}
           </button>
         </div>
       )}

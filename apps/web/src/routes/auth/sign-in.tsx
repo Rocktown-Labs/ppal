@@ -6,7 +6,7 @@ import { redirectSignedInVisitor } from "@/lib/auth/redirect-signed-in-visitor";
 import { noIndexMeta } from "@/lib/seo";
 
 const SignInComponent = () => (
-  <AuthShell>
+  <AuthShell showLegalFooter={false}>
     <Auth
       className="rounded-2xl border-white/10 bg-[#101412] shadow-2xl shadow-black/30"
       socialLayout="vertical"
@@ -18,6 +18,8 @@ const SignInComponent = () => (
 
 export const Route = createFileRoute("/auth/sign-in")({
   beforeLoad: async () => await redirectSignedInVisitor(),
-  head: () => ({ meta: [noIndexMeta] }),
+  head: () => ({
+    meta: [{ title: "Sign In | ParlayPal" }, noIndexMeta],
+  }),
   component: SignInComponent,
 });

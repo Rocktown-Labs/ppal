@@ -113,19 +113,18 @@ const SettingsComponent = () => {
     const fetchSettings = async () => {
       try {
         const [billingRes, notifRes, referralRes] = await Promise.all([
-          api.billing.getEntitlements().catch(() => ({
-            entitlement: {
-              currentPeriodEnd: null,
-              plan: "free" as const,
-              source: null,
-              status: "active",
-            },
-          })),
-          api.notifications.getSettings().catch(() => ({ preferences: {} })),
+          api.billing.getEntitlements().catch(() => null),
+          api.notifications.getSettings().catch(() => null),
           api.referrals.get().catch(() => null),
         ]);
         if (active) {
-          setEntitlement(billingRes.entitlement);
+          if (billingRes) {
+            setEntitlement(billingRes.entitlement);
+          } else {
+            toast.error(
+              "Could not verify your current plan. Refresh to try again."
+            );
+          }
           if (referralRes) {
             setReferral({
               code: referralRes.code,
@@ -133,7 +132,7 @@ const SettingsComponent = () => {
               summary: referralRes.summary,
             });
           }
-          const p = notifRes.preferences as
+          const p = notifRes?.preferences as
             | Partial<NotificationPreferences>
             | undefined;
           if (p && Object.keys(p).length > 0) {

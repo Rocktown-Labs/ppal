@@ -5,6 +5,7 @@ interface AuthShellProps {
   children: ReactNode;
   description?: string;
   eyebrow?: string;
+  showLegalFooter?: boolean;
   title?: string;
 }
 
@@ -22,6 +23,7 @@ export function AuthShell({
   children,
   description,
   eyebrow,
+  showLegalFooter = true,
   title,
 }: AuthShellProps) {
   return (
@@ -44,7 +46,7 @@ export function AuthShell({
 
             <div className="my-auto max-w-xl py-16">
               <h1 className="max-w-lg text-5xl leading-[0.98] font-semibold tracking-[-0.055em] text-white xl:text-7xl">
-                Keep the ticket
+                Keep the ticket{" "}
                 <span className="block text-emerald-400">moving.</span>
               </h1>
               <p className="mt-6 max-w-md text-base leading-7 text-zinc-400 xl:text-lg">
@@ -142,23 +144,25 @@ export function AuthShell({
 
             <div className={ROUNDED_CONTROLS}>{children}</div>
 
-            <p className="mt-6 text-center text-[11px] leading-5 text-zinc-600">
-              By creating an account, you agree to the ParlayPal{" "}
-              <Link
-                className="underline underline-offset-2 hover:text-zinc-400"
-                to="/terms"
-              >
-                Terms of Service
-              </Link>{" "}
-              and{" "}
-              <Link
-                className="underline underline-offset-2 hover:text-zinc-400"
-                to="/privacy"
-              >
-                Privacy Policy
-              </Link>
-              .
-            </p>
+            {showLegalFooter ? (
+              <p className="mt-6 text-center text-[11px] leading-5 text-zinc-600">
+                By creating an account, you agree to the ParlayPal{" "}
+                <Link
+                  className="underline underline-offset-2 hover:text-zinc-400"
+                  to="/terms"
+                >
+                  Terms of Service
+                </Link>{" "}
+                and{" "}
+                <Link
+                  className="underline underline-offset-2 hover:text-zinc-400"
+                  to="/privacy"
+                >
+                  Privacy Policy
+                </Link>
+                .
+              </p>
+            ) : null}
           </div>
         </section>
       </div>

@@ -21,7 +21,7 @@ import {
   Search,
   Zap,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { api } from "@/lib/api";
@@ -189,19 +189,29 @@ const TicketReviewComponent = () => {
     });
   };
 
+  const catalogSearchIdRef = useRef(0);
+
   const handleSearchCatalog = async (query: string) => {
     setCatalogQuery(query);
+    const requestId = catalogSearchIdRef.current + 1;
+    catalogSearchIdRef.current = requestId;
     if (query.trim().length < 2) {
       setCatalogResults({ events: [], markets: [], participants: [] });
+      setIsSearchingCatalog(false);
       return;
     }
     setIsSearchingCatalog(true);
     try {
       const res = await api.catalog.search(query);
+      if (catalogSearchIdRef.current !== requestId) {
+        return;
+      }
       setCatalogResults(res);
       setIsSearchingCatalog(false);
     } catch {
-      setIsSearchingCatalog(false);
+      if (catalogSearchIdRef.current === requestId) {
+        setIsSearchingCatalog(false);
+      }
     }
   };
 
@@ -225,6 +235,7 @@ const TicketReviewComponent = () => {
     }
     updateLegFields(searchModalLegIndex, {
       marketId: market.id,
+      ...(market.subjectType === "game" ? { participantId: null } : {}),
       ...(market.sportId ? { sportId: market.sportId } : {}),
       subjectType: market.subjectType,
     });
@@ -685,6 +696,7 @@ const TicketReviewComponent = () => {
                         <option value="under">Under</option>
                         <option value="gte">At Least (GTE)</option>
                         <option value="lte">At Most (LTE)</option>
+                        <option value="equals">Equals</option>
                         <option value="moneyline">Moneyline</option>
                         <option value="spread">Spread</option>
                         <option value="yes">Yes</option>

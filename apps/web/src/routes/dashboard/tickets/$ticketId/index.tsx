@@ -156,10 +156,12 @@ const TicketDetailComponent = () => {
     try {
       const [ticketRes, timelineRes] = await Promise.all([
         api.tickets.get(ticketId),
-        api.tickets.timeline(ticketId).catch(() => ({ events: [] })),
+        api.tickets.timeline(ticketId).catch(() => null),
       ]);
       setTicket(ticketRes.ticket);
-      setTimeline(timelineRes.events);
+      if (timelineRes) {
+        setTimeline(timelineRes.events);
+      }
       setIsRefreshing(false);
     } catch (error) {
       toast.error(
@@ -201,15 +203,28 @@ const TicketDetailComponent = () => {
   useEffect(() => {
     let active = true;
 
+    let isTerminal = false;
+    const terminalStatuses = new Set([
+      "won",
+      "lost",
+      "push",
+      "void",
+      "partially_void",
+      "settled",
+    ]);
+
     const loadInitial = async () => {
       try {
         const [ticketRes, timelineRes] = await Promise.all([
           api.tickets.get(ticketId),
-          api.tickets.timeline(ticketId).catch(() => ({ events: [] })),
+          api.tickets.timeline(ticketId).catch(() => null),
         ]);
         if (active) {
           setTicket(ticketRes.ticket);
-          setTimeline(timelineRes.events);
+          if (timelineRes) {
+            setTimeline(timelineRes.events);
+          }
+          isTerminal = terminalStatuses.has(ticketRes.ticket.status);
           setIsLoading(false);
         }
       } catch (error) {
@@ -227,14 +242,24 @@ const TicketDetailComponent = () => {
     loadInitial();
 
     const interval = setInterval(async () => {
+      if (isTerminal) {
+        clearInterval(interval);
+        return;
+      }
       try {
         const [ticketRes, timelineRes] = await Promise.all([
           api.tickets.get(ticketId),
-          api.tickets.timeline(ticketId).catch(() => ({ events: [] })),
+          api.tickets.timeline(ticketId).catch(() => null),
         ]);
         if (active) {
           setTicket(ticketRes.ticket);
-          setTimeline(timelineRes.events);
+          if (timelineRes) {
+            setTimeline(timelineRes.events);
+          }
+          if (terminalStatuses.has(ticketRes.ticket.status)) {
+            isTerminal = true;
+            clearInterval(interval);
+          }
         }
       } catch {
         // background poll ignore

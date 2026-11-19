@@ -2,7 +2,12 @@ import type { TicketLegStatus, TicketStatus } from "@ppal/contracts/tickets";
 
 import type { TicketEvaluationInput, TicketEvaluationResult } from "./types";
 
-const REVIEW_STATUSES = new Set<TicketStatus>(["draft", "needs_review"]);
+const PROTECTED_STATUSES = new Set<TicketStatus>([
+  "draft",
+  "needs_review",
+  "void",
+  "settled",
+]);
 const VOID_LEG_STATUSES = new Set<TicketLegStatus>(["void", "cancelled"]);
 
 const countStatuses = (legStatuses: readonly TicketLegStatus[]) => {
@@ -28,7 +33,7 @@ const countStatuses = (legStatuses: readonly TicketLegStatus[]) => {
 
 const deriveTicketStatus = (input: TicketEvaluationInput): TicketStatus => {
   const { legStatuses, status } = input;
-  if (REVIEW_STATUSES.has(status) || legStatuses.length === 0) {
+  if (PROTECTED_STATUSES.has(status) || legStatuses.length === 0) {
     return status;
   }
 
@@ -70,8 +75,14 @@ export const evaluateTicket = (
   input: TicketEvaluationInput,
   now: Date = new Date()
 ): TicketEvaluationResult => {
+  const { settledAt: existingSettledAt } = input;
   const status = deriveTicketStatus(input);
-  const settledAt = isSettledStatus(status) ? (input.settledAt ?? now) : null;
+  let settledAt: Date | null = null;
+  if (PROTECTED_STATUSES.has(status)) {
+    settledAt = existingSettledAt;
+  } else if (isSettledStatus(status)) {
+    settledAt = existingSettledAt ?? now;
+  }
 
   return {
     ...input,

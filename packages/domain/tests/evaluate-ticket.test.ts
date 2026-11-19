@@ -56,7 +56,7 @@ describe("evaluateTicket", () => {
     expect(result.status).toBe("push");
   });
 
-  test("keeps draft and needs-review tickets unchanged", () => {
+  test("keeps draft, needs-review, void, and settled tickets unchanged", () => {
     const draft = evaluateTicket(
       { legStatuses: ["won"], settledAt: null, status: "draft" },
       NOW
@@ -65,11 +65,25 @@ describe("evaluateTicket", () => {
       { legStatuses: ["won"], settledAt: null, status: "needs_review" },
       NOW
     );
+    const voided = evaluateTicket(
+      { legStatuses: ["won"], settledAt: NOW, status: "void" },
+      NOW
+    );
+    const settled = evaluateTicket(
+      { legStatuses: ["lost"], settledAt: NOW, status: "settled" },
+      NOW
+    );
 
     expect(draft.changed).toBeFalse();
     expect(draft.status).toBe("draft");
     expect(review.changed).toBeFalse();
     expect(review.status).toBe("needs_review");
+    expect(voided.changed).toBeFalse();
+    expect(voided.status).toBe("void");
+    expect(voided.settledAt).toEqual(NOW);
+    expect(settled.changed).toBeFalse();
+    expect(settled.status).toBe("settled");
+    expect(settled.settledAt).toEqual(NOW);
   });
 
   test("schedules all-pending tickets and activates mixed live tickets", () => {

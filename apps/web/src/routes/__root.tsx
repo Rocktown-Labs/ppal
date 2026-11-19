@@ -90,8 +90,45 @@ const RootDocument = () => {
   );
 };
 
+const NotFoundPage = () => (
+  <main className="flex min-h-svh flex-col items-center justify-center bg-zinc-950 px-6 py-20 text-center text-zinc-100">
+    <Link to="/" className="mb-10 inline-flex items-center">
+      <img
+        alt="ParlayPal"
+        className="h-10 w-auto object-contain"
+        src="/images/logo.png"
+      />
+    </Link>
+    <p className="text-xs font-bold tracking-[0.2em] text-emerald-400 uppercase">
+      404 · Page not found
+    </p>
+    <h1 className="mt-3 text-3xl font-black tracking-tight text-white sm:text-5xl">
+      That slip isn&apos;t on the board.
+    </h1>
+    <p className="mt-4 max-w-md text-sm leading-6 text-zinc-400">
+      The page you&apos;re looking for doesn&apos;t exist or has been moved.
+      Head back home to track your tickets live.
+    </p>
+    <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
+      <Link
+        className="inline-flex items-center justify-center rounded-xl bg-emerald-500 px-6 py-3 text-sm font-bold text-black shadow-lg shadow-emerald-500/25 transition hover:bg-emerald-400"
+        to="/"
+      >
+        Back to Home
+      </Link>
+      <Link
+        className="inline-flex items-center justify-center rounded-xl border border-zinc-700 bg-zinc-900/60 px-6 py-3 text-sm font-semibold text-zinc-300 transition hover:text-white"
+        to="/auth/sign-in"
+      >
+        Log In
+      </Link>
+    </div>
+  </main>
+);
+
 export const Route = createRootRouteWithContext<RouterAppContext>()({
   component: RootDocument,
+  notFoundComponent: NotFoundPage,
 
   head: () => ({
     links: [

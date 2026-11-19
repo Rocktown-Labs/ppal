@@ -63,13 +63,16 @@ const evaluateIncreasingOutcome = (input: LegEvaluationInput): LegOutcome => {
     return { currentValue, status: "won" };
   }
   if (input.event?.status === "final") {
+    if (operator === "over" && currentValue === targetValue) {
+      return { currentValue, status: "push" };
+    }
     return { currentValue, status: "lost" };
   }
   return unsettledNumericOutcome(input);
 };
 
 const evaluateDecreasingOutcome = (input: LegEvaluationInput): LegOutcome => {
-  const { currentValue, targetValue } = input;
+  const { currentValue, operator, targetValue } = input;
   if (currentValue === null || targetValue === null) {
     return unsettledNumericOutcome(input);
   }
@@ -77,6 +80,9 @@ const evaluateDecreasingOutcome = (input: LegEvaluationInput): LegOutcome => {
     return { currentValue, status: "lost" };
   }
   if (input.event?.status === "final") {
+    if (operator === "under" && currentValue === targetValue) {
+      return { currentValue, status: "push" };
+    }
     return { currentValue, status: "won" };
   }
   return unsettledNumericOutcome(input);

@@ -271,8 +271,15 @@ const upsertScheduleEvent = async (
     ON CONFLICT(provider, provider_event_id) DO UPDATE SET
       away_participant_id = excluded.away_participant_id,
       home_participant_id = excluded.home_participant_id,
-      league_id = excluded.league_id, provider_payload = excluded.provider_payload,
-      starts_at = excluded.starts_at, updated_at = excluded.updated_at`
+      league_id = excluded.league_id,
+      next_poll_at = MIN(COALESCE(sports_events.next_poll_at, excluded.next_poll_at), excluded.next_poll_at),
+      provider_payload = excluded.provider_payload,
+      starts_at = excluded.starts_at,
+      status = CASE
+        WHEN sports_events.status IN ('final', 'cancelled') THEN sports_events.status
+        ELSE excluded.status
+      END,
+      updated_at = excluded.updated_at`
   )
     .bind(
       awayId,
@@ -287,6 +294,74 @@ const upsertScheduleEvent = async (
       Date.now()
     )
     .run();
+};
+
+const syncLeagueSchedulePath = async ({
+  accessLevel,
+  leagueSlug,
+  pendingPath,
+  pendingPaths,
+  playbook,
+  sportSlug,
+  visitedPaths,
+  workerEnv,
+}: {
+  accessLevel: "production" | "trial";
+  leagueSlug: string;
+  pendingPath: string;
+  pendingPaths: string[];
+  playbook: NonNullable<(typeof playbooks)[string]>;
+  sportSlug: string;
+  visitedPaths: Set<string>;
+  workerEnv: Env;
+}): Promise<void> => {
+  try {
+    const budget = await acquireSportradarProductBudget(leagueSlug, workerEnv);
+    if (!budget.granted) {
+      workerEnv.ANALYTICS.writeDataPoint({
+        blobs: ["sportradar.schedule_deferred", leagueSlug],
+        doubles: [budget.retryAfterMs, budget.remaining],
+        indexes: [leagueSlug],
+      });
+      return;
+    }
+    const url = new URL(pendingPath, "https://api.sportradar.com/");
+    url.searchParams.set("api_key", workerEnv.SPORTRADAR_API_KEY);
+    const response = await fetch(url, {
+      headers: {
+        accept: "application/json",
+        "user-agent": "ParlayPal/2.0",
+      },
+    });
+    if (!response.ok) {
+      workerEnv.ANALYTICS.writeDataPoint({
+        blobs: ["sportradar.schedule_failed", leagueSlug],
+        doubles: [response.status],
+        indexes: [leagueSlug],
+      });
+      return;
+    }
+    const payload = (await response.json()) as Record<string, unknown>;
+    for (const followup of playbook.followupPaths?.(
+      payload,
+      new Date(),
+      accessLevel
+    ) ?? []) {
+      if (!visitedPaths.has(followup)) {
+        visitedPaths.add(followup);
+        pendingPaths.push(followup);
+      }
+    }
+    for (const raw of playbook.rows(payload)) {
+      await upsertScheduleEvent(raw, leagueSlug, sportSlug, workerEnv);
+    }
+  } catch {
+    workerEnv.ANALYTICS.writeDataPoint({
+      blobs: ["sportradar.schedule_error", leagueSlug],
+      doubles: [1],
+      indexes: [leagueSlug],
+    });
+  }
 };
 
 export const synchronizeSportsCatalog = async (
@@ -371,42 +446,18 @@ export const synchronizeSportsCatalog = async (
     );
     for (const path of paths) {
       const pendingPaths = [path];
+      const visitedPaths = new Set<string>([path]);
       for (const pendingPath of pendingPaths) {
-        const budget = await acquireSportradarProductBudget(
+        await syncLeagueSchedulePath({
+          accessLevel,
           leagueSlug,
-          workerEnv
-        );
-        if (!budget.granted) {
-          workerEnv.ANALYTICS.writeDataPoint({
-            blobs: ["sportradar.schedule_deferred", leagueSlug],
-            doubles: [budget.retryAfterMs, budget.remaining],
-            indexes: [leagueSlug],
-          });
-          continue;
-        }
-        const url = new URL(pendingPath, "https://api.sportradar.com/");
-        url.searchParams.set("api_key", workerEnv.SPORTRADAR_API_KEY);
-        const response = await fetch(url, {
-          headers: {
-            accept: "application/json",
-            "user-agent": "ParlayPal/2.0",
-          },
+          pendingPath,
+          pendingPaths,
+          playbook,
+          sportSlug,
+          visitedPaths,
+          workerEnv,
         });
-        if (!response.ok) {
-          workerEnv.ANALYTICS.writeDataPoint({
-            blobs: ["sportradar.schedule_failed", leagueSlug],
-            doubles: [response.status],
-            indexes: [leagueSlug],
-          });
-          continue;
-        }
-        const payload = (await response.json()) as Record<string, unknown>;
-        pendingPaths.push(
-          ...(playbook.followupPaths?.(payload, new Date(), accessLevel) ?? [])
-        );
-        for (const raw of playbook.rows(payload)) {
-          await upsertScheduleEvent(raw, leagueSlug, sportSlug, workerEnv);
-        }
       }
     }
   }

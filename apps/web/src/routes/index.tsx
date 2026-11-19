@@ -1,5 +1,5 @@
 import { Link, createFileRoute } from "@tanstack/react-router";
-import { Check } from "lucide-react";
+import { Check, ChevronDown } from "lucide-react";
 
 import { UserButton } from "@/components/auth/user/user-button";
 import { SPORT_PAGES } from "@/data/sports";
@@ -146,13 +146,11 @@ const HomeComponent = () => {
           <div className="flex items-center gap-3">
             {isAuthenticated ? (
               <>
-                <Link to="/dashboard">
-                  <button
-                    type="button"
-                    className="cursor-pointer rounded-lg bg-emerald-500 px-4 py-2 text-xs font-bold text-black shadow-md shadow-emerald-500/25 transition hover:bg-emerald-400"
-                  >
-                    Open Companion →
-                  </button>
+                <Link
+                  to="/dashboard"
+                  className="inline-flex cursor-pointer items-center justify-center rounded-lg bg-emerald-500 px-4 py-2 text-xs font-bold text-black shadow-md shadow-emerald-500/25 transition hover:bg-emerald-400"
+                >
+                  Open Companion →
                 </Link>
                 <UserButton size="icon" variant="ghost" />
               </>
@@ -164,13 +162,12 @@ const HomeComponent = () => {
                 >
                   Log In
                 </Link>
-                <Link to="/auth/sign-in">
-                  <button
-                    type="button"
-                    className="cursor-pointer rounded-lg bg-emerald-500 px-4 py-2 text-xs font-bold text-black shadow-md shadow-emerald-500/25 transition hover:bg-emerald-400"
-                  >
-                    Get Started Free
-                  </button>
+                <Link
+                  to="/auth/$path"
+                  params={{ path: "sign-up" }}
+                  className="inline-flex cursor-pointer items-center justify-center rounded-lg bg-emerald-500 px-4 py-2 text-xs font-bold text-black shadow-md shadow-emerald-500/25 transition hover:bg-emerald-400"
+                >
+                  Get Started Free
                 </Link>
               </>
             )}
@@ -194,7 +191,7 @@ const HomeComponent = () => {
 
               <h1 className="text-4xl leading-tight font-black tracking-tight text-white sm:text-6xl">
                 Never wonder if your parlay is hitting{" "}
-                <br className="hidden sm:inline" />
+                <br className="hidden sm:inline" />{" "}
                 <span className="text-emerald-400">again.</span>
               </h1>
 
@@ -207,31 +204,26 @@ const HomeComponent = () => {
 
               <div className="flex flex-col items-center justify-center gap-4 pt-2 sm:flex-row lg:justify-start">
                 {isAuthenticated ? (
-                  <Link to="/dashboard" className="w-full sm:w-auto">
-                    <button
-                      type="button"
-                      className="w-full cursor-pointer rounded-xl bg-emerald-500 px-6 py-3.5 text-sm font-bold text-black shadow-xl shadow-emerald-500/25 transition hover:bg-emerald-400 sm:w-auto"
-                    >
-                      Go to Live Dashboard →
-                    </button>
+                  <Link
+                    to="/dashboard"
+                    className="inline-flex w-full cursor-pointer items-center justify-center rounded-xl bg-emerald-500 px-6 py-3.5 text-sm font-bold text-black shadow-xl shadow-emerald-500/25 transition hover:bg-emerald-400 sm:w-auto"
+                  >
+                    Go to Live Dashboard →
                   </Link>
                 ) : (
                   <>
-                    <Link to="/auth/sign-in" className="w-full sm:w-auto">
-                      <button
-                        type="button"
-                        className="w-full cursor-pointer rounded-xl bg-emerald-500 px-6 py-3.5 text-sm font-bold text-black shadow-xl shadow-emerald-500/25 transition hover:bg-emerald-400 sm:w-auto"
-                      >
-                        Upload Your First Bet →
-                      </button>
+                    <Link
+                      to="/auth/$path"
+                      params={{ path: "sign-up" }}
+                      className="inline-flex w-full cursor-pointer items-center justify-center rounded-xl bg-emerald-500 px-6 py-3.5 text-sm font-bold text-black shadow-xl shadow-emerald-500/25 transition hover:bg-emerald-400 sm:w-auto"
+                    >
+                      Upload Your First Bet →
                     </Link>
-                    <a href="#how-it-works" className="w-full sm:w-auto">
-                      <button
-                        type="button"
-                        className="w-full cursor-pointer rounded-xl border border-zinc-700 bg-zinc-900/60 px-6 py-3.5 text-sm font-semibold text-zinc-300 transition hover:text-white sm:w-auto"
-                      >
-                        See How It Works
-                      </button>
+                    <a
+                      href="#how-it-works"
+                      className="inline-flex w-full cursor-pointer items-center justify-center rounded-xl border border-zinc-700 bg-zinc-900/60 px-6 py-3.5 text-sm font-semibold text-zinc-300 transition hover:text-white sm:w-auto"
+                    >
+                      See How It Works
                     </a>
                   </>
                 )}
@@ -271,7 +263,7 @@ const HomeComponent = () => {
                     </p>
                   </div>
                   <span className="rounded-full border border-emerald-500/30 bg-emerald-500/15 px-2.5 py-0.5 font-mono text-xs font-bold text-emerald-400">
-                    4 / 5 LEGS
+                    2 / 5 WON
                   </span>
                 </div>
 
@@ -377,7 +369,7 @@ const HomeComponent = () => {
                 {/* Card Bottom Status */}
                 <div className="mt-4 flex items-center justify-between border-t border-zinc-800/80 pt-3 text-[11px] text-zinc-400">
                   <span className="font-semibold text-emerald-400">
-                    👀 1 Leg Needed for Win
+                    👀 2 Live · 1 Scheduled
                   </span>
                   <span className="font-mono">Auto-syncing live</span>
                 </div>
@@ -671,14 +663,22 @@ const HomeComponent = () => {
               </div>
 
               <div className="border-t border-zinc-800 pt-4">
-                <Link to={isAuthenticated ? "/dashboard" : "/auth/sign-in"}>
-                  <button
-                    type="button"
-                    className="w-full cursor-pointer rounded-xl border border-zinc-700 bg-zinc-800/80 px-4 py-2.5 text-xs font-bold text-white transition hover:bg-zinc-700"
+                {isAuthenticated ? (
+                  <Link
+                    to="/dashboard"
+                    className="inline-flex w-full cursor-pointer items-center justify-center rounded-xl border border-zinc-700 bg-zinc-800/80 px-4 py-2.5 text-xs font-bold text-white transition hover:bg-zinc-700"
                   >
-                    {isAuthenticated ? "Continue Free" : "Get Started Free"}
-                  </button>
-                </Link>
+                    Continue Free
+                  </Link>
+                ) : (
+                  <Link
+                    to="/auth/$path"
+                    params={{ path: "sign-up" }}
+                    className="inline-flex w-full cursor-pointer items-center justify-center rounded-xl border border-zinc-700 bg-zinc-800/80 px-4 py-2.5 text-xs font-bold text-white transition hover:bg-zinc-700"
+                  >
+                    Get Started Free
+                  </Link>
+                )}
               </div>
             </div>
 
@@ -737,16 +737,22 @@ const HomeComponent = () => {
               </div>
 
               <div className="border-t border-zinc-800 pt-4">
-                <Link to={isAuthenticated ? "/dashboard" : "/auth/sign-in"}>
-                  <button
-                    type="button"
-                    className="w-full cursor-pointer rounded-xl bg-emerald-500 px-4 py-2.5 text-xs font-bold text-black shadow-lg shadow-emerald-500/25 transition hover:bg-emerald-400"
+                {isAuthenticated ? (
+                  <Link
+                    to="/dashboard/settings"
+                    className="inline-flex w-full cursor-pointer items-center justify-center rounded-xl bg-emerald-500 px-4 py-2.5 text-xs font-bold text-black shadow-lg shadow-emerald-500/25 transition hover:bg-emerald-400"
                   >
-                    {isAuthenticated
-                      ? "Upgrade to Pro"
-                      : "Get Started with Pro"}
-                  </button>
-                </Link>
+                    Upgrade to Pro
+                  </Link>
+                ) : (
+                  <Link
+                    to="/auth/$path"
+                    params={{ path: "sign-up" }}
+                    className="inline-flex w-full cursor-pointer items-center justify-center rounded-xl bg-emerald-500 px-4 py-2.5 text-xs font-bold text-black shadow-lg shadow-emerald-500/25 transition hover:bg-emerald-400"
+                  >
+                    Get Started with Pro
+                  </Link>
+                )}
               </div>
             </div>
 
@@ -807,16 +813,22 @@ const HomeComponent = () => {
               </div>
 
               <div className="border-t border-zinc-800 pt-4">
-                <Link to={isAuthenticated ? "/dashboard" : "/auth/sign-in"}>
-                  <button
-                    type="button"
-                    className="w-full cursor-pointer rounded-xl bg-purple-600 px-4 py-2.5 text-xs font-bold text-white shadow-lg shadow-purple-500/25 transition hover:bg-purple-500"
+                {isAuthenticated ? (
+                  <Link
+                    to="/dashboard/settings"
+                    className="inline-flex w-full cursor-pointer items-center justify-center rounded-xl bg-purple-600 px-4 py-2.5 text-xs font-bold text-white shadow-lg shadow-purple-500/25 transition hover:bg-purple-500"
                   >
-                    {isAuthenticated
-                      ? "Upgrade to Creator"
-                      : "Get Started with Creator"}
-                  </button>
-                </Link>
+                    Upgrade to Creator
+                  </Link>
+                ) : (
+                  <Link
+                    to="/auth/$path"
+                    params={{ path: "sign-up" }}
+                    className="inline-flex w-full cursor-pointer items-center justify-center rounded-xl bg-purple-600 px-4 py-2.5 text-xs font-bold text-white shadow-lg shadow-purple-500/25 transition hover:bg-purple-500"
+                  >
+                    Get Started with Creator
+                  </Link>
+                )}
               </div>
             </div>
           </div>
@@ -842,8 +854,12 @@ const HomeComponent = () => {
           <div className="divide-y divide-zinc-800 rounded-2xl border border-zinc-800 bg-zinc-900/40 px-6">
             {FAQ_ITEMS.map((item) => (
               <details className="group py-5" key={item.question}>
-                <summary className="cursor-pointer list-none pr-8 text-sm font-semibold text-white marker:hidden">
-                  {item.question}
+                <summary className="flex cursor-pointer list-none items-center justify-between gap-4 text-sm font-semibold text-white marker:hidden [&::-webkit-details-marker]:hidden">
+                  <span>{item.question}</span>
+                  <ChevronDown
+                    aria-hidden="true"
+                    className="size-4 shrink-0 text-zinc-400 transition-transform duration-200 group-open:rotate-180 group-open:text-emerald-400"
+                  />
                 </summary>
                 <p className="mt-3 text-sm leading-relaxed text-zinc-400">
                   {item.answer}
@@ -869,14 +885,22 @@ const HomeComponent = () => {
           </p>
 
           <div className="flex flex-col items-center justify-center gap-4 pt-2 sm:flex-row">
-            <Link to={isAuthenticated ? "/dashboard" : "/auth/sign-in"}>
-              <button
-                type="button"
-                className="cursor-pointer rounded-xl bg-emerald-500 px-8 py-3.5 text-sm font-bold text-black shadow-xl shadow-emerald-500/30 transition hover:bg-emerald-400"
+            {isAuthenticated ? (
+              <Link
+                to="/dashboard"
+                className="inline-flex cursor-pointer items-center justify-center rounded-xl bg-emerald-500 px-8 py-3.5 text-sm font-bold text-black shadow-xl shadow-emerald-500/30 transition hover:bg-emerald-400"
               >
-                {isAuthenticated ? "Launch Dashboard →" : "Get Started Free →"}
-              </button>
-            </Link>
+                Launch Dashboard →
+              </Link>
+            ) : (
+              <Link
+                to="/auth/$path"
+                params={{ path: "sign-up" }}
+                className="inline-flex cursor-pointer items-center justify-center rounded-xl bg-emerald-500 px-8 py-3.5 text-sm font-bold text-black shadow-xl shadow-emerald-500/30 transition hover:bg-emerald-400"
+              >
+                Get Started Free →
+              </Link>
+            )}
           </div>
         </div>
       </section>
@@ -902,9 +926,9 @@ const HomeComponent = () => {
             </div>
 
             <div className="space-y-3">
-              <h4 className="text-xs font-bold tracking-wider text-zinc-500 uppercase">
+              <h3 className="text-xs font-bold tracking-wider text-zinc-500 uppercase">
                 Product
-              </h4>
+              </h3>
               <nav className="flex flex-col gap-2.5 text-sm text-zinc-400">
                 <a
                   href="#how-it-works"
@@ -940,9 +964,9 @@ const HomeComponent = () => {
             </div>
 
             <div className="space-y-3">
-              <h4 className="text-xs font-bold tracking-wider text-zinc-500 uppercase">
+              <h3 className="text-xs font-bold tracking-wider text-zinc-500 uppercase">
                 Legal & Support
-              </h4>
+              </h3>
               <nav className="flex flex-col gap-2.5 text-sm text-zinc-400">
                 <Link
                   className="transition-colors hover:text-emerald-400"
