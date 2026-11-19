@@ -388,8 +388,14 @@ export const Route = createFileRoute("/dashboard")({
   ssr: false,
   head: () => ({ meta: [noIndexMeta] }),
   beforeLoad: async ({ location }) => {
-    const session = await authClient.getSession();
-    if (!session.data) {
+    let session: Awaited<ReturnType<typeof authClient.getSession>> | null =
+      null;
+    try {
+      session = await authClient.getSession();
+    } catch {
+      session = null;
+    }
+    if (!session?.data) {
       throw redirect({
         to: "/auth/sign-in",
       });
@@ -400,8 +406,13 @@ export const Route = createFileRoute("/dashboard")({
     // The onboarding wizard is the first authenticated destination for a new
     // account. The profile endpoint returns a null profile until the wizard
     // creates one, so both paths can use the same guard without a race.
-    const res = await api.community.getMe();
-    const profile = res.user?.profile ?? null;
+    let profile = null;
+    try {
+      const res = await api.community.getMe();
+      profile = res.user?.profile ?? null;
+    } catch {
+      return { profile: null, session };
+    }
     const hasUsername = Boolean(profile?.username?.trim());
 
     if (!hasUsername && !isOnboardingPath) {

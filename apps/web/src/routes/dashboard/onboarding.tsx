@@ -202,14 +202,21 @@ const OnboardingWizardComponent = () => {
       });
       setIsSubmitting(false);
       setStep(3);
-    } catch {
-      // Preferences update failure shouldn't block onboarding progress
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Notification settings couldn't be saved — you can update them in Settings."
+      );
       setIsSubmitting(false);
       setStep(3);
     }
   };
 
   const handleSelectPlan = async (plan: "creator" | "free" | "pro") => {
+    if (isSubmitting) {
+      return;
+    }
     form.setFieldValue("selectedPlan", plan);
     if (plan === "free") {
       setStep(4);

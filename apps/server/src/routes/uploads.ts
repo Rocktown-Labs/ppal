@@ -248,17 +248,19 @@ export const createUploadRoutes = (auth: Auth) =>
         sha256: hexToBuffer(upload.sha256),
       });
       const now = new Date();
-      await env.DB.prepare(
+      const readyResult = await env.DB.prepare(
         "UPDATE uploads SET status = 'ready', ready_at = ?, updated_at = ? WHERE id = ? AND status = 'uploading'"
       )
         .bind(now.getTime(), now.getTime(), upload.id)
         .run();
-      const message: ExtractionQueueMessage = {
-        attemptVersion: 1,
-        requestedAt: now.toISOString(),
-        uploadId: upload.id,
-      };
-      await env.EXTRACTION_QUEUE.send(message, { contentType: "json" });
+      if (readyResult.meta.changes > 0) {
+        const message: ExtractionQueueMessage = {
+          attemptVersion: 1,
+          requestedAt: now.toISOString(),
+          uploadId: upload.id,
+        };
+        await env.EXTRACTION_QUEUE.send(message, { contentType: "json" });
+      }
       return c.json({ accepted: true, uploadId: upload.id }, 202);
     })
     .get("/:uploadId/content", async (c) => {
@@ -294,12 +296,21 @@ export const createUploadRoutes = (auth: Auth) =>
         "x-content-type-options": "nosniff",
       });
       if (object.range) {
-        const offset =
-          "offset" in object.range ? (object.range.offset ?? 0) : 0;
-        const length =
-          "length" in object.range
-            ? (object.range.length ?? object.size)
-            : object.size;
+        let offset = 0;
+        let length = object.size;
+        if (
+          "suffix" in object.range &&
+          typeof object.range.suffix === "number"
+        ) {
+          length = Math.min(object.range.suffix, object.size);
+          offset = Math.max(0, object.size - length);
+        } else {
+          offset = "offset" in object.range ? (object.range.offset ?? 0) : 0;
+          length =
+            "length" in object.range
+              ? (object.range.length ?? Math.max(0, object.size - offset))
+              : Math.max(0, object.size - offset);
+        }
         headers.set(
           "content-range",
           `bytes ${offset}-${offset + length - 1}/${object.size}`

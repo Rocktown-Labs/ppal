@@ -351,13 +351,23 @@ export const createTicketRoutes = (auth: Auth) =>
             ticketId
           )
         );
-        await env.DB.batch([
+        const reviewBatch = await env.DB.batch([
           ...updates,
           env.DB.prepare(
             `UPDATE tickets SET notification_interval_minutes = ?, updated_at = ?,
-              version = version + 1 WHERE id = ? AND user_id = ?`
+              version = version + 1 WHERE id = ? AND user_id = ? AND status IN ('draft', 'needs_review')`
           ).bind(notificationIntervalMinutes, now, ticketId, user.id),
         ]);
+        const ticketUpdate = reviewBatch.at(-1);
+        if (!ticketUpdate || ticketUpdate.meta.changes === 0) {
+          return c.json(
+            {
+              code: "INVALID_STATE",
+              error: "Ticket cannot be reviewed in its current state",
+            },
+            409
+          );
+        }
         await writeAuditEvent({
           action: "ticket.review",
           actorUserId: user.id,
@@ -412,14 +422,15 @@ export const createTicketRoutes = (auth: Auth) =>
         );
       }
       const now = Date.now();
-      const confirmation = await env.DB.prepare(
-        `UPDATE tickets SET confirmed_at = ?, last_progress_notified_at = ?, status = 'scheduled',
-          tracking_started_at = ?, updated_at = ?, version = version + 1
-         WHERE id = ? AND user_id = ? AND status IN ('draft', 'needs_review')`
+      const ticketRow = await env.DB.prepare(
+        "SELECT status FROM tickets WHERE id = ? AND user_id = ?"
       )
-        .bind(now, now, now, now, ticketId, user.id)
-        .run();
-      if (confirmation.meta.changes === 0) {
+        .bind(ticketId, user.id)
+        .first<{ status: string }>();
+      if (!ticketRow) {
+        return c.json({ code: "NOT_FOUND", error: "Ticket not found" }, 404);
+      }
+      if (!["draft", "needs_review"].includes(ticketRow.status)) {
         return c.json(
           {
             code: "INVALID_STATE",
@@ -479,7 +490,24 @@ export const createTicketRoutes = (auth: Auth) =>
           "UPDATE sports_events SET next_poll_at = MIN(COALESCE(next_poll_at, ?), ?), updated_at = ? WHERE id = ?"
         ).bind(pollAt, pollAt, now, eventId)
       );
-      await env.DB.batch([...trackingStatements, ...eventStatements]);
+      const confirmBatch = await env.DB.batch([
+        env.DB.prepare(
+          `UPDATE tickets SET confirmed_at = ?, last_progress_notified_at = ?, status = 'scheduled',
+            tracking_started_at = ?, updated_at = ?, version = version + 1
+           WHERE id = ? AND user_id = ? AND status IN ('draft', 'needs_review')`
+        ).bind(now, now, now, now, ticketId, user.id),
+        ...trackingStatements,
+        ...eventStatements,
+      ]);
+      if (confirmBatch[0]?.meta.changes === 0) {
+        return c.json(
+          {
+            code: "INVALID_STATE",
+            error: "Ticket cannot be confirmed in its current state",
+          },
+          409
+        );
+      }
       await writeAuditEvent({
         action: "ticket.confirm",
         actorUserId: user.id,

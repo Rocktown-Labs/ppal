@@ -188,14 +188,16 @@ export const createHistoricalImportRoutes = (auth: Auth) =>
       if (!user) {
         return c.json({ code: "UNAUTHORIZED", error: "Unauthorized" }, 401);
       }
-      await refreshHistoricalBatch(env.DB, c.req.param("batchId"));
-      const batch = await loadBatch(c.req.param("batchId"), user.id);
-      if (!batch) {
+      const batchId = c.req.param("batchId");
+      const existing = await loadBatch(batchId, user.id);
+      if (!existing) {
         return c.json(
           { code: "NOT_FOUND", error: "Import batch not found" },
           404
         );
       }
+      await refreshHistoricalBatch(env.DB, existing.id);
+      const batch = (await loadBatch(existing.id, user.id)) ?? existing;
       const uploads = await env.DB.prepare(
         `SELECT id, original_filename, status FROM uploads
          WHERE historical_import_batch_id = ? AND user_id = ? ORDER BY created_at`

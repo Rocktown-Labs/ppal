@@ -7,6 +7,7 @@ import { evlog } from "evlog/hono";
 import type { EvlogVariables } from "evlog/hono";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
+import { HTTPException } from "hono/http-exception";
 import { secureHeaders } from "hono/secure-headers";
 
 import { getRateLimitKey } from "./lib/rate-limit";
@@ -110,18 +111,26 @@ const contentSecurityPolicy = {
   styleSrc: ["'self'", "'unsafe-inline'"],
 };
 
+const LOCAL_EXPO_ORIGIN_PATTERN =
+  /^exp:\/\/(?:localhost|127\.0\.0\.1|10\.\d{1,3}\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3}|172\.(?:1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3})(?::\d+)?(?:\/.*)?$/u;
+
 const isAllowedOrigin = (origin: string): boolean => {
   if (TRUSTED_ORIGINS.has(origin)) {
     return true;
   }
   return (
-    origin.startsWith("ppal://") ||
-    origin.startsWith("exp://") ||
+    origin === "ppal://" ||
+    LOCAL_EXPO_ORIGIN_PATTERN.test(origin) ||
     origin === "http://localhost:8081" ||
     origin === "http://127.0.0.1:8081" ||
     origin === "http://localhost:19006"
   );
 };
+
+const identifyUser = createAuthMiddleware(auth as BetterAuthInstance, {
+  exclude: ["/api/auth/**", "/health"],
+  maskEmail: true,
+});
 
 app.use(
   "*",
@@ -155,10 +164,6 @@ app.use("*", async (c, next) => {
   return await next();
 });
 app.use("*", async (c, next) => {
-  const identifyUser = createAuthMiddleware(auth as BetterAuthInstance, {
-    exclude: ["/api/auth/**", "/health"],
-    maskEmail: true,
-  });
   await identifyUser(c.get("log"), c.req.raw.headers, c.req.path);
   return next();
 });
@@ -245,6 +250,9 @@ app.notFound((c) => c.json({ code: "NOT_FOUND", error: "Not found" }, 404));
 // Hono requires an error callback to preserve its typed response surface.
 // oxlint-disable-next-line prefer-await-to-callbacks
 app.onError((error, c) => {
+  if (error instanceof HTTPException) {
+    return error.getResponse();
+  }
   c.get("log").error(error, { event: "request.failed" });
   return c.json(
     { code: "INTERNAL_ERROR", error: "Internal server error" },

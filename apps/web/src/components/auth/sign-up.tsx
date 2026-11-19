@@ -210,11 +210,19 @@ export function SignUp({
           {socialPosition === "top" && (
             <>
               {socialProviders && socialProviders.length > 0 && (
-                <ProviderButtons
-                  disabled={!termsAccepted}
-                  socialLayout={socialLayout}
-                  view="signUp"
-                />
+                <div className="flex flex-col gap-2">
+                  <ProviderButtons
+                    disabled={!termsAccepted}
+                    socialLayout={socialLayout}
+                    view="signUp"
+                  />
+                  {!termsAccepted ? (
+                    <p className="text-center text-xs text-zinc-500">
+                      Accept the Terms &amp; Privacy Policy below to enable
+                      social sign-up.
+                    </p>
+                  ) : null}
+                </div>
               )}
 
               {showSeparator && (
@@ -582,7 +590,7 @@ export function SignUp({
                     />
                     <FieldContent>
                       <FieldLabel
-                        className="text-xs leading-5 text-zinc-400"
+                        className="inline text-xs leading-5 text-zinc-400"
                         htmlFor="termsAccepted"
                       >
                         I agree to the{" "}
@@ -643,11 +651,19 @@ export function SignUp({
               )}
 
               {socialProviders && socialProviders.length > 0 && (
-                <ProviderButtons
-                  disabled={!termsAccepted}
-                  socialLayout={socialLayout}
-                  view="signUp"
-                />
+                <div className="flex flex-col gap-2">
+                  <ProviderButtons
+                    disabled={!termsAccepted}
+                    socialLayout={socialLayout}
+                    view="signUp"
+                  />
+                  {!termsAccepted ? (
+                    <p className="text-center text-xs text-zinc-500">
+                      Accept the Terms &amp; Privacy Policy below to enable
+                      social sign-up.
+                    </p>
+                  ) : null}
+                </div>
               )}
             </>
           )}

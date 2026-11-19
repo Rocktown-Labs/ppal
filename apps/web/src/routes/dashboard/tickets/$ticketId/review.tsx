@@ -225,6 +225,7 @@ const TicketReviewComponent = () => {
     }
     updateLegFields(searchModalLegIndex, {
       marketId: market.id,
+      ...(market.subjectType === "game" ? { participantId: null } : {}),
       ...(market.sportId ? { sportId: market.sportId } : {}),
       subjectType: market.subjectType,
     });
@@ -685,6 +686,7 @@ const TicketReviewComponent = () => {
                         <option value="under">Under</option>
                         <option value="gte">At Least (GTE)</option>
                         <option value="lte">At Most (LTE)</option>
+                        <option value="equals">Equals</option>
                         <option value="moneyline">Moneyline</option>
                         <option value="spread">Spread</option>
                         <option value="yes">Yes</option>

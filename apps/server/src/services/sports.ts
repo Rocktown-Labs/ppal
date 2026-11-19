@@ -598,10 +598,11 @@ export const processSportsMessage = async (
       event.starts_at
     );
   }
-  await workerEnv.DB.prepare(
+  const leaseToken = Number(message.leaseToken);
+  const eventUpdate = await workerEnv.DB.prepare(
     `UPDATE sports_events SET away_score = ?, home_score = ?, last_synced_at = ?,
       next_poll_at = ?, provider_payload = ?, status = ?, updated_at = ?
-     WHERE id = ?`
+     WHERE id = ? AND poll_lease_until = ?`
   )
     .bind(
       scores.away,
@@ -611,12 +612,17 @@ export const processSportsMessage = async (
       JSON.stringify(payload),
       status,
       syncedAt,
-      event.id
+      event.id,
+      leaseToken
     )
     .run();
+  if (eventUpdate.meta.changes === 0) {
+    return;
+  }
 
-  const tracked = await workerEnv.DB.prepare(
-    `SELECT l.current_value, l.id AS leg_id, l.lost_at, l.operator,
+  try {
+    const tracked = await workerEnv.DB.prepare(
+      `SELECT l.current_value, l.id AS leg_id, l.lost_at, l.operator,
       l.market_components, l.participant_id, l.settled_at, l.status AS leg_status, l.target_value,
       l.ticket_id, l.won_at, m.id AS market_id, m.slug AS market_slug,
       p.provider_participant_id, t.historical_import_batch_id, t.ingestion_mode,
@@ -628,35 +634,164 @@ export const processSportsMessage = async (
      JOIN markets m ON m.id = s.market_id
      LEFT JOIN participants p ON p.id = s.participant_id
      WHERE s.sports_event_id = ? AND s.status = 'active'`
-  )
-    .bind(event.id)
-    .all<TrackingRow>();
-  const playerRecords: Record<string, unknown>[] = [];
-  collectRecords(payload, playerRecords);
-  await upsertObservedParticipants(event, playerRecords, workerEnv);
-  const affectedTickets = new Map<
-    string,
-    {
-      historicalImportBatchId: string | null;
-      ingestionMode: "historical" | "single";
-      lastProgressNotifiedAt: number | null;
-      notificationIntervalMinutes: NotificationIntervalMinutes;
-      status: TicketStatus;
-      userId: string;
-    }
-  >();
-  for (const trackedLeg of tracked.results) {
-    if (status === "cancelled") {
-      const cancelledAt = Date.now();
-      await workerEnv.DB.batch([
-        workerEnv.DB.prepare(
-          `UPDATE ticket_legs SET settled_at = ?, status = 'void', updated_at = ?, version = version + 1
+    )
+      .bind(event.id)
+      .all<TrackingRow>();
+    const playerRecords: Record<string, unknown>[] = [];
+    collectRecords(payload, playerRecords);
+    await upsertObservedParticipants(event, playerRecords, workerEnv);
+    const affectedTickets = new Map<
+      string,
+      {
+        historicalImportBatchId: string | null;
+        ingestionMode: "historical" | "single";
+        lastProgressNotifiedAt: number | null;
+        notificationIntervalMinutes: NotificationIntervalMinutes;
+        status: TicketStatus;
+        userId: string;
+      }
+    >();
+    for (const trackedLeg of tracked.results) {
+      if (status === "cancelled") {
+        const cancelledAt = Date.now();
+        await workerEnv.DB.batch([
+          workerEnv.DB.prepare(
+            `UPDATE ticket_legs SET settled_at = ?, status = 'void', updated_at = ?, version = version + 1
            WHERE id = ? AND status IN ('pending', 'live', 'unresolved')`
-        ).bind(cancelledAt, cancelledAt, trackedLeg.leg_id),
-        workerEnv.DB.prepare(
-          "UPDATE tracking_subscriptions SET status = 'completed', updated_at = ? WHERE ticket_leg_id = ?"
-        ).bind(cancelledAt, trackedLeg.leg_id),
-      ]);
+          ).bind(cancelledAt, cancelledAt, trackedLeg.leg_id),
+          workerEnv.DB.prepare(
+            "UPDATE tracking_subscriptions SET status = 'completed', updated_at = ? WHERE ticket_leg_id = ?"
+          ).bind(cancelledAt, trackedLeg.leg_id),
+        ]);
+        affectedTickets.set(trackedLeg.ticket_id, {
+          historicalImportBatchId: trackedLeg.historical_import_batch_id,
+          ingestionMode: trackedLeg.ingestion_mode,
+          lastProgressNotifiedAt: trackedLeg.last_progress_notified_at,
+          notificationIntervalMinutes: trackedLeg.notification_interval_minutes,
+          status: trackedLeg.ticket_status,
+          userId: trackedLeg.user_id,
+        });
+        continue;
+      }
+      const player = playerRecords.find(
+        (record) =>
+          record.id === trackedLeg.provider_participant_id ||
+          record.sr_id === trackedLeg.provider_participant_id
+      );
+      const components = trackedLeg.market_components
+        ? (JSON.parse(trackedLeg.market_components) as string[])
+        : [];
+      let value: number | null = null;
+      if (components.length > 0) {
+        let sum = 0;
+        let allFound = true;
+        for (const component of components) {
+          const componentValue = findNumber(
+            player?.statistics ?? player,
+            marketStatKeys[component] ?? []
+          );
+          if (componentValue === null) {
+            allFound = false;
+            break;
+          }
+          sum += componentValue;
+        }
+        value = allFound ? sum : null;
+      } else {
+        value = findNumber(
+          player?.statistics ?? player,
+          marketStatKeys[trackedLeg.market_slug] ?? []
+        );
+      }
+      if (
+        trackedLeg.market_slug === "team_moneyline" ||
+        trackedLeg.market_slug === "team_spread"
+      ) {
+        value =
+          trackedLeg.participant_id === event.home_participant_id
+            ? scores.home
+            : scores.away;
+      } else if (trackedLeg.market_slug === "game_total") {
+        value =
+          scores.home === null || scores.away === null
+            ? null
+            : scores.home + scores.away;
+      } else if (
+        ["finish_position", "leaderboard_position"].includes(
+          trackedLeg.market_slug
+        )
+      ) {
+        value = findNumber(player, ["position"]);
+      } else if (
+        ["race_winner", "tournament_winner"].includes(trackedLeg.market_slug)
+      ) {
+        const position = findNumber(player, ["position"]);
+        value = position === null ? null : Number(position === 1);
+      }
+      if (value === null) {
+        if (status === "final") {
+          throw new Error(
+            `Final provider payload is missing ${trackedLeg.market_slug} for leg ${trackedLeg.leg_id}`
+          );
+        }
+        continue;
+      }
+      const observationKey = `sportradar:${event.id}:${trackedLeg.participant_id}:${trackedLeg.market_id}:${sequence}`;
+      await workerEnv.DB.prepare(
+        `INSERT INTO stat_observations (
+        idempotency_key, market_id, observed_at, participant_id, provider,
+        provider_sequence, sports_event_id, value
+      ) VALUES (?, ?, ?, ?, 'sportradar', ?, ?, ?)
+      ON CONFLICT(idempotency_key) DO NOTHING`
+      )
+        .bind(
+          observationKey,
+          trackedLeg.market_id,
+          Date.now(),
+          trackedLeg.participant_id,
+          sequence,
+          event.id,
+          value
+        )
+        .run();
+      // Observations are shared and deduplicated, but every subscribed leg must
+      // still be evaluated against the resulting value.
+      const evaluation = evaluateLeg(
+        {
+          currentValue: trackedLeg.current_value,
+          event: {
+            awayParticipantId: event.away_participant_id,
+            awayScore: scores.away,
+            homeParticipantId: event.home_participant_id,
+            homeScore: scores.home,
+            status,
+          },
+          lostAt: trackedLeg.lost_at ? new Date(trackedLeg.lost_at) : null,
+          operator: trackedLeg.operator,
+          participantId: trackedLeg.participant_id,
+          settledAt: trackedLeg.settled_at
+            ? new Date(trackedLeg.settled_at)
+            : null,
+          status: trackedLeg.leg_status,
+          targetValue: trackedLeg.target_value,
+          wonAt: trackedLeg.won_at ? new Date(trackedLeg.won_at) : null,
+        },
+        value
+      );
+      await workerEnv.DB.prepare(
+        `UPDATE ticket_legs SET current_value = ?, lost_at = ?, settled_at = ?,
+        status = ?, updated_at = ?, version = version + 1, won_at = ? WHERE id = ?`
+      )
+        .bind(
+          evaluation.currentValue,
+          evaluation.lostAt?.getTime() ?? null,
+          evaluation.settledAt?.getTime() ?? null,
+          evaluation.status,
+          Date.now(),
+          evaluation.wonAt?.getTime() ?? null,
+          trackedLeg.leg_id
+        )
+        .run();
       affectedTickets.set(trackedLeg.ticket_id, {
         historicalImportBatchId: trackedLeg.historical_import_batch_id,
         ingestionMode: trackedLeg.ingestion_mode,
@@ -665,187 +800,64 @@ export const processSportsMessage = async (
         status: trackedLeg.ticket_status,
         userId: trackedLeg.user_id,
       });
-      continue;
     }
-    const player = playerRecords.find(
-      (record) =>
-        record.id === trackedLeg.provider_participant_id ||
-        record.sr_id === trackedLeg.provider_participant_id
-    );
-    const components = trackedLeg.market_components
-      ? (JSON.parse(trackedLeg.market_components) as string[])
-      : [];
-    let value: number | null = null;
-    if (components.length > 0) {
-      let sum = 0;
-      let allFound = true;
-      for (const component of components) {
-        const componentValue = findNumber(
-          player?.statistics ?? player,
-          marketStatKeys[component] ?? []
-        );
-        if (componentValue === null) {
-          allFound = false;
-          break;
-        }
-        sum += componentValue;
-      }
-      value = allFound ? sum : null;
-    } else {
-      value = findNumber(
-        player?.statistics ?? player,
-        marketStatKeys[trackedLeg.market_slug] ?? []
-      );
-    }
-    if (
-      trackedLeg.market_slug === "team_moneyline" ||
-      trackedLeg.market_slug === "team_spread"
-    ) {
-      value =
-        trackedLeg.participant_id === event.home_participant_id
-          ? scores.home
-          : scores.away;
-    } else if (trackedLeg.market_slug === "game_total") {
-      value =
-        scores.home === null || scores.away === null
-          ? null
-          : scores.home + scores.away;
-    } else if (
-      ["finish_position", "leaderboard_position"].includes(
-        trackedLeg.market_slug
-      )
-    ) {
-      value = findNumber(player, ["position"]);
-    } else if (
-      ["race_winner", "tournament_winner"].includes(trackedLeg.market_slug)
-    ) {
-      const position = findNumber(player, ["position"]);
-      value = position === null ? null : Number(position === 1);
-    }
-    if (value === null) {
-      if (status === "final") {
-        throw new Error(
-          `Final provider payload is missing ${trackedLeg.market_slug} for leg ${trackedLeg.leg_id}`
-        );
-      }
-      continue;
-    }
-    const observationKey = `sportradar:${event.id}:${trackedLeg.participant_id}:${trackedLeg.market_id}:${sequence}`;
-    await workerEnv.DB.prepare(
-      `INSERT INTO stat_observations (
-        idempotency_key, market_id, observed_at, participant_id, provider,
-        provider_sequence, sports_event_id, value
-      ) VALUES (?, ?, ?, ?, 'sportradar', ?, ?, ?)
-      ON CONFLICT(idempotency_key) DO NOTHING`
-    )
-      .bind(
-        observationKey,
-        trackedLeg.market_id,
-        Date.now(),
-        trackedLeg.participant_id,
-        sequence,
-        event.id,
-        value
-      )
-      .run();
-    // Observations are shared and deduplicated, but every subscribed leg must
-    // still be evaluated against the resulting value.
-    const evaluation = evaluateLeg(
-      {
-        currentValue: trackedLeg.current_value,
-        event: {
-          awayParticipantId: event.away_participant_id,
-          awayScore: scores.away,
-          homeParticipantId: event.home_participant_id,
-          homeScore: scores.home,
-          status,
-        },
-        lostAt: trackedLeg.lost_at ? new Date(trackedLeg.lost_at) : null,
-        operator: trackedLeg.operator,
-        participantId: trackedLeg.participant_id,
-        settledAt: trackedLeg.settled_at
-          ? new Date(trackedLeg.settled_at)
-          : null,
-        status: trackedLeg.leg_status,
-        targetValue: trackedLeg.target_value,
-        wonAt: trackedLeg.won_at ? new Date(trackedLeg.won_at) : null,
-      },
-      value
-    );
-    await workerEnv.DB.prepare(
-      `UPDATE ticket_legs SET current_value = ?, lost_at = ?, settled_at = ?,
-        status = ?, updated_at = ?, version = version + 1, won_at = ? WHERE id = ?`
-    )
-      .bind(
-        evaluation.currentValue,
-        evaluation.lostAt?.getTime() ?? null,
-        evaluation.settledAt?.getTime() ?? null,
-        evaluation.status,
-        Date.now(),
-        evaluation.wonAt?.getTime() ?? null,
-        trackedLeg.leg_id
-      )
-      .run();
-    affectedTickets.set(trackedLeg.ticket_id, {
-      historicalImportBatchId: trackedLeg.historical_import_batch_id,
-      ingestionMode: trackedLeg.ingestion_mode,
-      lastProgressNotifiedAt: trackedLeg.last_progress_notified_at,
-      notificationIntervalMinutes: trackedLeg.notification_interval_minutes,
-      status: trackedLeg.ticket_status,
-      userId: trackedLeg.user_id,
-    });
-  }
 
-  for (const [ticketId, ticketState] of affectedTickets) {
-    const legRows = await workerEnv.DB.prepare(
-      "SELECT status FROM ticket_legs WHERE ticket_id = ?"
-    )
-      .bind(ticketId)
-      .all<{ status: TicketLegStatus }>();
-    const result = evaluateTicket({
-      legStatuses: legRows.results.map(({ status: legStatus }) => legStatus),
-      settledAt: null,
-      status: ticketState.status,
-    });
-    if (result.changed) {
-      const providerVerified =
-        ticketState.ingestionMode === "historical" &&
-        (result.status === "won" ||
-          result.status === "lost" ||
-          result.status === "void");
-      await workerEnv.DB.prepare(
-        `UPDATE tickets SET result_source = CASE WHEN ? THEN 'historical_provider' ELSE result_source END,
+    for (const [ticketId, ticketState] of affectedTickets) {
+      const legRows = await workerEnv.DB.prepare(
+        "SELECT status FROM ticket_legs WHERE ticket_id = ?"
+      )
+        .bind(ticketId)
+        .all<{ status: TicketLegStatus }>();
+      const result = evaluateTicket({
+        legStatuses: legRows.results.map(({ status: legStatus }) => legStatus),
+        settledAt: null,
+        status: ticketState.status,
+      });
+      if (result.changed) {
+        const providerVerified =
+          ticketState.ingestionMode === "historical" &&
+          (result.status === "won" ||
+            result.status === "lost" ||
+            result.status === "void");
+        await workerEnv.DB.prepare(
+          `UPDATE tickets SET result_source = CASE WHEN ? THEN 'historical_provider' ELSE result_source END,
          settled_at = ?, status = ?, updated_at = ?, verification_status = CASE WHEN ? THEN 'verified' ELSE verification_status END,
          verified_at = CASE WHEN ? THEN ? ELSE verified_at END, version = version + 1 WHERE id = ?`
-      )
-        .bind(
-          Number(providerVerified),
-          result.settledAt?.getTime() ?? null,
-          result.status,
-          Date.now(),
-          Number(providerVerified),
-          Number(providerVerified),
-          providerVerified ? Date.now() : null,
-          ticketId
         )
-        .run();
-      if (ticketState.historicalImportBatchId) {
-        await refreshHistoricalBatch(
-          workerEnv.DB,
-          ticketState.historicalImportBatchId
-        );
+          .bind(
+            Number(providerVerified),
+            result.settledAt?.getTime() ?? null,
+            result.status,
+            Date.now(),
+            Number(providerVerified),
+            Number(providerVerified),
+            providerVerified ? Date.now() : null,
+            ticketId
+          )
+          .run();
+        if (ticketState.historicalImportBatchId) {
+          await refreshHistoricalBatch(
+            workerEnv.DB,
+            ticketState.historicalImportBatchId
+          );
+        }
       }
+      await publishTicketProgress({
+        eventId: event.id,
+        sequence,
+        status: result.status,
+        ticketId,
+        ticketState,
+        workerEnv,
+      });
     }
-    await publishTicketProgress({
-      eventId: event.id,
-      sequence,
-      status: result.status,
-      ticketId,
-      ticketState,
-      workerEnv,
-    });
+  } finally {
+    try {
+      await releaseEventLease(event.id, leaseToken, workerEnv);
+    } catch {
+      // Best-effort lease release; lease expires automatically if DB is unavailable.
+    }
   }
-  await releaseEventLease(event.id, Number(message.leaseToken), workerEnv);
 };
 
 export const enqueueDueSportsEvents = async (workerEnv: Env): Promise<void> => {

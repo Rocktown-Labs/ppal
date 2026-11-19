@@ -89,11 +89,20 @@ const verifyRevenueCatWebhook = async (
   return constantTimeEqual(expected, suppliedSignature.toLowerCase());
 };
 
+const ACTIVE_REVENUECAT_EVENTS = new Set([
+  "INITIAL_PURCHASE",
+  "NON_RENEWING_PURCHASE",
+  "PRODUCT_CHANGE",
+  "RENEWAL",
+  "TEMPORARY_ENTITLEMENT_GRANT",
+  "UNCANCELLATION",
+]);
+
 const resolveRevenueCatStatus = (
   event: z.infer<typeof revenueCatEventSchema>
-): "active" | "cancelled" | "expired" | "grace_period" | "paused" => {
-  if (event.type === "BILLING_ISSUE" && event.grace_period_expiration_at_ms) {
-    return "grace_period";
+): "active" | "expired" | "grace_period" | "paused" | null => {
+  if (event.type === "BILLING_ISSUE") {
+    return event.grace_period_expiration_at_ms ? "grace_period" : "expired";
   }
   if (event.type === "SUBSCRIPTION_PAUSED") {
     return "paused";
@@ -106,12 +115,38 @@ const resolveRevenueCatStatus = (
       ? "active"
       : "expired";
   }
-  return "active";
+  if (ACTIVE_REVENUECAT_EVENTS.has(event.type)) {
+    return "active";
+  }
+  return null;
+};
+
+const resolveRevenueCatPlan = (
+  entitlementIds: readonly string[]
+): "creator" | "pro" | null => {
+  if (entitlementIds.includes("creator")) {
+    return "creator";
+  }
+  if (entitlementIds.includes("pro")) {
+    return "pro";
+  }
+  return null;
 };
 
 const processRevenueCatEvent = async (
   event: z.infer<typeof revenueCatEventSchema>
 ): Promise<void> => {
+  const status = resolveRevenueCatStatus(event);
+  const now = Date.now();
+  if (!status) {
+    await env.DB.prepare(
+      "UPDATE webhook_receipts SET status = 'processed', processed_at = ? WHERE provider = 'revenuecat' AND provider_event_id = ?"
+    )
+      .bind(now, event.id)
+      .run();
+    return;
+  }
+
   const candidateIds = [
     ...new Set([
       event.app_user_id,
@@ -129,13 +164,20 @@ const processRevenueCatEvent = async (
     throw new Error("RevenueCat event does not map to a Better Auth user");
   }
   const entitlementIds = event.entitlement_ids ?? [];
-  const plan = entitlementIds.includes("creator") ? "creator" : "pro";
+  const plan = resolveRevenueCatPlan(entitlementIds);
+  if (!plan && status !== "expired") {
+    await env.DB.prepare(
+      "UPDATE webhook_receipts SET status = 'processed', processed_at = ? WHERE provider = 'revenuecat' AND provider_event_id = ?"
+    )
+      .bind(now, event.id)
+      .run();
+    return;
+  }
   const providerReference =
     event.original_transaction_id ?? event.transaction_id ?? event.id;
-  const status = resolveRevenueCatStatus(event);
-  const now = Date.now();
   const expiresAt =
     event.grace_period_expiration_at_ms ?? event.expiration_at_ms ?? null;
+  const effectiveAt = event.event_timestamp_ms;
   await env.DB.batch([
     env.DB.prepare(
       `INSERT INTO billing_entitlements (
@@ -145,19 +187,21 @@ const processRevenueCatEvent = async (
       ON CONFLICT(source, provider_reference) DO UPDATE SET
         current_period_end = excluded.current_period_end,
         current_period_start = excluded.current_period_start,
+        effective_at = excluded.effective_at,
         expires_at = excluded.expires_at,
         plan = excluded.plan,
         status = excluded.status,
         updated_at = excluded.updated_at,
-        user_id = excluded.user_id`
+        user_id = excluded.user_id
+      WHERE excluded.effective_at >= billing_entitlements.effective_at`
     ).bind(
       now,
       event.expiration_at_ms,
       event.purchased_at_ms ?? event.event_timestamp_ms,
-      event.purchased_at_ms ?? event.event_timestamp_ms,
+      effectiveAt,
       expiresAt,
       `revenuecat:${providerReference}`,
-      plan,
+      plan ?? "pro",
       providerReference,
       status,
       now,

@@ -154,4 +154,49 @@ describe("evaluateLeg", () => {
     expect(result.changed).toBeFalse();
     expect(result.status).toBe("pending");
   });
+
+  test("settles exact-hit over and under lines as push on final events", () => {
+    const finalEvent = { ...liveEvent, status: "final" as const };
+    const overPush = evaluateLeg(
+      createLeg({
+        event: finalEvent,
+        operator: "over",
+        targetValue: 3,
+      }),
+      3,
+      NOW
+    );
+    const underPush = evaluateLeg(
+      createLeg({
+        event: finalEvent,
+        operator: "under",
+        targetValue: 3,
+      }),
+      3,
+      NOW
+    );
+    const gteWin = evaluateLeg(
+      createLeg({
+        event: finalEvent,
+        operator: "gte",
+        targetValue: 3,
+      }),
+      3,
+      NOW
+    );
+    const lteWin = evaluateLeg(
+      createLeg({
+        event: finalEvent,
+        operator: "lte",
+        targetValue: 3,
+      }),
+      3,
+      NOW
+    );
+
+    expect(overPush.status).toBe("push");
+    expect(underPush.status).toBe("push");
+    expect(gteWin.status).toBe("won");
+    expect(lteWin.status).toBe("won");
+  });
 });

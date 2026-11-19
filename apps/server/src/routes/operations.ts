@@ -34,16 +34,25 @@ const replaySchema = z.object({
   failureIds: z.array(z.string()).min(1).max(100),
 });
 
+const PREVIEW_API_HOST_PATTERN = /^api-pr-\d+\.myparlaypal\.com$/u;
+
+const isDemoSeedAllowedHost = (hostname: string): boolean =>
+  hostname === "localhost" ||
+  hostname === "127.0.0.1" ||
+  hostname === "::1" ||
+  PREVIEW_API_HOST_PATTERN.test(hostname);
+
 /**
  * Demo fixtures never ship to production. The seeder exists so a pulled-down
- * repo (and preview deployments) can demo out of the box; it is hard-disabled
- * on the production API origin.
+ * repo (and preview deployments) can demo out of the box; it fails closed so
+ * any missing, malformed, or unrecognized origin is treated as production.
  */
 const isProductionDeployment = (): boolean => {
   try {
-    return new URL(env.BETTER_AUTH_URL).hostname === "api.myparlaypal.com";
+    const hostname = new URL(env.BETTER_AUTH_URL).hostname.toLowerCase();
+    return !isDemoSeedAllowedHost(hostname);
   } catch {
-    return false;
+    return true;
   }
 };
 

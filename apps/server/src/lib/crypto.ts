@@ -18,7 +18,16 @@
 
 const ENCRYPTED_PREFIX = "enc:";
 
+const HEX_PATTERN = /^[0-9a-f]+$/iu;
+
 const hexToBytes = (value: string): Uint8Array<ArrayBuffer> => {
+  if (
+    value.length === 0 ||
+    value.length % 2 !== 0 ||
+    !HEX_PATTERN.test(value)
+  ) {
+    throw new Error("DATA_ENCRYPTION_KEY hex value is invalid");
+  }
   const bytes = new Uint8Array(value.length / 2);
   for (let index = 0; index < bytes.length; index += 1) {
     bytes[index] = Number.parseInt(value.slice(index * 2, index * 2 + 2), 16);
@@ -62,13 +71,14 @@ let cachedSha256Key: CryptoKey | null | undefined;
 let cachedRawKey: CryptoKey | null | undefined;
 
 export const clearEncryptionKeyCache = (): void => {
+  overrideRawKey = undefined;
   cachedSha256Key = undefined;
   cachedRawKey = undefined;
 };
 
 export const setEncryptionKeyValue = (raw: string): void => {
-  overrideRawKey = raw.trim();
   clearEncryptionKeyCache();
+  overrideRawKey = raw.trim();
 };
 
 const getRawKey = async (): Promise<string | undefined> =>
@@ -105,11 +115,7 @@ const importEncryptionKey = async ({
 const sha256EncryptionKey = async (): Promise<CryptoKey | null> => {
   if (cachedSha256Key === undefined) {
     const raw = await getRawKey();
-    try {
-      cachedSha256Key = await importEncryptionKey({ algorithm: "sha256", raw });
-    } catch {
-      cachedSha256Key = null;
-    }
+    cachedSha256Key = await importEncryptionKey({ algorithm: "sha256", raw });
   }
   return cachedSha256Key;
 };
@@ -188,7 +194,6 @@ export const decryptValue = async (value: string): Promise<string> => {
       return tryDecrypt(rawKey, iv, ciphertext);
     }
   }
-  /* c8 ignore next */
 };
 
 export const hashValue = async (value: string): Promise<string> => {
