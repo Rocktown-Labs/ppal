@@ -62,7 +62,7 @@ interface TrackingRow {
 export const SPORTSAPI_PRO_PROVIDER = "sportsapipro";
 export const SPORTSAPI_PRO_BASE_URL = "https://api.sportsapipro.com";
 
-const SPORTSAPI_SPORT_PATHS: Record<string, string> = {
+export const SPORTSAPI_SPORT_PATHS: Record<string, string> = {
   baseball: "baseball",
   basketball: "basketball",
   football: "american-football",
@@ -314,6 +314,22 @@ export const acquireSportsApiBudget = async (
   });
 };
 
+const parseRateLimitResetMs = (rawHeader: string | null): number | null => {
+  if (!rawHeader) {
+    return null;
+  }
+  const trimmed = rawHeader.trim();
+  if (!trimmed) {
+    return null;
+  }
+  const numeric = Number(trimmed);
+  if (Number.isFinite(numeric) && numeric > 0) {
+    return numeric > 1_000_000_000_000 ? numeric : numeric * 1000;
+  }
+  const parsed = Date.parse(trimmed);
+  return Number.isNaN(parsed) ? null : parsed;
+};
+
 export const syncSportsApiQuotaHeaders = async (
   headers: Headers,
   workerEnv: Env
@@ -321,13 +337,12 @@ export const syncSportsApiQuotaHeaders = async (
   const remainingHeader = headers.get("x-ratelimit-remaining");
   const resetHeader = headers.get("x-ratelimit-reset");
   const remaining =
-    remainingHeader !== null && Number.isFinite(Number(remainingHeader))
+    remainingHeader !== null &&
+    remainingHeader.trim() !== "" &&
+    Number.isFinite(Number(remainingHeader))
       ? Number(remainingHeader)
       : null;
-  const resetAt =
-    resetHeader !== null && !Number.isNaN(Date.parse(resetHeader))
-      ? Date.parse(resetHeader)
-      : null;
+  const resetAt = parseRateLimitResetMs(resetHeader);
   if (remaining === null && resetAt === null) {
     return;
   }
@@ -387,8 +402,17 @@ const fetchSummary = async (
           lineups: lineups.payload,
         };
         hashInput = `${match.text}:${lineups.text}`;
-      } catch {
+      } catch (error) {
         // Lineups may not be published before tip-off/kickoff; continue with match scores.
+        workerEnv.ANALYTICS.writeDataPoint({
+          blobs: [
+            "sportsapipro.lineups_unavailable",
+            sportSlug,
+            error instanceof Error ? error.message.slice(0, 120) : "unknown",
+          ],
+          doubles: [1],
+          indexes: [event.id],
+        });
       }
     }
   }

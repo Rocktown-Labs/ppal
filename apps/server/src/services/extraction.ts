@@ -83,8 +83,12 @@ const createTicketStatements = async ({
   upload: UploadRow;
   workerEnv: Env;
 }): Promise<SqlPreparedStatement[]> => {
+  try {
+    await hydrateSchedulesForExtraction(extraction, workerEnv);
+  } catch {
+    // Schedule hydration is best-effort and must never fail ticket creation.
+  }
   const now = Date.now();
-  await hydrateSchedulesForExtraction(extraction, workerEnv);
   const resolutions = await Promise.all(
     extraction.legs.map((leg) => resolveExtractedLeg(db, leg))
   );

@@ -78,7 +78,14 @@ const ensureReferralCode = async (userId: string): Promise<string> => {
         return raced.referral_code;
       }
     } catch (error) {
-      if (!(error instanceof Error && error.message.includes("UNIQUE"))) {
+      const isUniqueViolation =
+        (typeof error === "object" &&
+          error !== null &&
+          "code" in error &&
+          (error as { code?: unknown }).code === "23505") ||
+        (error instanceof Error &&
+          /unique|duplicate key/iu.test(error.message));
+      if (!isUniqueViolation) {
         throw error;
       }
     }

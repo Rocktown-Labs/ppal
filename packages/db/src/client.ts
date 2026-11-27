@@ -81,8 +81,8 @@ export const translateSqlForPostgres = (sqlText: string): string => {
 const createRawPostgresClient = (connectionString: string) =>
   postgres(connectionString, {
     fetch_types: false,
-    idle_timeout: 5,
-    max: 5,
+    idle_timeout: 2,
+    max: 2,
     prepare: false,
     types: {
       bigint: {
@@ -90,6 +90,12 @@ const createRawPostgresClient = (connectionString: string) =>
         parse: Number,
         serialize: String,
         to: 20,
+      },
+      numeric: {
+        from: [1700],
+        parse: Number,
+        serialize: String,
+        to: 1700,
       },
     },
   });

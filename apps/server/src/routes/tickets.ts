@@ -182,16 +182,25 @@ export const createTicketRoutes = (auth: Auth) =>
         if (!user) {
           return c.json({ code: "UNAUTHORIZED", error: "Unauthorized" }, 401);
         }
-        // D1 rejects `undefined` bindings, so absent query params coalesce.
         const { cursor = null, limit = 20 } = c.req.valid("query");
-        const rows = await getDb()
-          .prepare(
-            `SELECT id, created_at FROM tickets WHERE user_id = ?
-           AND (? IS NULL OR created_at < ?)
-           ORDER BY created_at DESC LIMIT ?`
-          )
-          .bind(user.id, cursor, cursor ? Number(cursor) : null, limit + 1)
-          .all<{ created_at: number; id: string }>();
+        const parsedCursor = cursor ? Number(cursor) : null;
+        const rows =
+          parsedCursor === null
+            ? await getDb()
+                .prepare(
+                  `SELECT id, created_at FROM tickets WHERE user_id = ?
+                   ORDER BY created_at DESC LIMIT ?`
+                )
+                .bind(user.id, limit + 1)
+                .all<{ created_at: number; id: string }>()
+            : await getDb()
+                .prepare(
+                  `SELECT id, created_at FROM tickets WHERE user_id = ?
+                   AND created_at < ?
+                   ORDER BY created_at DESC LIMIT ?`
+                )
+                .bind(user.id, parsedCursor, limit + 1)
+                .all<{ created_at: number; id: string }>();
         const hasMore = rows.results.length > limit;
         const page = rows.results.slice(0, limit);
         const loadedTickets = await Promise.all(

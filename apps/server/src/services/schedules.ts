@@ -1,16 +1,20 @@
 /* oxlint-disable no-await-in-loop -- Sequential provider calls protect the upstream rate limit. */
 
 import { marketDefinitions } from "@ppal/contracts/markets";
+import type { SqlDatabase, SqlPreparedStatement } from "@ppal/db";
 
 import { getDb } from "../lib/database";
 import {
   acquireSportsApiBudget,
   SPORTSAPI_PRO_BASE_URL,
   SPORTSAPI_PRO_PROVIDER,
+  SPORTSAPI_SPORT_PATHS,
   syncSportsApiQuotaHeaders,
 } from "./sports";
 
 const SCHEDULE_CACHE_TTL_MS = 3 * 60 * 60 * 1000;
+const SCHEDULE_FAILURE_BACKOFF_MS = 5 * 60 * 1000;
+const BATCH_CHUNK_SIZE = 100;
 
 const STATIC_SPORTS = [
   ["basketball", "Basketball"],
@@ -45,16 +49,73 @@ const STATIC_LEAGUES = [
   ["pga", "PGA Tour", "golf"],
 ] as const;
 
-const SPORTSAPI_SPORT_MAP: Record<string, string> = {
-  baseball: "baseball",
-  basketball: "basketball",
-  football: "american-football",
-  golf: "golf",
-  hockey: "hockey",
-  mma: "mma",
-  racing: "motorsport",
-  soccer: "football",
-  tennis: "tennis",
+const STATIC_LEAGUE_MATCHERS: readonly [string, RegExp, string][] = [
+  ["basketball", /\bwnba\b/iu, "wnba"],
+  ["basketball", /\bnba\b/iu, "nba"],
+  [
+    "basketball",
+    /\b(?:ncaa\s*women|ncaaw|ncaawb|women'?s\s*college\s*basketball)\b/iu,
+    "ncaawb",
+  ],
+  [
+    "basketball",
+    /\b(?:ncaa|ncaam|ncaab|ncaamb|college\s*basketball|march\s*madness)\b/iu,
+    "ncaamb",
+  ],
+  ["football", /\bnfl\b/iu, "nfl"],
+  ["football", /\b(?:ncaa|ncaaf|ncaafb|cfb|college\s*football)\b/iu, "ncaafb"],
+  ["baseball", /\bmlb\b/iu, "mlb"],
+  ["hockey", /\bnhl\b/iu, "nhl"],
+  ["mma", /\bufc\b/iu, "ufc"],
+  ["racing", /\bnascar\b/iu, "nascar"],
+  ["racing", /\b(?:f1|formula\s*1)\b/iu, "f1"],
+  ["golf", /\bpga\b/iu, "pga"],
+];
+
+const STATIC_LEAGUE_NAME_BY_SLUG = new Map<string, string>(
+  STATIC_LEAGUES.map(([slug, name]) => [slug, name])
+);
+
+const slugify = (value: string): string =>
+  value
+    .toLowerCase()
+    .replaceAll(/[^a-z0-9]+/gu, "_")
+    .replaceAll(/^_+|_+$/gu, "")
+    .slice(0, 64) || "league";
+
+const resolveHydratedLeague = ({
+  sportSlug,
+  tournamentName,
+  tournamentProviderKey,
+}: {
+  sportSlug: string;
+  tournamentName: string;
+  tournamentProviderKey: string;
+}): {
+  id: string;
+  name: string;
+  providerKey: string;
+  slug: string;
+} => {
+  for (const [sport, pattern, staticSlug] of STATIC_LEAGUE_MATCHERS) {
+    if (sport === sportSlug && pattern.test(tournamentName)) {
+      return {
+        id: `league:${staticSlug}`,
+        name: STATIC_LEAGUE_NAME_BY_SLUG.get(staticSlug) ?? tournamentName,
+        providerKey: staticSlug,
+        slug: staticSlug,
+      };
+    }
+  }
+  const keySlug = slugify(tournamentProviderKey);
+  const nameSlug = slugify(tournamentName);
+  const uniqueSlug = `${sportSlug}_${nameSlug}_${keySlug}`.slice(0, 80);
+  return {
+    id: `league:${SPORTSAPI_PRO_PROVIDER}:${sportSlug}:${tournamentProviderKey}`,
+    name: tournamentName,
+    providerKey: `${sportSlug}:${tournamentProviderKey}`,
+    slug: uniqueSlug,
+  };
 };
 
 const HINT_TO_SPORT_SLUG: readonly [RegExp, string][] = [
@@ -113,7 +174,7 @@ export const resolveSportSlugFromHint = (
     return null;
   }
   const lowered = combined.toLowerCase();
-  if (lowered in SPORTSAPI_SPORT_MAP) {
+  if (lowered in SPORTSAPI_SPORT_PATHS) {
     return lowered;
   }
   for (const [pattern, slug] of HINT_TO_SPORT_SLUG) {
@@ -125,7 +186,7 @@ export const resolveSportSlugFromHint = (
 };
 
 export const toSportsApiSportPath = (sportSlug: string): string | null =>
-  SPORTSAPI_SPORT_MAP[sportSlug.toLowerCase()] ?? null;
+  SPORTSAPI_SPORT_PATHS[sportSlug.toLowerCase()] ?? null;
 
 const normalizeScheduleEventStatus = (
   raw: Record<string, unknown>
@@ -170,30 +231,27 @@ const extractStartTimestampMs = (
   return null;
 };
 
-const slugify = (value: string): string =>
-  value
-    .toLowerCase()
-    .replaceAll(/[^a-z0-9]+/gu, "_")
-    .replaceAll(/^_+|_+$/gu, "")
-    .slice(0, 64) || "league";
-
-const upsertTeamParticipant = async ({
+const buildTeamParticipantStatement = ({
+  db,
   leagueId,
   name,
+  now,
   providerId,
   sportId,
-  workerEnv,
 }: {
+  db: SqlDatabase;
   leagueId: string;
   name: string;
+  now: number;
   providerId: string;
   sportId: string;
-  workerEnv: Env;
-}): Promise<string> => {
+}): { id: string; statement: SqlPreparedStatement } => {
   const id = `team:${SPORTSAPI_PRO_PROVIDER}:${providerId}`;
-  await getDb(workerEnv)
-    .prepare(
-      `INSERT INTO participants (
+  return {
+    id,
+    statement: db
+      .prepare(
+        `INSERT INTO participants (
         id, league_id, name, provider, provider_participant_id, short_name, sport_id, type, updated_at
       ) VALUES (?, ?, ?, ?, ?, ?, ?, 'team', ?)
       ON CONFLICT(provider, provider_participant_id) DO UPDATE SET
@@ -202,19 +260,18 @@ const upsertTeamParticipant = async ({
         short_name = excluded.short_name,
         sport_id = excluded.sport_id,
         updated_at = excluded.updated_at`
-    )
-    .bind(
-      id,
-      leagueId,
-      name,
-      SPORTSAPI_PRO_PROVIDER,
-      providerId,
-      name,
-      sportId,
-      Date.now()
-    )
-    .run();
-  return id;
+      )
+      .bind(
+        id,
+        leagueId,
+        name,
+        SPORTSAPI_PRO_PROVIDER,
+        providerId,
+        name,
+        sportId,
+        now
+      ),
+  };
 };
 
 const extractTeamDescriptor = (
@@ -233,103 +290,142 @@ const extractTeamDescriptor = (
   return providerId ? { name, providerId } : null;
 };
 
-const upsertScheduleEvent = async (
-  raw: Record<string, unknown>,
+const buildScheduleBatchStatements = (
+  events: Record<string, unknown>[],
   sportSlug: string,
-  workerEnv: Env
-): Promise<void> => {
-  const providerEventId =
-    raw.id === undefined || raw.id === null ? null : String(raw.id);
-  const startsAtMs = extractStartTimestampMs(raw);
-  if (!(providerEventId && startsAtMs)) {
-    return;
-  }
-
+  db: SqlDatabase
+): SqlPreparedStatement[] => {
+  const leagueStatements = new Map<string, SqlPreparedStatement>();
+  const teamStatements = new Map<string, SqlPreparedStatement>();
+  const eventStatements: SqlPreparedStatement[] = [];
   const sportId = `sport:${sportSlug}`;
-  const tournamentObj = asRecord(raw.tournament);
-  const tournamentName = String(
-    tournamentObj?.name ?? raw.tournament ?? sportSlug.toUpperCase()
-  ).trim();
-  const tournamentProviderKey = String(
-    tournamentObj?.id ?? raw.tournamentId ?? slugify(tournamentName)
-  );
-  const leagueSlug = `${sportSlug}_${slugify(tournamentName)}`;
-  const leagueId = `league:${SPORTSAPI_PRO_PROVIDER}:${sportSlug}:${tournamentProviderKey}`;
   const now = Date.now();
 
-  await getDb(workerEnv)
-    .prepare(
-      `INSERT INTO leagues (id, name, provider, provider_key, slug, sport_id, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?)
-       ON CONFLICT(provider, provider_key) DO UPDATE SET
-         name = excluded.name,
-         updated_at = excluded.updated_at`
-    )
-    .bind(
-      leagueId,
-      tournamentName,
-      SPORTSAPI_PRO_PROVIDER,
-      `${sportSlug}:${tournamentProviderKey}`,
-      leagueSlug,
-      sportId,
-      now
-    )
-    .run();
+  for (const raw of events) {
+    const providerEventId =
+      raw.id === undefined || raw.id === null ? null : String(raw.id);
+    const startsAtMs = extractStartTimestampMs(raw);
+    if (!(providerEventId && startsAtMs)) {
+      continue;
+    }
 
-  const homeTeam = extractTeamDescriptor(raw.homeTeam, raw.homeTeamId);
-  const awayTeam = extractTeamDescriptor(raw.awayTeam, raw.awayTeamId);
-  const homeId = homeTeam
-    ? await upsertTeamParticipant({
-        leagueId,
+    const tournamentObj = asRecord(raw.tournament);
+    const tournamentName = String(
+      tournamentObj?.name ?? raw.tournament ?? sportSlug.toUpperCase()
+    ).trim();
+    const tournamentProviderKey = String(
+      tournamentObj?.id ?? raw.tournamentId ?? slugify(tournamentName)
+    );
+    const league = resolveHydratedLeague({
+      sportSlug,
+      tournamentName,
+      tournamentProviderKey,
+    });
+
+    if (!leagueStatements.has(league.id)) {
+      leagueStatements.set(
+        league.id,
+        db
+          .prepare(
+            `INSERT INTO leagues (id, name, provider, provider_key, slug, sport_id, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?)
+             ON CONFLICT(slug) DO UPDATE SET
+               name = excluded.name,
+               provider = excluded.provider,
+               provider_key = excluded.provider_key,
+               updated_at = excluded.updated_at`
+          )
+          .bind(
+            league.id,
+            league.name,
+            SPORTSAPI_PRO_PROVIDER,
+            league.providerKey,
+            league.slug,
+            sportId,
+            now
+          )
+      );
+    }
+
+    const homeTeam = extractTeamDescriptor(raw.homeTeam, raw.homeTeamId);
+    const awayTeam = extractTeamDescriptor(raw.awayTeam, raw.awayTeamId);
+    let homeId: string | null = null;
+    if (homeTeam) {
+      const built = buildTeamParticipantStatement({
+        db,
+        leagueId: league.id,
         name: homeTeam.name,
+        now,
         providerId: `${sportSlug}:${homeTeam.providerId}`,
         sportId,
-        workerEnv,
-      })
-    : null;
-  const awayId = awayTeam
-    ? await upsertTeamParticipant({
-        leagueId,
+      });
+      homeId = built.id;
+      teamStatements.set(built.id, built.statement);
+    }
+    let awayId: string | null = null;
+    if (awayTeam) {
+      const built = buildTeamParticipantStatement({
+        db,
+        leagueId: league.id,
         name: awayTeam.name,
+        now,
         providerId: `${sportSlug}:${awayTeam.providerId}`,
         sportId,
-        workerEnv,
-      })
-    : null;
+      });
+      awayId = built.id;
+      teamStatements.set(built.id, built.statement);
+    }
 
-  await getDb(workerEnv)
-    .prepare(
-      `INSERT INTO sports_events (
-        away_participant_id, home_participant_id, id, league_id, next_poll_at,
-        provider, provider_event_id, provider_payload, starts_at, status, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      ON CONFLICT(provider, provider_event_id) DO UPDATE SET
-        away_participant_id = excluded.away_participant_id,
-        home_participant_id = excluded.home_participant_id,
-        league_id = excluded.league_id,
-        next_poll_at = LEAST(COALESCE(sports_events.next_poll_at, excluded.next_poll_at), excluded.next_poll_at),
-        provider_payload = excluded.provider_payload,
-        starts_at = excluded.starts_at,
-        status = CASE
-          WHEN sports_events.status IN ('final', 'cancelled') THEN sports_events.status
-          ELSE excluded.status
-        END,
-        updated_at = excluded.updated_at`
-    )
-    .bind(
-      awayId,
-      homeId,
-      `event:${SPORTSAPI_PRO_PROVIDER}:${sportSlug}:${providerEventId}`,
-      leagueId,
-      startsAtMs - 5 * 60 * 1000,
-      SPORTSAPI_PRO_PROVIDER,
-      providerEventId,
-      JSON.stringify(raw),
-      startsAtMs,
-      normalizeScheduleEventStatus(raw),
-      now
-    )
-    .run();
+    eventStatements.push(
+      db
+        .prepare(
+          `INSERT INTO sports_events (
+            away_participant_id, home_participant_id, id, league_id, next_poll_at,
+            provider, provider_event_id, provider_payload, starts_at, status, updated_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          ON CONFLICT(provider, provider_event_id) DO UPDATE SET
+            away_participant_id = excluded.away_participant_id,
+            home_participant_id = excluded.home_participant_id,
+            league_id = excluded.league_id,
+            next_poll_at = LEAST(COALESCE(sports_events.next_poll_at, excluded.next_poll_at), excluded.next_poll_at),
+            provider_payload = excluded.provider_payload,
+            starts_at = excluded.starts_at,
+            status = CASE
+              WHEN sports_events.status IN ('final', 'cancelled') THEN sports_events.status
+              ELSE excluded.status
+            END,
+            updated_at = excluded.updated_at`
+        )
+        .bind(
+          awayId,
+          homeId,
+          `event:${SPORTSAPI_PRO_PROVIDER}:${sportSlug}:${providerEventId}`,
+          league.id,
+          startsAtMs - 5 * 60 * 1000,
+          SPORTSAPI_PRO_PROVIDER,
+          providerEventId,
+          JSON.stringify(raw),
+          startsAtMs,
+          normalizeScheduleEventStatus(raw),
+          now
+        )
+    );
+  }
+
+  return [
+    ...leagueStatements.values(),
+    ...teamStatements.values(),
+    ...eventStatements,
+  ];
+};
+
+const runBatchedStatements = async (
+  db: SqlDatabase,
+  statements: readonly SqlPreparedStatement[]
+): Promise<void> => {
+  for (let i = 0; i < statements.length; i += BATCH_CHUNK_SIZE) {
+    await db.batch(statements.slice(i, i + BATCH_CHUNK_SIZE));
+  }
 };
 
 /**
@@ -341,36 +437,39 @@ export const ensureStaticSportsCatalog = async (
 ): Promise<void> => {
   const now = Date.now();
   const db = getDb(workerEnv);
+  const statements: SqlPreparedStatement[] = [];
 
   for (const [slug, name] of STATIC_SPORTS) {
-    await db
-      .prepare(
-        `INSERT INTO sports (id, name, slug, updated_at) VALUES (?, ?, ?, ?)
-         ON CONFLICT(slug) DO UPDATE SET name = excluded.name, updated_at = excluded.updated_at`
-      )
-      .bind(`sport:${slug}`, name, slug, now)
-      .run();
+    statements.push(
+      db
+        .prepare(
+          `INSERT INTO sports (id, name, slug, updated_at) VALUES (?, ?, ?, ?)
+           ON CONFLICT(slug) DO UPDATE SET name = excluded.name, updated_at = excluded.updated_at`
+        )
+        .bind(`sport:${slug}`, name, slug, now)
+    );
   }
 
   for (const [slug, name, sport] of STATIC_LEAGUES) {
-    await db
-      .prepare(
-        `INSERT INTO leagues (id, name, provider, provider_key, slug, sport_id, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?)
-         ON CONFLICT(slug) DO UPDATE SET name = excluded.name,
-           provider = excluded.provider, provider_key = excluded.provider_key,
-           updated_at = excluded.updated_at`
-      )
-      .bind(
-        `league:${slug}`,
-        name,
-        SPORTSAPI_PRO_PROVIDER,
-        slug,
-        slug,
-        `sport:${sport}`,
-        now
-      )
-      .run();
+    statements.push(
+      db
+        .prepare(
+          `INSERT INTO leagues (id, name, provider, provider_key, slug, sport_id, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?)
+           ON CONFLICT(slug) DO UPDATE SET name = excluded.name,
+             provider = excluded.provider, provider_key = excluded.provider_key,
+             updated_at = excluded.updated_at`
+        )
+        .bind(
+          `league:${slug}`,
+          name,
+          SPORTSAPI_PRO_PROVIDER,
+          slug,
+          slug,
+          `sport:${sport}`,
+          now
+        )
+    );
   }
 
   for (const [slug, name] of Object.entries(marketNames)) {
@@ -382,22 +481,57 @@ export const ensureStaticSportsCatalog = async (
     } else if (isGameMarket) {
       subjectType = "game";
     }
-    await db
-      .prepare(
-        `INSERT INTO markets (id, name, slug, subject_type, updated_at, value_type)
-         VALUES (?, ?, ?, ?, ?, ?)
-         ON CONFLICT(slug) DO UPDATE SET name = excluded.name, updated_at = excluded.updated_at`
-      )
-      .bind(
-        `market:${slug}`,
-        name,
-        slug,
-        subjectType,
-        now,
-        slug === "team_moneyline" ? "moneyline" : "numeric"
-      )
-      .run();
+    statements.push(
+      db
+        .prepare(
+          `INSERT INTO markets (id, name, slug, subject_type, updated_at, value_type)
+           VALUES (?, ?, ?, ?, ?, ?)
+           ON CONFLICT(slug) DO UPDATE SET name = excluded.name, updated_at = excluded.updated_at`
+        )
+        .bind(
+          `market:${slug}`,
+          name,
+          slug,
+          subjectType,
+          now,
+          slug === "team_moneyline" ? "moneyline" : "numeric"
+        )
+    );
   }
+
+  await runBatchedStatements(db, statements);
+};
+
+const writeScheduleSyncTimestamp = async ({
+  db,
+  now,
+  scheduleDate,
+  sportSlug,
+  syncedAt,
+}: {
+  db: SqlDatabase;
+  now: number;
+  scheduleDate: string;
+  sportSlug: string;
+  syncedAt: number;
+}): Promise<void> => {
+  await db
+    .prepare(
+      `INSERT INTO provider_schedule_syncs (id, provider, schedule_date, sport_slug, synced_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?)
+       ON CONFLICT(provider, sport_slug, schedule_date) DO UPDATE SET
+         synced_at = excluded.synced_at,
+         updated_at = excluded.updated_at`
+    )
+    .bind(
+      `sync:${SPORTSAPI_PRO_PROVIDER}:${sportSlug}:${scheduleDate}`,
+      SPORTSAPI_PRO_PROVIDER,
+      scheduleDate,
+      sportSlug,
+      syncedAt,
+      now
+    )
+    .run();
 };
 
 /**
@@ -426,34 +560,34 @@ export const ensureSportScheduleHydrated = async ({
   const now = Date.now();
   const db = getDb(workerEnv);
 
-  const cached = await db
-    .prepare(
-      `SELECT synced_at FROM provider_schedule_syncs
-       WHERE provider = ? AND sport_slug = ? AND schedule_date = ?`
-    )
-    .bind(SPORTSAPI_PRO_PROVIDER, sportSlug, scheduleDate)
-    .first<{ synced_at: number }>();
-  if (cached && now - cached.synced_at < SCHEDULE_CACHE_TTL_MS) {
-    return { eventCount: 0, hydrated: false };
-  }
-
-  const budget = await acquireSportsApiBudget(workerEnv);
-  if (!budget.granted) {
-    workerEnv.ANALYTICS.writeDataPoint({
-      blobs: ["sportsapipro.schedule_deferred", sportSlug],
-      doubles: [budget.retryAfterMs, budget.remaining],
-      indexes: [sportSlug],
-    });
-    return { eventCount: 0, hydrated: false };
-  }
-
-  const endpointPath =
-    scheduleDate === todayIso
-      ? `/v2/${apiSport}/api/today`
-      : `/v2/${apiSport}/api/schedule/${scheduleDate}`;
-  const url = new URL(endpointPath, SPORTSAPI_PRO_BASE_URL);
-
   try {
+    const cached = await db
+      .prepare(
+        `SELECT synced_at FROM provider_schedule_syncs
+         WHERE provider = ? AND sport_slug = ? AND schedule_date = ?`
+      )
+      .bind(SPORTSAPI_PRO_PROVIDER, sportSlug, scheduleDate)
+      .first<{ synced_at: number }>();
+    if (cached && now - cached.synced_at < SCHEDULE_CACHE_TTL_MS) {
+      return { eventCount: 0, hydrated: false };
+    }
+
+    const budget = await acquireSportsApiBudget(workerEnv);
+    if (!budget.granted) {
+      workerEnv.ANALYTICS.writeDataPoint({
+        blobs: ["sportsapipro.schedule_deferred", sportSlug],
+        doubles: [budget.retryAfterMs, budget.remaining],
+        indexes: [sportSlug],
+      });
+      return { eventCount: 0, hydrated: false };
+    }
+
+    const endpointPath =
+      scheduleDate === todayIso
+        ? `/v2/${apiSport}/api/today`
+        : `/v2/${apiSport}/api/schedule/${scheduleDate}`;
+    const url = new URL(endpointPath, SPORTSAPI_PRO_BASE_URL);
+
     const response = await fetch(url, {
       headers: {
         accept: "application/json",
@@ -468,40 +602,56 @@ export const ensureSportScheduleHydrated = async ({
         doubles: [response.status],
         indexes: [sportSlug],
       });
+      await writeScheduleSyncTimestamp({
+        db,
+        now,
+        scheduleDate,
+        sportSlug,
+        syncedAt: now - SCHEDULE_CACHE_TTL_MS + SCHEDULE_FAILURE_BACKOFF_MS,
+      });
       return { eventCount: 0, hydrated: false };
     }
     const payload = (await response.json()) as Record<string, unknown>;
     const events = asRecords(
       payload.events ?? payload.matches ?? payload.games ?? payload.data
     );
-    await ensureStaticSportsCatalog(workerEnv);
-    for (const raw of events) {
-      await upsertScheduleEvent(raw, sportSlug, workerEnv);
+    const hasSports = await db
+      .prepare("SELECT 1 AS ok FROM sports LIMIT 1")
+      .first<{ ok: number }>();
+    if (!hasSports) {
+      await ensureStaticSportsCatalog(workerEnv);
     }
-    await db
-      .prepare(
-        `INSERT INTO provider_schedule_syncs (id, provider, schedule_date, sport_slug, synced_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?)
-         ON CONFLICT(provider, sport_slug, schedule_date) DO UPDATE SET
-           synced_at = excluded.synced_at,
-           updated_at = excluded.updated_at`
-      )
-      .bind(
-        `sync:${SPORTSAPI_PRO_PROVIDER}:${sportSlug}:${scheduleDate}`,
-        SPORTSAPI_PRO_PROVIDER,
-        scheduleDate,
-        sportSlug,
-        now,
-        now
-      )
-      .run();
+    const statements = buildScheduleBatchStatements(events, sportSlug, db);
+    await runBatchedStatements(db, statements);
+    await writeScheduleSyncTimestamp({
+      db,
+      now,
+      scheduleDate,
+      sportSlug,
+      syncedAt: now,
+    });
     return { eventCount: events.length, hydrated: true };
-  } catch {
+  } catch (error) {
     workerEnv.ANALYTICS.writeDataPoint({
-      blobs: ["sportsapipro.schedule_error", sportSlug],
+      blobs: [
+        "sportsapipro.schedule_error",
+        sportSlug,
+        error instanceof Error ? error.message.slice(0, 120) : "unknown",
+      ],
       doubles: [1],
       indexes: [sportSlug],
     });
+    try {
+      await writeScheduleSyncTimestamp({
+        db,
+        now,
+        scheduleDate,
+        sportSlug,
+        syncedAt: now - SCHEDULE_CACHE_TTL_MS + SCHEDULE_FAILURE_BACKOFF_MS,
+      });
+    } catch {
+      // Ignore secondary failure while recording negative backoff.
+    }
     return { eventCount: 0, hydrated: false };
   }
 };

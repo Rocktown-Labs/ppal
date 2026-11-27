@@ -50,8 +50,12 @@ jobs:
       - run: bun run check-types
       - run: bun test packages/domain apps/server/tests
       - name: Run PostgreSQL migrations
-        if: env.DATABASE_URL != ''
-        run: bun run db:migrate
+        run: |
+          if [ -z "$DATABASE_URL" ]; then
+            echo "::error::DATABASE_URL secret is required to run PostgreSQL migrations"
+            exit 1
+          fi
+          bun run db:migrate
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
       - name: Deploy Cloudflare stack

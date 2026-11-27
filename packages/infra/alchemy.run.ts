@@ -33,8 +33,22 @@ const publicWebUrl = `https://${webDomain}`;
 const parseHyperdriveOrigin = (
   rawUrl: string | undefined
 ): Cloudflare.Hyperdrive.PublicOrigin => {
+  const trimmed = rawUrl?.trim();
+  const deployStage =
+    process.env.ALCHEMY_DEPLOY_STAGE?.trim() ||
+    (isPullRequest ? `pr-${pullRequestNumber}` : "local");
+  const isRemoteStage =
+    Boolean(process.env.CI) ||
+    deployStage === "production" ||
+    deployStage === "prod" ||
+    isPullRequest;
+  if (!trimmed && isRemoteStage) {
+    throw new Error(
+      `DATABASE_URL is required when deploying stage "${deployStage}" to Cloudflare`
+    );
+  }
   const fallback = "postgres://postgres:postgres@127.0.0.1:5432/parlaypal";
-  const parsed = new URL(rawUrl?.trim() || fallback);
+  const parsed = new URL(trimmed || fallback);
   return {
     database: parsed.pathname.replace(/^\//u, "") || "parlaypal",
     host: parsed.hostname,

@@ -21,6 +21,15 @@ export interface ProductBudgetDecision {
 
 const STATE_KEY = "budget";
 
+const nextUtcMidnightMs = (now: number): number => {
+  const date = new Date(now);
+  return Date.UTC(
+    date.getUTCFullYear(),
+    date.getUTCMonth(),
+    date.getUTCDate() + 1
+  );
+};
+
 /**
  * Serializes upstream SportsAPI Pro calls across all queue consumers and
  * enforces both QPS pacing and the shared daily account quota (including
@@ -122,10 +131,14 @@ export class SportradarProductBudget extends DurableObject {
       providerResetAt: null,
       requestTimestamps: [],
     };
+    const fallbackResetAt =
+      remaining !== null && resetAt === null && state.providerResetAt === null
+        ? nextUtcMidnightMs(Date.now())
+        : null;
     await this.ctx.storage.put(STATE_KEY, {
       ...state,
       providerRemaining: remaining ?? state.providerRemaining,
-      providerResetAt: resetAt ?? state.providerResetAt,
+      providerResetAt: resetAt ?? state.providerResetAt ?? fallbackResetAt,
     } satisfies ProductBudgetState);
   }
 }

@@ -517,7 +517,8 @@ export const processExpoPushReceipts = async (
       return;
     }
 
-    const updates: Promise<unknown>[] = [];
+    const db = getDb(workerEnv);
+    const statements = [];
     for (const delivery of recentDeliveries.results) {
       const receipt = json.data[delivery.provider_receipt_id];
       if (!receipt) {
@@ -526,15 +527,14 @@ export const processExpoPushReceipts = async (
 
       if (receipt.status === "error") {
         if (receipt.details?.error === "DeviceNotRegistered") {
-          updates.push(
-            getDb(workerEnv)
+          statements.push(
+            db
               .prepare("DELETE FROM device_tokens WHERE token_hash = ?")
               .bind(delivery.destination)
-              .run()
           );
         }
-        updates.push(
-          getDb(workerEnv)
+        statements.push(
+          db
             .prepare(
               "UPDATE notification_deliveries SET status = 'failed', error_message = ?, updated_at = ? WHERE id = ?"
             )
@@ -545,12 +545,11 @@ export const processExpoPushReceipts = async (
               Date.now(),
               delivery.id
             )
-            .run()
         );
       }
     }
-    if (updates.length > 0) {
-      await Promise.all(updates);
+    if (statements.length > 0) {
+      await db.batch(statements);
     }
   } catch {
     // Network or receipt fetch issue; retried next schedule
