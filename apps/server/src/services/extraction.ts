@@ -5,6 +5,10 @@ import type { SqlDatabase, SqlPreparedStatement } from "@ppal/db";
 import { getDb } from "../lib/database";
 import { refreshHistoricalBatch } from "./historical-imports";
 import { publishNotification } from "./notifications";
+import {
+  ensureSportScheduleHydrated,
+  resolveSportSlugFromHint,
+} from "./schedules";
 import { resolveExtractedLeg } from "./ticket-resolution";
 import {
   applySettledOverride,
@@ -34,20 +38,53 @@ interface UploadRow {
   user_id: string;
 }
 
+const ISO_DATE_PATTERN = /\d{4}-\d{2}-\d{2}/u;
+
+const hydrateSchedulesForExtraction = async (
+  extraction: ExtractionResult,
+  workerEnv: Env
+): Promise<void> => {
+  const seen = new Set<string>();
+  const targets: { date?: string; sportSlug: string }[] = [];
+  for (const leg of extraction.legs) {
+    const sportSlug = resolveSportSlugFromHint(leg.sport, leg.league);
+    if (!sportSlug) {
+      continue;
+    }
+    const rawDate = leg.eventHint?.match(ISO_DATE_PATTERN)?.[0];
+    const key = `${sportSlug}:${rawDate ?? "today"}`;
+    if (!seen.has(key)) {
+      seen.add(key);
+      targets.push({ date: rawDate, sportSlug });
+    }
+  }
+  for (const target of targets) {
+    // oxlint-disable-next-line no-await-in-loop -- Hydrate distinct sport schedules sequentially to respect QPS.
+    await ensureSportScheduleHydrated({
+      date: target.date,
+      sportSlug: target.sportSlug,
+      workerEnv,
+    });
+  }
+};
+
 const createTicketStatements = async ({
   db,
   extraction,
   extractionId,
   ticketId,
   upload,
+  workerEnv,
 }: {
   db: SqlDatabase;
   extraction: ExtractionResult;
   extractionId: string;
   ticketId: string;
   upload: UploadRow;
+  workerEnv: Env;
 }): Promise<SqlPreparedStatement[]> => {
   const now = Date.now();
+  await hydrateSchedulesForExtraction(extraction, workerEnv);
   const resolutions = await Promise.all(
     extraction.legs.map((leg) => resolveExtractedLeg(db, leg))
   );
@@ -376,6 +413,7 @@ export const processExtractionMessage = async (
       extractionId,
       ticketId,
       upload,
+      workerEnv,
     });
     statements.unshift(
       getDb(workerEnv)

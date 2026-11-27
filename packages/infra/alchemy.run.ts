@@ -87,7 +87,7 @@ export const server = Cloudflare.Worker("server", {
     date: "2026-09-10",
     flags: ["nodejs_compat"],
   },
-  crons: ["*/1 * * * *", "5 */6 * * *"],
+  crons: ["*/1 * * * *"],
   dev: {
     port: 3000,
   },
@@ -174,27 +174,20 @@ export const server = Cloudflare.Worker("server", {
     ),
     REVENUECAT_WEBHOOK_SECRET: Config.redacted("REVENUECAT_WEBHOOK_SECRET"),
     SERVER_BUILD: Config.string("GITHUB_SHA").pipe(Config.withDefault("local")),
-    SPORTRADAR_API_KEY: Config.redacted("SPORTRADAR_API_KEY"),
-    SPORTRADAR_LEAGUES: Config.string("SPORTRADAR_LEAGUES").pipe(
-      Config.withDefault("")
+    SPORTSAPI_PRO_API_KEY: Config.redacted("SPORTSAPI_PRO_API_KEY").pipe(
+      Config.withDefault(Redacted.make(""))
     ),
-    SPORTRADAR_ACCESS_LEVEL: Config.string("SPORTRADAR_ACCESS_LEVEL").pipe(
-      Config.withDefault("trial")
+    SPORTSAPI_PRO_DAILY_QUOTA: Config.string("SPORTSAPI_PRO_DAILY_QUOTA").pipe(
+      Config.withDefault("100")
+    ),
+    SPORTSAPI_PRO_QPS: Config.string("SPORTSAPI_PRO_QPS").pipe(
+      Config.withDefault("2")
     ),
     SPORTRADAR_PRODUCT_BUDGET:
       Cloudflare.DurableObject<SportradarProductBudget>(
         "SPORTRADAR_PRODUCT_BUDGET",
         { className: "SportradarProductBudget" }
       ),
-    SPORTRADAR_QPS: Config.string("SPORTRADAR_QPS").pipe(
-      Config.withDefault("1")
-    ),
-    SPORTRADAR_ROLLING_QUOTA: Config.string("SPORTRADAR_ROLLING_QUOTA").pipe(
-      Config.withDefault("1000")
-    ),
-    SPORTRADAR_ROLLING_WINDOW_DAYS: Config.string(
-      "SPORTRADAR_ROLLING_WINDOW_DAYS"
-    ).pipe(Config.withDefault("30")),
     SENT_DM_API_KEY: Config.redacted("SENT_DM_API_KEY").pipe(
       Config.withDefault(Redacted.make(""))
     ),

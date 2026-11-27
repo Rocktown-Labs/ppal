@@ -79,8 +79,7 @@ jobs:
           REVENUECAT_WEBHOOK_SECRET: ${{ secrets.REVENUECAT_WEBHOOK_SECRET }}
           SENT_DM_API_KEY: ${{ secrets.SENT_DM_API_KEY }}
           SENT_DM_TEMPLATE_NAME: ${{ vars.SENT_DM_TEMPLATE_NAME || '' }}
-          SPORTRADAR_API_KEY: ${{ secrets.SPORTRADAR_API_KEY }}
-          SPORTRADAR_LEAGUES: ${{ vars.SPORTRADAR_LEAGUES || '' }}
+          SPORTSAPI_PRO_API_KEY: ${{ secrets.SPORTSAPI_PRO_API_KEY }}
           STRIPE_CREATOR_PRICE_ID: ${{ secrets.STRIPE_CREATOR_PRICE_ID }}
           STRIPE_PRICE_CREATOR_YEARLY: ${{ secrets.STRIPE_PRICE_CREATOR_YEARLY }}
           STRIPE_PRICE_PRO_YEARLY: ${{ secrets.STRIPE_PRICE_PRO_YEARLY }}
@@ -127,7 +126,7 @@ jobs:
           RESEND_FROM_EMAIL: ${{ vars.RESEND_FROM_EMAIL || 'noreply@bets.myparlaypal.com' }}
           RESEND_REPLY_TO_EMAIL: ${{ vars.RESEND_REPLY_TO_EMAIL || 'support@bets.myparlaypal.com' }}
           REVENUECAT_WEBHOOK_SECRET: ${{ secrets.REVENUECAT_WEBHOOK_SECRET }}
-          SPORTRADAR_API_KEY: ${{ secrets.SPORTRADAR_API_KEY }}
+          SPORTSAPI_PRO_API_KEY: ${{ secrets.SPORTSAPI_PRO_API_KEY }}
           STRIPE_CREATOR_PRICE_ID: ${{ secrets.STRIPE_CREATOR_PRICE_ID }}
           STRIPE_PRICE_CREATOR_YEARLY: ${{ secrets.STRIPE_PRICE_CREATOR_YEARLY }}
           STRIPE_PRICE_PRO_YEARLY: ${{ secrets.STRIPE_PRICE_PRO_YEARLY }}

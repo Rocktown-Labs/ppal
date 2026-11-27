@@ -317,13 +317,13 @@ const queue = async (batch: MessageBatch, workerEnv: Env): Promise<void> => {
 };
 
 const scheduled = async (
-  controller: ScheduledController,
+  _controller: ScheduledController,
   workerEnv: Env
 ): Promise<void> => {
   const catalog = await getDb(workerEnv)
     .prepare("SELECT COUNT(*) AS count FROM sports")
     .first<{ count: number }>();
-  if (controller.cron !== "*/1 * * * *" || (catalog?.count ?? 0) === 0) {
+  if ((catalog?.count ?? 0) === 0) {
     await synchronizeSportsCatalog(workerEnv);
   }
   await enqueueDueSportsEvents(workerEnv);

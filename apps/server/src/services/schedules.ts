@@ -1,14 +1,30 @@
-import { marketDefinitions } from "@ppal/contracts/markets";
 /* oxlint-disable no-await-in-loop -- Sequential provider calls protect the upstream rate limit. */
+
+import { marketDefinitions } from "@ppal/contracts/markets";
 
 import { getDb } from "../lib/database";
 import {
-  acquireSportradarProductBudget,
-  resolveSportradarAccessLevel,
+  acquireSportsApiBudget,
+  SPORTSAPI_PRO_BASE_URL,
+  SPORTSAPI_PRO_PROVIDER,
+  syncSportsApiQuotaHeaders,
 } from "./sports";
-import type { SportradarAccessLevel } from "./sports";
 
-const leagues = [
+const SCHEDULE_CACHE_TTL_MS = 3 * 60 * 60 * 1000;
+
+const STATIC_SPORTS = [
+  ["basketball", "Basketball"],
+  ["football", "Football"],
+  ["baseball", "Baseball"],
+  ["hockey", "Hockey"],
+  ["soccer", "Soccer"],
+  ["mma", "MMA"],
+  ["tennis", "Tennis"],
+  ["racing", "Racing"],
+  ["golf", "Golf"],
+] as const;
+
+const STATIC_LEAGUES = [
   ["nba", "NBA", "basketball"],
   ["wnba", "WNBA", "basketball"],
   ["ncaamb", "NCAA Men's Basketball", "basketball"],
@@ -29,6 +45,45 @@ const leagues = [
   ["pga", "PGA Tour", "golf"],
 ] as const;
 
+const SPORTSAPI_SPORT_MAP: Record<string, string> = {
+  baseball: "baseball",
+  basketball: "basketball",
+  football: "american-football",
+  golf: "golf",
+  hockey: "hockey",
+  mma: "mma",
+  racing: "motorsport",
+  soccer: "football",
+  tennis: "tennis",
+};
+
+const HINT_TO_SPORT_SLUG: readonly [RegExp, string][] = [
+  [
+    /\b(?:nba|wnba|ncaa\w*\s*basketball|ncaamb|ncaawb|euroleague|basketball)\b/iu,
+    "basketball",
+  ],
+  [
+    /\b(?:nfl|ncaaf|ncaafb|cfb|cfl|american\s*football|football)\b/iu,
+    "football",
+  ],
+  [/\b(?:mlb|baseball|kbo|npb)\b/iu, "baseball"],
+  [/\b(?:nhl|khl|hockey|ice\s*hockey)\b/iu, "hockey"],
+  [
+    /\b(?:epl|premier\s*league|mls|la\s*liga|serie\s*a|bundesliga|champions\s*league|soccer|fifa)\b/iu,
+    "soccer",
+  ],
+  [/\b(?:ufc|mma|bellator|pfl)\b/iu, "mma"],
+  [
+    /\b(?:atp|wta|tennis|wimbledon|us\s*open|french\s*open|australian\s*open)\b/iu,
+    "tennis",
+  ],
+  [
+    /\b(?:f1|formula\s*1|nascar|motogp|indycar|racing|motorsport)\b/iu,
+    "racing",
+  ],
+  [/\b(?:pga|liv|golf|masters)\b/iu, "golf"],
+];
+
 const marketNames = Object.fromEntries(
   Object.entries(marketDefinitions).map(([slug, definition]) => [
     slug,
@@ -36,198 +91,125 @@ const marketNames = Object.fromEntries(
   ])
 );
 
-interface SchedulePlaybook {
-  followupPaths?: (
-    payload: Record<string, unknown>,
-    date: Date,
-    accessLevel: SportradarAccessLevel
-  ) => string[];
-  path: (date: Date, accessLevel: SportradarAccessLevel) => string;
-  rows: (payload: Record<string, unknown>) => Record<string, unknown>[];
-}
-
-const record = (value: unknown): Record<string, unknown> | null =>
+const asRecord = (value: unknown): Record<string, unknown> | null =>
   typeof value === "object" && value !== null && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : null;
 
-const records = (value: unknown): Record<string, unknown>[] =>
+const asRecords = (value: unknown): Record<string, unknown>[] =>
   Array.isArray(value)
     ? value.flatMap((item) => {
-        const itemRecord = record(item);
-        return itemRecord ? [itemRecord] : [];
+        const rec = asRecord(item);
+        return rec ? [rec] : [];
       })
     : [];
 
-const dateParts = (
-  date: Date
-): { day: string; iso: string; month: string; year: string } => ({
-  day: String(date.getUTCDate()).padStart(2, "0"),
-  iso: date.toISOString().slice(0, 10),
-  month: String(date.getUTCMonth() + 1).padStart(2, "0"),
-  year: String(date.getUTCFullYear()),
-});
-
-const americanRows = (payload: Record<string, unknown>) =>
-  records(payload.games);
-const sportEventRows = (key: string) => (payload: Record<string, unknown>) =>
-  records(payload[key]).flatMap((row) => {
-    const event = record(row.sport_event);
-    return event ? [event] : [];
-  });
-
-const dailyAmerican = (
-  league: string,
-  version: string,
-  suffix = "schedule.json"
-): SchedulePlaybook => ({
-  path: (date, accessLevel) => {
-    const { day, month, year } = dateParts(date);
-    return `${league}/${accessLevel}/${version}/en/games/${year}/${month}/${day}/${suffix}`;
-  },
-  rows: americanRows,
-});
-
-const footballWeek = (date: Date): string => {
-  const septemberFirst = new Date(Date.UTC(date.getUTCFullYear(), 8, 1));
-  const daysUntilThursday = (4 - septemberFirst.getUTCDay() + 7) % 7;
-  const seasonStart = new Date(
-    septemberFirst.getTime() + daysUntilThursday * 24 * 60 * 60 * 1000
-  );
-  const elapsedWeeks = Math.floor(
-    (date.getTime() - seasonStart.getTime()) / (7 * 24 * 60 * 60 * 1000)
-  );
-  return String(Math.min(Math.max(elapsedWeeks + 1, 1), 18)).padStart(2, "0");
-};
-
-const playbooks: Record<string, SchedulePlaybook> = {
-  f1: {
-    followupPaths: (payload, date, accessLevel) =>
-      records(payload.seasons)
-        .filter(
-          (season) =>
-            Number(season.year) === date.getUTCFullYear() &&
-            typeof season.id === "string"
-        )
-        .map(
-          (season) =>
-            `formula1/${accessLevel}/v2/en/seasons/${String(season.id)}/stages/schedule.json`
-        ),
-    path: (_date, accessLevel) => `formula1/${accessLevel}/v2/en/seasons.json`,
-    rows: (payload) =>
-      records(payload.stages).filter((stage) => stage.type === "race"),
-  },
-  global_american_football: {
-    path: (date, accessLevel) =>
-      `americanfootball/${accessLevel}/v2/en/schedules/${dateParts(date).iso}/summaries.json`,
-    rows: sportEventRows("summaries"),
-  },
-  global_baseball: {
-    path: (date, accessLevel) =>
-      `baseball/${accessLevel}/v2/en/schedules/${dateParts(date).iso}/summaries.json?start=0&limit=100`,
-    rows: sportEventRows("summaries"),
-  },
-  global_basketball: {
-    path: (date, accessLevel) =>
-      `basketball/${accessLevel}/v2/en/schedules/${dateParts(date).iso}/summaries.json`,
-    rows: sportEventRows("summaries"),
-  },
-  global_ice_hockey: {
-    path: (date, accessLevel) =>
-      `icehockey/${accessLevel}/v2/en/schedules/${dateParts(date).iso}/summaries.json`,
-    rows: sportEventRows("summaries"),
-  },
-  mlb: dailyAmerican("mlb", "v8"),
-  nascar: {
-    path: (date, accessLevel) =>
-      `nascar-${accessLevel === "trial" ? "ot3" : "t3"}/mc/${dateParts(date).year}/races/schedule.json`,
-    rows: (payload) => records(payload.races),
-  },
-  nba: dailyAmerican("nba", "v8"),
-  ncaafb: {
-    path: (date, accessLevel) =>
-      `ncaafb/${accessLevel}/v7/en/games/${dateParts(date).year}/REG/${footballWeek(date)}/schedule.json`,
-    rows: americanRows,
-  },
-  ncaamb: dailyAmerican("ncaamb", "v8"),
-  ncaawb: dailyAmerican("ncaawb", "v8"),
-  nfl: {
-    path: (date, accessLevel) =>
-      `nfl/official/${accessLevel}/v7/en/games/${dateParts(date).year}/REG/${footballWeek(date)}/schedule.json`,
-    rows: americanRows,
-  },
-  nhl: dailyAmerican("nhl", "v7"),
-  pga: {
-    path: (date, accessLevel) =>
-      `golf/${accessLevel}/pga/v3/en/${dateParts(date).year}/tournaments/schedule.json`,
-    rows: (payload) => records(payload.tournaments),
-  },
-  soccer: {
-    path: (date, accessLevel) =>
-      `soccer-extended/${accessLevel}/v4/en/schedules/${dateParts(date).iso}/schedules.json`,
-    rows: sportEventRows("schedules"),
-  },
-  tennis: {
-    path: (date, accessLevel) =>
-      `tennis/${accessLevel}/v3/en/schedules/${dateParts(date).iso}/summaries.json`,
-    rows: sportEventRows("summaries"),
-  },
-  ufc: {
-    path: (date, accessLevel) =>
-      `mma/${accessLevel}/v2/en/schedules/${dateParts(date).iso}/summaries.json`,
-    rows: sportEventRows("summaries"),
-  },
-  wnba: dailyAmerican("wnba", "v8"),
-};
-
-const normalizeEventStatus = (value: unknown): string => {
-  const status = String(value ?? "scheduled").toLowerCase();
-  if (["closed", "complete", "final", "ended"].includes(status)) {
-    return "final";
+export const resolveSportSlugFromHint = (
+  sportHint: string | null | undefined,
+  leagueHint?: string | null
+): string | null => {
+  const combined = `${sportHint ?? ""} ${leagueHint ?? ""}`.trim();
+  if (!combined) {
+    return null;
   }
-  if (["inprogress", "live", "started"].includes(status)) {
+  const lowered = combined.toLowerCase();
+  if (lowered in SPORTSAPI_SPORT_MAP) {
+    return lowered;
+  }
+  for (const [pattern, slug] of HINT_TO_SPORT_SLUG) {
+    if (pattern.test(combined)) {
+      return slug;
+    }
+  }
+  return null;
+};
+
+export const toSportsApiSportPath = (sportSlug: string): string | null =>
+  SPORTSAPI_SPORT_MAP[sportSlug.toLowerCase()] ?? null;
+
+const normalizeScheduleEventStatus = (
+  raw: Record<string, unknown>
+): "cancelled" | "final" | "live" | "postponed" | "scheduled" => {
+  const statusObj = asRecord(raw.status);
+  const rawStatus = String(statusObj?.type ?? raw.status ?? "").toLowerCase();
+  if (
+    rawStatus === "inprogress" ||
+    rawStatus === "live" ||
+    rawStatus === "pause"
+  ) {
     return "live";
   }
-  if (["postponed", "cancelled"].includes(status)) {
-    return status;
+  if (
+    rawStatus === "finished" ||
+    rawStatus === "ended" ||
+    rawStatus === "closed"
+  ) {
+    return "final";
+  }
+  if (rawStatus === "postponed") {
+    return "postponed";
+  }
+  if (rawStatus === "canceled" || rawStatus === "cancelled") {
+    return "cancelled";
   }
   return "scheduled";
 };
 
-const upsertTeam = async ({
-  data,
+const extractStartTimestampMs = (
+  raw: Record<string, unknown>
+): number | null => {
+  const startTs = raw.startTimestamp;
+  if (typeof startTs === "number" && Number.isFinite(startTs)) {
+    return startTs > 1_000_000_000_000 ? startTs : startTs * 1000;
+  }
+  const iso = raw.startTime ?? raw.scheduled;
+  if (typeof iso === "string") {
+    const parsed = new Date(iso).getTime();
+    return Number.isNaN(parsed) ? null : parsed;
+  }
+  return null;
+};
+
+const slugify = (value: string): string =>
+  value
+    .toLowerCase()
+    .replaceAll(/[^a-z0-9]+/gu, "_")
+    .replaceAll(/^_+|_+$/gu, "")
+    .slice(0, 64) || "league";
+
+const upsertTeamParticipant = async ({
   leagueId,
+  name,
+  providerId,
   sportId,
   workerEnv,
 }: {
-  data: Record<string, unknown>;
   leagueId: string;
+  name: string;
+  providerId: string;
   sportId: string;
   workerEnv: Env;
-}): Promise<string | null> => {
-  const providerId = String(data.id ?? data.sr_id ?? "");
-  const name = String(data.name ?? data.full_name ?? "");
-  if (!(providerId && name)) {
-    return null;
-  }
-  const id = `participant:${providerId}`;
+}): Promise<string> => {
+  const id = `team:${SPORTSAPI_PRO_PROVIDER}:${providerId}`;
   await getDb(workerEnv)
     .prepare(
       `INSERT INTO participants (
-      id, league_id, name, provider, provider_participant_id, short_name,
-      sport_id, type, updated_at
-    ) VALUES (?, ?, ?, 'sportradar', ?, ?, ?, 'team', ?)
-    ON CONFLICT(provider, provider_participant_id) DO UPDATE SET
-      league_id = excluded.league_id, name = excluded.name,
-      short_name = excluded.short_name, sport_id = excluded.sport_id,
-      updated_at = excluded.updated_at`
+        id, league_id, name, provider, provider_participant_id, short_name, sport_id, type, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, 'team', ?)
+      ON CONFLICT(provider, provider_participant_id) DO UPDATE SET
+        league_id = excluded.league_id,
+        name = excluded.name,
+        short_name = excluded.short_name,
+        sport_id = excluded.sport_id,
+        updated_at = excluded.updated_at`
     )
     .bind(
       id,
       leagueId,
       name,
+      SPORTSAPI_PRO_PROVIDER,
       providerId,
-      String(data.alias ?? data.abbreviation ?? name),
+      name,
       sportId,
       Date.now()
     )
@@ -235,175 +217,162 @@ const upsertTeam = async ({
   return id;
 };
 
+const extractTeamDescriptor = (
+  rawTeam: unknown,
+  rawTeamId: unknown
+): { name: string; providerId: string } | null => {
+  const teamObj = asRecord(rawTeam);
+  const name =
+    typeof rawTeam === "string"
+      ? rawTeam.trim()
+      : String(teamObj?.name ?? "").trim();
+  if (!name) {
+    return null;
+  }
+  const providerId = String(rawTeamId ?? teamObj?.id ?? slugify(name));
+  return providerId ? { name, providerId } : null;
+};
+
 const upsertScheduleEvent = async (
   raw: Record<string, unknown>,
-  leagueSlug: string,
   sportSlug: string,
   workerEnv: Env
 ): Promise<void> => {
-  const providerId = String(raw.id ?? raw.sr_id ?? "");
-  const startsAtRaw = raw.scheduled ?? raw.start_time;
-  const startsAt = new Date(String(startsAtRaw ?? ""));
-  if (!(providerId && Number.isFinite(startsAt.getTime()))) {
+  const providerEventId =
+    raw.id === undefined || raw.id === null ? null : String(raw.id);
+  const startsAtMs = extractStartTimestampMs(raw);
+  if (!(providerEventId && startsAtMs)) {
     return;
   }
-  const leagueId = `league:${leagueSlug}`;
+
   const sportId = `sport:${sportSlug}`;
-  const competitors = records(raw.competitors);
-  const homeRaw =
-    record(raw.home) ??
-    competitors.find((item) => item.qualifier === "home") ??
-    null;
-  const awayRaw =
-    record(raw.away) ??
-    competitors.find((item) => item.qualifier === "away") ??
-    null;
-  const homeId = homeRaw
-    ? await upsertTeam({ data: homeRaw, leagueId, sportId, workerEnv })
+  const tournamentObj = asRecord(raw.tournament);
+  const tournamentName = String(
+    tournamentObj?.name ?? raw.tournament ?? sportSlug.toUpperCase()
+  ).trim();
+  const tournamentProviderKey = String(
+    tournamentObj?.id ?? raw.tournamentId ?? slugify(tournamentName)
+  );
+  const leagueSlug = `${sportSlug}_${slugify(tournamentName)}`;
+  const leagueId = `league:${SPORTSAPI_PRO_PROVIDER}:${sportSlug}:${tournamentProviderKey}`;
+  const now = Date.now();
+
+  await getDb(workerEnv)
+    .prepare(
+      `INSERT INTO leagues (id, name, provider, provider_key, slug, sport_id, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(provider, provider_key) DO UPDATE SET
+         name = excluded.name,
+         updated_at = excluded.updated_at`
+    )
+    .bind(
+      leagueId,
+      tournamentName,
+      SPORTSAPI_PRO_PROVIDER,
+      `${sportSlug}:${tournamentProviderKey}`,
+      leagueSlug,
+      sportId,
+      now
+    )
+    .run();
+
+  const homeTeam = extractTeamDescriptor(raw.homeTeam, raw.homeTeamId);
+  const awayTeam = extractTeamDescriptor(raw.awayTeam, raw.awayTeamId);
+  const homeId = homeTeam
+    ? await upsertTeamParticipant({
+        leagueId,
+        name: homeTeam.name,
+        providerId: `${sportSlug}:${homeTeam.providerId}`,
+        sportId,
+        workerEnv,
+      })
     : null;
-  const awayId = awayRaw
-    ? await upsertTeam({ data: awayRaw, leagueId, sportId, workerEnv })
+  const awayId = awayTeam
+    ? await upsertTeamParticipant({
+        leagueId,
+        name: awayTeam.name,
+        providerId: `${sportSlug}:${awayTeam.providerId}`,
+        sportId,
+        workerEnv,
+      })
     : null;
+
   await getDb(workerEnv)
     .prepare(
       `INSERT INTO sports_events (
-      away_participant_id, home_participant_id, id, league_id, next_poll_at,
-      provider, provider_event_id, provider_payload, starts_at, status, updated_at
-    ) VALUES (?, ?, ?, ?, ?, 'sportradar', ?, ?, ?, ?, ?)
-    ON CONFLICT(provider, provider_event_id) DO UPDATE SET
-      away_participant_id = excluded.away_participant_id,
-      home_participant_id = excluded.home_participant_id,
-      league_id = excluded.league_id,
-      next_poll_at = LEAST(COALESCE(sports_events.next_poll_at, excluded.next_poll_at), excluded.next_poll_at),
-      provider_payload = excluded.provider_payload,
-      starts_at = excluded.starts_at,
-      status = CASE
-        WHEN sports_events.status IN ('final', 'cancelled') THEN sports_events.status
-        ELSE excluded.status
-      END,
-      updated_at = excluded.updated_at`
+        away_participant_id, home_participant_id, id, league_id, next_poll_at,
+        provider, provider_event_id, provider_payload, starts_at, status, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(provider, provider_event_id) DO UPDATE SET
+        away_participant_id = excluded.away_participant_id,
+        home_participant_id = excluded.home_participant_id,
+        league_id = excluded.league_id,
+        next_poll_at = LEAST(COALESCE(sports_events.next_poll_at, excluded.next_poll_at), excluded.next_poll_at),
+        provider_payload = excluded.provider_payload,
+        starts_at = excluded.starts_at,
+        status = CASE
+          WHEN sports_events.status IN ('final', 'cancelled') THEN sports_events.status
+          ELSE excluded.status
+        END,
+        updated_at = excluded.updated_at`
     )
     .bind(
       awayId,
       homeId,
-      `event:${providerId}`,
+      `event:${SPORTSAPI_PRO_PROVIDER}:${sportSlug}:${providerEventId}`,
       leagueId,
-      startsAt.getTime() - 5 * 60 * 1000,
-      providerId,
+      startsAtMs - 5 * 60 * 1000,
+      SPORTSAPI_PRO_PROVIDER,
+      providerEventId,
       JSON.stringify(raw),
-      startsAt.getTime(),
-      normalizeEventStatus(raw.status),
-      Date.now()
+      startsAtMs,
+      normalizeScheduleEventStatus(raw),
+      now
     )
     .run();
 };
 
-const syncLeagueSchedulePath = async ({
-  accessLevel,
-  leagueSlug,
-  pendingPath,
-  pendingPaths,
-  playbook,
-  sportSlug,
-  visitedPaths,
-  workerEnv,
-}: {
-  accessLevel: "production" | "trial";
-  leagueSlug: string;
-  pendingPath: string;
-  pendingPaths: string[];
-  playbook: NonNullable<(typeof playbooks)[string]>;
-  sportSlug: string;
-  visitedPaths: Set<string>;
-  workerEnv: Env;
-}): Promise<void> => {
-  try {
-    const budget = await acquireSportradarProductBudget(leagueSlug, workerEnv);
-    if (!budget.granted) {
-      workerEnv.ANALYTICS.writeDataPoint({
-        blobs: ["sportradar.schedule_deferred", leagueSlug],
-        doubles: [budget.retryAfterMs, budget.remaining],
-        indexes: [leagueSlug],
-      });
-      return;
-    }
-    const url = new URL(pendingPath, "https://api.sportradar.com/");
-    url.searchParams.set("api_key", workerEnv.SPORTRADAR_API_KEY);
-    const response = await fetch(url, {
-      headers: {
-        accept: "application/json",
-        "user-agent": "ParlayPal/2.0",
-      },
-    });
-    if (!response.ok) {
-      workerEnv.ANALYTICS.writeDataPoint({
-        blobs: ["sportradar.schedule_failed", leagueSlug],
-        doubles: [response.status],
-        indexes: [leagueSlug],
-      });
-      return;
-    }
-    const payload = (await response.json()) as Record<string, unknown>;
-    for (const followup of playbook.followupPaths?.(
-      payload,
-      new Date(),
-      accessLevel
-    ) ?? []) {
-      if (!visitedPaths.has(followup)) {
-        visitedPaths.add(followup);
-        pendingPaths.push(followup);
-      }
-    }
-    for (const raw of playbook.rows(payload)) {
-      await upsertScheduleEvent(raw, leagueSlug, sportSlug, workerEnv);
-    }
-  } catch {
-    workerEnv.ANALYTICS.writeDataPoint({
-      blobs: ["sportradar.schedule_error", leagueSlug],
-      doubles: [1],
-      indexes: [leagueSlug],
-    });
-  }
-};
-
-export const synchronizeSportsCatalog = async (
+/**
+ * Seeds static sports, default leagues, and supported betting markets locally.
+ * Makes ZERO upstream HTTP calls.
+ */
+export const ensureStaticSportsCatalog = async (
   workerEnv: Env
 ): Promise<void> => {
-  const allowlist = new Set(
-    workerEnv.SPORTRADAR_LEAGUES.split(",")
-      .map((slug) => slug.trim().toLowerCase())
-      .filter((slug) => slug.length > 0)
-  );
-  const isLeagueEnabled = (slug: string): boolean =>
-    allowlist.size === 0 || allowlist.has(slug.toLowerCase());
-  const sportNames = new Map(
-    leagues.map((league) => [league[2], league[2]] as const)
-  );
-  for (const [slug, name] of sportNames) {
-    await getDb(workerEnv)
+  const now = Date.now();
+  const db = getDb(workerEnv);
+
+  for (const [slug, name] of STATIC_SPORTS) {
+    await db
       .prepare(
         `INSERT INTO sports (id, name, slug, updated_at) VALUES (?, ?, ?, ?)
-       ON CONFLICT(slug) DO UPDATE SET name = excluded.name, updated_at = excluded.updated_at`
+         ON CONFLICT(slug) DO UPDATE SET name = excluded.name, updated_at = excluded.updated_at`
       )
-      .bind(
-        `sport:${slug}`,
-        name[0]?.toUpperCase() + name.slice(1),
-        slug,
-        Date.now()
-      )
+      .bind(`sport:${slug}`, name, slug, now)
       .run();
   }
-  for (const [slug, name, sport] of leagues) {
-    await getDb(workerEnv)
+
+  for (const [slug, name, sport] of STATIC_LEAGUES) {
+    await db
       .prepare(
         `INSERT INTO leagues (id, name, provider, provider_key, slug, sport_id, updated_at)
-       VALUES (?, ?, 'sportradar', ?, ?, ?, ?)
-       ON CONFLICT(slug) DO UPDATE SET name = excluded.name,
-         provider_key = excluded.provider_key, updated_at = excluded.updated_at`
+         VALUES (?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(slug) DO UPDATE SET name = excluded.name,
+           provider = excluded.provider, provider_key = excluded.provider_key,
+           updated_at = excluded.updated_at`
       )
-      .bind(`league:${slug}`, name, slug, slug, `sport:${sport}`, Date.now())
+      .bind(
+        `league:${slug}`,
+        name,
+        SPORTSAPI_PRO_PROVIDER,
+        slug,
+        slug,
+        `sport:${sport}`,
+        now
+      )
       .run();
   }
+
   for (const [slug, name] of Object.entries(marketNames)) {
     const isTeamMarket = slug === "team_moneyline" || slug === "team_spread";
     const isGameMarket = slug === "game_total";
@@ -413,57 +382,132 @@ export const synchronizeSportsCatalog = async (
     } else if (isGameMarket) {
       subjectType = "game";
     }
-    await getDb(workerEnv)
+    await db
       .prepare(
         `INSERT INTO markets (id, name, slug, subject_type, updated_at, value_type)
-       VALUES (?, ?, ?, ?, ?, ?)
-       ON CONFLICT(slug) DO UPDATE SET name = excluded.name, updated_at = excluded.updated_at`
+         VALUES (?, ?, ?, ?, ?, ?)
+         ON CONFLICT(slug) DO UPDATE SET name = excluded.name, updated_at = excluded.updated_at`
       )
       .bind(
         `market:${slug}`,
         name,
         slug,
         subjectType,
-        Date.now(),
+        now,
         slug === "team_moneyline" ? "moneyline" : "numeric"
       )
       .run();
   }
-  const dates = [new Date(), new Date(Date.now() + 24 * 60 * 60 * 1000)];
-  const accessLevel = resolveSportradarAccessLevel(
-    workerEnv.SPORTRADAR_ACCESS_LEVEL
-  );
-  for (const [leagueSlug, , sportSlug] of leagues) {
-    if (!isLeagueEnabled(leagueSlug)) {
+};
+
+/**
+ * Reactive, demand-driven schedule hydration for ONE sport and date.
+ * Cached in `provider_schedule_syncs` for 3 hours so repeated uploads for the
+ * same sport/day cost 0 upstream API calls.
+ */
+export const ensureSportScheduleHydrated = async ({
+  date,
+  sportSlug,
+  workerEnv,
+}: {
+  date?: string;
+  sportSlug: string;
+  workerEnv: Env;
+}): Promise<{ hydrated: boolean; eventCount: number }> => {
+  const apiKey = workerEnv.SPORTSAPI_PRO_API_KEY?.trim();
+  const apiSport = toSportsApiSportPath(sportSlug);
+  if (!(apiKey && apiSport)) {
+    return { eventCount: 0, hydrated: false };
+  }
+
+  const todayIso = new Date().toISOString().slice(0, 10);
+  const scheduleDate =
+    date && /^\d{4}-\d{2}-\d{2}$/u.test(date) ? date : todayIso;
+  const now = Date.now();
+  const db = getDb(workerEnv);
+
+  const cached = await db
+    .prepare(
+      `SELECT synced_at FROM provider_schedule_syncs
+       WHERE provider = ? AND sport_slug = ? AND schedule_date = ?`
+    )
+    .bind(SPORTSAPI_PRO_PROVIDER, sportSlug, scheduleDate)
+    .first<{ synced_at: number }>();
+  if (cached && now - cached.synced_at < SCHEDULE_CACHE_TTL_MS) {
+    return { eventCount: 0, hydrated: false };
+  }
+
+  const budget = await acquireSportsApiBudget(workerEnv);
+  if (!budget.granted) {
+    workerEnv.ANALYTICS.writeDataPoint({
+      blobs: ["sportsapipro.schedule_deferred", sportSlug],
+      doubles: [budget.retryAfterMs, budget.remaining],
+      indexes: [sportSlug],
+    });
+    return { eventCount: 0, hydrated: false };
+  }
+
+  const endpointPath =
+    scheduleDate === todayIso
+      ? `/v2/${apiSport}/api/today`
+      : `/v2/${apiSport}/api/schedule/${scheduleDate}`;
+  const url = new URL(endpointPath, SPORTSAPI_PRO_BASE_URL);
+
+  try {
+    const response = await fetch(url, {
+      headers: {
+        accept: "application/json",
+        "user-agent": "ParlayPal/2.0",
+        "x-api-key": apiKey,
+      },
+    });
+    await syncSportsApiQuotaHeaders(response.headers, workerEnv);
+    if (!response.ok) {
       workerEnv.ANALYTICS.writeDataPoint({
-        blobs: ["sportradar.league_skipped", leagueSlug],
-        doubles: [0],
-        indexes: [leagueSlug],
+        blobs: ["sportsapipro.schedule_failed", sportSlug],
+        doubles: [response.status],
+        indexes: [sportSlug],
       });
-      continue;
+      return { eventCount: 0, hydrated: false };
     }
-    const playbook = playbooks[leagueSlug];
-    if (!playbook) {
-      continue;
-    }
-    const paths = new Set(
-      dates.map((date) => playbook.path(date, accessLevel))
+    const payload = (await response.json()) as Record<string, unknown>;
+    const events = asRecords(
+      payload.events ?? payload.matches ?? payload.games ?? payload.data
     );
-    for (const path of paths) {
-      const pendingPaths = [path];
-      const visitedPaths = new Set<string>([path]);
-      for (const pendingPath of pendingPaths) {
-        await syncLeagueSchedulePath({
-          accessLevel,
-          leagueSlug,
-          pendingPath,
-          pendingPaths,
-          playbook,
-          sportSlug,
-          visitedPaths,
-          workerEnv,
-        });
-      }
+    await ensureStaticSportsCatalog(workerEnv);
+    for (const raw of events) {
+      await upsertScheduleEvent(raw, sportSlug, workerEnv);
     }
+    await db
+      .prepare(
+        `INSERT INTO provider_schedule_syncs (id, provider, schedule_date, sport_slug, synced_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?)
+         ON CONFLICT(provider, sport_slug, schedule_date) DO UPDATE SET
+           synced_at = excluded.synced_at,
+           updated_at = excluded.updated_at`
+      )
+      .bind(
+        `sync:${SPORTSAPI_PRO_PROVIDER}:${sportSlug}:${scheduleDate}`,
+        SPORTSAPI_PRO_PROVIDER,
+        scheduleDate,
+        sportSlug,
+        now,
+        now
+      )
+      .run();
+    return { eventCount: events.length, hydrated: true };
+  } catch {
+    workerEnv.ANALYTICS.writeDataPoint({
+      blobs: ["sportsapipro.schedule_error", sportSlug],
+      doubles: [1],
+      indexes: [sportSlug],
+    });
+    return { eventCount: 0, hydrated: false };
   }
 };
+
+/**
+ * Legacy entrypoint kept for cron/bootstrap callers — seeds static catalog only
+ * without making any eager upstream API calls.
+ */
+export const synchronizeSportsCatalog = ensureStaticSportsCatalog;

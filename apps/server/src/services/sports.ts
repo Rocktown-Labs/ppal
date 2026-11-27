@@ -59,54 +59,39 @@ interface TrackingRow {
   won_at: number | null;
 }
 
-export type SportradarAccessLevel = "production" | "trial";
-type SummaryEvent = Pick<
-  EventRow,
-  "league_slug" | "provider_event_id" | "starts_at"
->;
+export const SPORTSAPI_PRO_PROVIDER = "sportsapipro";
+export const SPORTSAPI_PRO_BASE_URL = "https://api.sportsapipro.com";
 
-export const resolveSportradarAccessLevel = (
-  configured: string | undefined
-): SportradarAccessLevel =>
-  configured === "production" ? "production" : "trial";
-
-const summaryPaths: Record<
-  string,
-  (event: SummaryEvent, accessLevel: SportradarAccessLevel) => string
-> = {
-  f1: (_event, accessLevel) => `formula1/${accessLevel}/v2/en/sport_events`,
-  global_american_football: (_event, accessLevel) =>
-    `americanfootball/${accessLevel}/v2/en/sport_events`,
-  global_baseball: (_event, accessLevel) =>
-    `baseball/${accessLevel}/v2/en/sport_events`,
-  global_basketball: (_event, accessLevel) =>
-    `basketball/${accessLevel}/v2/en/sport_events`,
-  global_ice_hockey: (_event, accessLevel) =>
-    `icehockey/${accessLevel}/v2/en/sport_events`,
-  mlb: (_event, accessLevel) => `mlb/${accessLevel}/v8/en/games`,
-  nba: (_event, accessLevel) => `nba/${accessLevel}/v8/en/games`,
-  ncaafb: (_event, accessLevel) => `ncaafb/${accessLevel}/v7/en/games`,
-  ncaamb: (_event, accessLevel) => `ncaamb/${accessLevel}/v8/en/games`,
-  ncaawb: (_event, accessLevel) => `ncaawb/${accessLevel}/v8/en/games`,
-  nfl: (_event, accessLevel) => `nfl/official/${accessLevel}/v7/en/games`,
-  nhl: (_event, accessLevel) => `nhl/${accessLevel}/v7/en/games`,
-  soccer: (_event, accessLevel) =>
-    `soccer-extended/${accessLevel}/v4/en/sport_events`,
-  tennis: (_event, accessLevel) => `tennis/${accessLevel}/v3/en/sport_events`,
-  ufc: (_event, accessLevel) => `mma/${accessLevel}/v2/en/sport_events`,
-  wnba: (_event, accessLevel) => `wnba/${accessLevel}/v8/en/games`,
+const SPORTSAPI_SPORT_PATHS: Record<string, string> = {
+  baseball: "baseball",
+  basketball: "basketball",
+  football: "american-football",
+  golf: "golf",
+  hockey: "hockey",
+  mma: "mma",
+  racing: "motorsport",
+  soccer: "football",
+  tennis: "tennis",
 };
 
-const boxscoreLeagues = new Set([
-  "mlb",
-  "nba",
-  "ncaafb",
-  "ncaamb",
-  "ncaawb",
-  "nfl",
-  "nhl",
-  "wnba",
-]);
+const sportSlugFromId = (sportId: string): string =>
+  sportId.replace(/^sport:/u, "").toLowerCase();
+
+export const buildSportsApiMatchPath = (
+  sportSlug: string,
+  providerEventId: string
+): string => {
+  const apiSport = SPORTSAPI_SPORT_PATHS[sportSlug.toLowerCase()];
+  if (!apiSport) {
+    throw new Error(`Unsupported SportsAPI Pro sport: ${sportSlug}`);
+  }
+  return `/v2/${apiSport}/api/match/${encodeURIComponent(providerEventId)}`;
+};
+
+export const buildSportsApiLineupsPath = (
+  sportSlug: string,
+  providerEventId: string
+): string => `${buildSportsApiMatchPath(sportSlug, providerEventId)}/lineups`;
 
 const marketStatKeys = Object.fromEntries(
   Object.entries(marketDefinitions).map(([slug, definition]) => [
@@ -134,11 +119,30 @@ export const collectRecords = (
   if (!record) {
     return;
   }
+  const nestedPlayer = asRecord(record.player);
   if (
-    (typeof record.id === "string" || typeof record.sr_id === "string") &&
+    nestedPlayer &&
+    (typeof nestedPlayer.id === "number" ||
+      typeof nestedPlayer.id === "string") &&
+    record.statistics
+  ) {
+    records.push({
+      ...nestedPlayer,
+      id: String(nestedPlayer.id),
+      statistics: record.statistics,
+    });
+    return;
+  }
+  if (
+    (typeof record.id === "number" ||
+      typeof record.id === "string" ||
+      typeof record.sr_id === "string") &&
     (record.statistics || record.result || typeof record.position === "number")
   ) {
-    records.push(record);
+    records.push({
+      ...record,
+      ...(record.id === undefined ? {} : { id: String(record.id) }),
+    });
   }
   for (const child of Object.values(record)) {
     collectRecords(child, records);
@@ -171,23 +175,29 @@ export const normalizeStatus = (
   summary: Record<string, unknown>,
   previous: SportsEventStatus
 ): SportsEventStatus => {
+  const eventObj = asRecord(summary.event);
   const game = asRecord(summary.game);
   const eventStatus = asRecord(summary.sport_event_status);
+  const statusObj = asRecord(eventObj?.status ?? summary.status);
   const raw = String(
-    game?.status ??
+    statusObj?.type ??
+      game?.status ??
       eventStatus?.status ??
       eventStatus?.match_status ??
-      summary.status ??
+      (typeof summary.status === "string" ? summary.status : "") ??
       ""
   ).toLowerCase();
-  if (["inprogress", "live", "started"].includes(raw)) {
+  if (["inprogress", "live", "started", "pause"].includes(raw)) {
     return "live";
   }
-  if (["closed", "complete", "final", "ended"].includes(raw)) {
+  if (["closed", "complete", "final", "ended", "finished"].includes(raw)) {
     return "final";
   }
-  if (raw === "postponed" || raw === "cancelled") {
-    return raw;
+  if (raw === "postponed") {
+    return "postponed";
+  }
+  if (raw === "canceled" || raw === "cancelled") {
+    return "cancelled";
   }
   return previous;
 };
@@ -196,18 +206,23 @@ export const summaryScores = (
   summary: Record<string, unknown>,
   event: EventRow
 ): { away: number | null; home: number | null } => {
+  const eventObj = asRecord(summary.event);
   const game = asRecord(summary.game);
-  const home = asRecord(game?.home ?? summary.home);
-  const away = asRecord(game?.away ?? summary.away);
+  const home = asRecord(
+    eventObj?.homeScore ?? summary.homeScore ?? game?.home ?? summary.home
+  );
+  const away = asRecord(
+    eventObj?.awayScore ?? summary.awayScore ?? game?.away ?? summary.away
+  );
   const eventStatus = asRecord(summary.sport_event_status);
   return {
     away:
-      findNumber(away, ["points", "runs", "score"]) ??
+      findNumber(away, ["current", "display", "points", "runs", "score"]) ??
       (typeof eventStatus?.away_score === "number"
         ? eventStatus.away_score
         : event.away_score),
     home:
-      findNumber(home, ["points", "runs", "score"]) ??
+      findNumber(home, ["current", "display", "points", "runs", "score"]) ??
       (typeof eventStatus?.home_score === "number"
         ? eventStatus.home_score
         : event.home_score),
@@ -255,15 +270,16 @@ const upsertObservedParticipants = async (
         return getDb(workerEnv)
           .prepare(
             `INSERT INTO participants (id, league_id, name, provider, provider_participant_id, short_name, sport_id, type, updated_at)
-         VALUES (?, ?, ?, 'sportradar', ?, ?, ?, 'player', ?)
+         VALUES (?, ?, ?, ?, ?, ?, ?, 'player', ?)
          ON CONFLICT(provider, provider_participant_id) DO UPDATE SET name = excluded.name,
            short_name = excluded.short_name, league_id = excluded.league_id,
            sport_id = excluded.sport_id, updated_at = excluded.updated_at`
           )
           .bind(
-            `participant:${providerId}`,
+            `participant:${SPORTSAPI_PRO_PROVIDER}:${providerId}`,
             event.league_id,
             name,
+            SPORTSAPI_PRO_PROVIDER,
             providerId,
             String(record.abbr_name ?? record.abbreviation ?? name),
             event.sport_id,
@@ -276,56 +292,6 @@ const upsertObservedParticipants = async (
   }
 };
 
-export const buildSportradarSummaryPath = (
-  event: SummaryEvent,
-  accessLevel: SportradarAccessLevel
-): string => {
-  const basePath = summaryPaths[event.league_slug];
-  if (
-    !(basePath || event.league_slug === "nascar" || event.league_slug === "pga")
-  ) {
-    throw new Error(`Unsupported Sportradar league: ${event.league_slug}`);
-  }
-  if (event.league_slug === "nascar") {
-    const tier = accessLevel === "trial" ? "ot3" : "t3";
-    return `nascar-${tier}/mc/races/${encodeURIComponent(event.provider_event_id)}/results.json`;
-  }
-  if (event.league_slug === "pga") {
-    const year = new Date(event.starts_at).getUTCFullYear();
-    return `golf/${accessLevel}/pga/v3/en/${year}/tournaments/${encodeURIComponent(event.provider_event_id)}/leaderboard.json`;
-  }
-  if (!basePath) {
-    throw new Error(`Unsupported Sportradar league: ${event.league_slug}`);
-  }
-  const suffix = boxscoreLeagues.has(event.league_slug)
-    ? "boxscore.json"
-    : "summary.json";
-  return `${basePath(event, accessLevel)}/${encodeURIComponent(event.provider_event_id)}/${suffix}`;
-};
-
-const fetchSummary = async (
-  event: EventRow,
-  workerEnv: Env
-): Promise<{ payload: Record<string, unknown>; sequence: string }> => {
-  const accessLevel = resolveSportradarAccessLevel(
-    workerEnv.SPORTRADAR_ACCESS_LEVEL
-  );
-  const requestPath = buildSportradarSummaryPath(event, accessLevel);
-  const url = new URL(requestPath, "https://api.sportradar.com/");
-  url.searchParams.set("api_key", workerEnv.SPORTRADAR_API_KEY);
-  const response = await fetch(url, {
-    headers: { accept: "application/json" },
-  });
-  const text = await response.text();
-  if (!response.ok) {
-    throw new Error(`Sportradar request failed (${response.status})`);
-  }
-  return {
-    payload: JSON.parse(text) as Record<string, unknown>,
-    sequence: await sha256Hex(text),
-  };
-};
-
 const positiveNumber = (
   value: string | undefined,
   fallback: number
@@ -334,24 +300,103 @@ const positiveNumber = (
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 };
 
-export const acquireSportradarProductBudget = async (
-  leagueSlug: string,
+export const acquireSportsApiBudget = async (
   workerEnv: Env
 ): Promise<ProductBudgetDecision> => {
   const namespace = workerEnv.SPORTRADAR_PRODUCT_BUDGET;
-  const stub = namespace.get(namespace.idFromName(leagueSlug));
+  const stub = namespace.get(namespace.idFromName("sportsapipro:global"));
   return await stub.acquire({
-    qps: positiveNumber(workerEnv.SPORTRADAR_QPS, 1),
+    qps: positiveNumber(workerEnv.SPORTSAPI_PRO_QPS, 2),
     rollingQuota: Math.floor(
-      positiveNumber(workerEnv.SPORTRADAR_ROLLING_QUOTA, 1000)
+      positiveNumber(workerEnv.SPORTSAPI_PRO_DAILY_QUOTA, 100)
     ),
-    rollingWindowMs:
-      positiveNumber(workerEnv.SPORTRADAR_ROLLING_WINDOW_DAYS, 30) *
-      24 *
-      60 *
-      60 *
-      1000,
+    rollingWindowMs: 24 * 60 * 60 * 1000,
   });
+};
+
+export const syncSportsApiQuotaHeaders = async (
+  headers: Headers,
+  workerEnv: Env
+): Promise<void> => {
+  const remainingHeader = headers.get("x-ratelimit-remaining");
+  const resetHeader = headers.get("x-ratelimit-reset");
+  const remaining =
+    remainingHeader !== null && Number.isFinite(Number(remainingHeader))
+      ? Number(remainingHeader)
+      : null;
+  const resetAt =
+    resetHeader !== null && !Number.isNaN(Date.parse(resetHeader))
+      ? Date.parse(resetHeader)
+      : null;
+  if (remaining === null && resetAt === null) {
+    return;
+  }
+  const namespace = workerEnv.SPORTRADAR_PRODUCT_BUDGET;
+  const stub = namespace.get(namespace.idFromName("sportsapipro:global"));
+  await stub.syncQuota({ remaining, resetAt });
+};
+
+const fetchSportsApiJson = async (
+  path: string,
+  workerEnv: Env
+): Promise<{ payload: Record<string, unknown>; text: string }> => {
+  const apiKey = workerEnv.SPORTSAPI_PRO_API_KEY?.trim();
+  if (!apiKey) {
+    throw new Error("SPORTSAPI_PRO_API_KEY is not configured");
+  }
+  const url = new URL(path, SPORTSAPI_PRO_BASE_URL);
+  const response = await fetch(url, {
+    headers: {
+      accept: "application/json",
+      "user-agent": "ParlayPal/2.0",
+      "x-api-key": apiKey,
+    },
+  });
+  await syncSportsApiQuotaHeaders(response.headers, workerEnv);
+  const text = await response.text();
+  if (!response.ok) {
+    throw new Error(`SportsAPI Pro request failed (${response.status})`);
+  }
+  return {
+    payload: JSON.parse(text) as Record<string, unknown>,
+    text,
+  };
+};
+
+const fetchSummary = async (
+  event: EventRow,
+  needsPlayerBoxscore: boolean,
+  workerEnv: Env
+): Promise<{ payload: Record<string, unknown>; sequence: string }> => {
+  const sportSlug = sportSlugFromId(event.sport_id);
+  const matchPath = buildSportsApiMatchPath(sportSlug, event.provider_event_id);
+  const match = await fetchSportsApiJson(matchPath, workerEnv);
+  let combinedPayload: Record<string, unknown> = match.payload;
+  let hashInput = match.text;
+
+  if (needsPlayerBoxscore) {
+    const lineupBudget = await acquireSportsApiBudget(workerEnv);
+    if (lineupBudget.granted) {
+      try {
+        const lineups = await fetchSportsApiJson(
+          buildSportsApiLineupsPath(sportSlug, event.provider_event_id),
+          workerEnv
+        );
+        combinedPayload = {
+          ...match.payload,
+          lineups: lineups.payload,
+        };
+        hashInput = `${match.text}:${lineups.text}`;
+      } catch {
+        // Lineups may not be published before tip-off/kickoff; continue with match scores.
+      }
+    }
+  }
+
+  return {
+    payload: combinedPayload,
+    sequence: await sha256Hex(hashInput),
+  };
 };
 
 const releaseEventLease = async (
@@ -557,10 +602,7 @@ export const processSportsMessage = async (
       .run();
     return;
   }
-  const budget = await acquireSportradarProductBudget(
-    event.league_slug,
-    workerEnv
-  );
+  const budget = await acquireSportsApiBudget(workerEnv);
   if (!budget.granted) {
     const retryAt = Date.now() + budget.retryAfterMs;
     await getDb(workerEnv)
@@ -572,15 +614,24 @@ export const processSportsMessage = async (
       .run();
     return;
   }
+  const playerSubCount = await getDb(workerEnv)
+    .prepare(
+      `SELECT COUNT(*) AS count FROM tracking_subscriptions s
+       JOIN ticket_legs l ON l.id = s.ticket_leg_id
+       WHERE s.sports_event_id = ? AND s.status = 'active' AND l.subject_type = 'player'`
+    )
+    .bind(event.id)
+    .first<{ count: number }>();
+  const needsPlayerBoxscore = (playerSubCount?.count ?? 0) > 0;
   let summary: {
     payload: Record<string, unknown>;
     sequence: string;
   };
   try {
-    summary = await fetchSummary(event, workerEnv);
+    summary = await fetchSummary(event, needsPlayerBoxscore, workerEnv);
   } catch (error) {
-    // Provider outages, 429s, or an expired trial must not trigger the queue's
-    // rapid retries: park the event with backoff and return normally.
+    // Provider outages or 429s must not trigger the queue's rapid retries:
+    // park the event with backoff and return normally.
     const detail =
       error instanceof Error ? error.message : "Unknown provider error";
     const quotaHit = /(?<quota>429|403|quota|limit)/iu.test(detail);
@@ -593,7 +644,7 @@ export const processSportsMessage = async (
       .bind(retryAt, Date.now(), event.id)
       .run();
     workerEnv.ANALYTICS.writeDataPoint({
-      blobs: ["sportradar.poll_failed", event.league_slug],
+      blobs: ["sportsapipro.poll_failed", event.league_slug],
       doubles: [quotaHit ? 1 : 0],
       indexes: [event.league_slug],
     });
@@ -756,13 +807,13 @@ export const processSportsMessage = async (
         }
         continue;
       }
-      const observationKey = `sportradar:${event.id}:${trackedLeg.participant_id}:${trackedLeg.market_id}:${sequence}`;
+      const observationKey = `${SPORTSAPI_PRO_PROVIDER}:${event.id}:${trackedLeg.participant_id}:${trackedLeg.market_id}:${sequence}`;
       await getDb(workerEnv)
         .prepare(
           `INSERT INTO stat_observations (
         idempotency_key, market_id, observed_at, participant_id, provider,
         provider_sequence, sports_event_id, value
-      ) VALUES (?, ?, ?, ?, 'sportradar', ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(idempotency_key) DO NOTHING`
         )
         .bind(
@@ -770,6 +821,7 @@ export const processSportsMessage = async (
           trackedLeg.market_id,
           Date.now(),
           trackedLeg.participant_id,
+          SPORTSAPI_PRO_PROVIDER,
           sequence,
           event.id,
           value
@@ -889,10 +941,14 @@ export const enqueueDueSportsEvents = async (workerEnv: Env): Promise<void> => {
     .prepare(
       `UPDATE sports_events SET poll_lease_until = ?, updated_at = ?
      WHERE id IN (
-       SELECT id FROM sports_events
-       WHERE status IN ('scheduled', 'live') AND next_poll_at <= ?
-         AND (poll_lease_until IS NULL OR poll_lease_until < ?)
-       ORDER BY next_poll_at LIMIT 100
+       SELECT e.id FROM sports_events e
+       WHERE e.status IN ('scheduled', 'live') AND e.next_poll_at <= ?
+         AND (e.poll_lease_until IS NULL OR e.poll_lease_until < ?)
+         AND EXISTS (
+           SELECT 1 FROM tracking_subscriptions s
+           WHERE s.sports_event_id = e.id AND s.status = 'active'
+         )
+       ORDER BY e.next_poll_at LIMIT 100
      ) RETURNING id`
     )
     .bind(leaseUntil, now, now, now)
