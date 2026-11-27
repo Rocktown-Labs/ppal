@@ -1,8 +1,8 @@
-import { index, integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import { bigint, index, pgTable, text } from "drizzle-orm/pg-core";
 
 import { user } from "./auth";
 
-export const auditLogs = sqliteTable(
+export const auditLogs = pgTable(
   "audit_logs",
   {
     action: text("action").notNull(),
@@ -11,11 +11,8 @@ export const auditLogs = sqliteTable(
     }),
     id: text("id").primaryKey(),
     ipCountry: text("ip_country"),
-    metadata: text("metadata", { mode: "json" }).$type<Record<
-      string,
-      unknown
-    > | null>(),
-    occurredAt: integer("occurred_at", { mode: "timestamp_ms" }).notNull(),
+    metadata: text("metadata"),
+    occurredAt: bigint("occurred_at", { mode: "number" }).notNull(),
     outcome: text("outcome").notNull(),
     requestId: text("request_id"),
     targetId: text("target_id"),

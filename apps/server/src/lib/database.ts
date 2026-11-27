@@ -1,3 +1,11 @@
+import { createSqlDatabase } from "@ppal/db";
+import type { SqlDatabase } from "@ppal/db";
+
+export type { SqlDatabase, SqlPreparedStatement, SqlResult } from "@ppal/db";
+
+export const getDb = (source?: { HYPERDRIVE?: Hyperdrive }): SqlDatabase =>
+  createSqlDatabase(source);
+
 export const safeJsonParse = <T>(value: string | null, fallback: T): T => {
   if (!value) {
     return fallback;

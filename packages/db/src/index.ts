@@ -1,4 +1,7 @@
-import { env } from "@ppal/env/server";
-import { drizzle } from "drizzle-orm/d1";
-
-export const createDb = () => drizzle(env.DB);
+export {
+  createDb,
+  createPostgresClient,
+  createSqlDatabase,
+  translateSqlForPostgres,
+} from "./client";
+export type { SqlDatabase, SqlPreparedStatement, SqlResult } from "./client";

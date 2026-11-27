@@ -1,6 +1,7 @@
 import { communityChatMessageSchema } from "@ppal/contracts/community";
 import { DurableObject } from "cloudflare:workers";
 
+import { getDb } from "../lib/database";
 import { escapeHtml } from "../lib/html";
 import { publishNotification } from "../services/notifications";
 import type { NotificationServiceEnv } from "../services/notifications";
@@ -276,9 +277,10 @@ export class CommunityChannelRoom extends DurableObject<CommunityRoomEnv> {
   private async persistMessage(
     input: PostMessageInput
   ): Promise<PostMessageResult> {
-    const membership = await this.env.DB.prepare(
-      "SELECT role, status FROM community_members WHERE community_id = ? AND user_id = ?"
-    )
+    const membership = await getDb(this.env)
+      .prepare(
+        "SELECT role, status FROM community_members WHERE community_id = ? AND user_id = ?"
+      )
       .bind(input.communityId, input.userId)
       .first<{ role: string; status: string }>();
     if (membership?.status !== "active") {
@@ -304,9 +306,10 @@ export class CommunityChannelRoom extends DurableObject<CommunityRoomEnv> {
         };
       }
     }
-    const channel = await this.env.DB.prepare(
-      "SELECT 1 AS present FROM community_channels WHERE id = ? AND community_id = ? AND is_archived = 0"
-    )
+    const channel = await getDb(this.env)
+      .prepare(
+        "SELECT 1 AS present FROM community_channels WHERE id = ? AND community_id = ? AND is_archived = 0"
+      )
       .bind(input.channelId, input.communityId)
       .first<{ present: number }>();
     if (!channel) {
@@ -321,10 +324,11 @@ export class CommunityChannelRoom extends DurableObject<CommunityRoomEnv> {
     const mentions = parseMentions(input.body);
     const mentionedProfiles =
       mentions.length > 0
-        ? await this.env.DB.prepare(
-            `SELECT user_id, username FROM profiles
+        ? await getDb(this.env)
+            .prepare(
+              `SELECT user_id, username FROM profiles
              WHERE is_public = 1 AND lower(username) IN (${mentions.map(() => "?").join(",")})`
-          )
+            )
             .bind(...mentions)
             .all<{ user_id: string; username: string }>()
         : { results: [] as { user_id: string; username: string }[] };
@@ -339,11 +343,12 @@ export class CommunityChannelRoom extends DurableObject<CommunityRoomEnv> {
       username: string | null;
     } | null = null;
     try {
-      await this.env.DB.prepare(
-        `INSERT INTO community_messages
+      await getDb(this.env)
+        .prepare(
+          `INSERT INTO community_messages
            (author_user_id, body, channel_id, community_id, created_at, id, mentions, reply_to_id)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
-      )
+        )
         .bind(
           input.userId,
           input.body,
@@ -355,9 +360,10 @@ export class CommunityChannelRoom extends DurableObject<CommunityRoomEnv> {
           input.replyToId ?? null
         )
         .run();
-      author = await this.env.DB.prepare(
-        "SELECT u.image, u.name, p.username FROM user u LEFT JOIN profiles p ON p.user_id = u.id WHERE u.id = ?"
-      )
+      author = await getDb(this.env)
+        .prepare(
+          "SELECT u.image, u.name, p.username FROM user u LEFT JOIN profiles p ON p.user_id = u.id WHERE u.id = ?"
+        )
         .bind(input.userId)
         .first<{
           image: string | null;

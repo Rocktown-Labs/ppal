@@ -1,6 +1,5 @@
-/* oxlint-disable no-await-in-loop -- Leg updates are serialized per event for deterministic settlement. */
-
 import { marketDefinitions } from "@ppal/contracts/markets";
+/* oxlint-disable no-await-in-loop -- Leg updates are serialized per event for deterministic settlement. */
 import { sportsPollQueueMessageSchema } from "@ppal/contracts/queues";
 import type {
   NotificationIntervalMinutes,
@@ -13,6 +12,7 @@ import { evaluateLeg } from "@ppal/domain/tracking/evaluate-leg";
 import { evaluateTicket } from "@ppal/domain/tracking/evaluate-ticket";
 
 import type { ProductBudgetDecision } from "../durable-objects/sportradar-product-budget";
+import { getDb } from "../lib/database";
 import { refreshHistoricalBatch } from "./historical-imports";
 import { publishNotification } from "./notifications";
 import {
@@ -59,54 +59,39 @@ interface TrackingRow {
   won_at: number | null;
 }
 
-export type SportradarAccessLevel = "production" | "trial";
-type SummaryEvent = Pick<
-  EventRow,
-  "league_slug" | "provider_event_id" | "starts_at"
->;
+export const SPORTSAPI_PRO_PROVIDER = "sportsapipro";
+export const SPORTSAPI_PRO_BASE_URL = "https://api.sportsapipro.com";
 
-export const resolveSportradarAccessLevel = (
-  configured: string | undefined
-): SportradarAccessLevel =>
-  configured === "production" ? "production" : "trial";
-
-const summaryPaths: Record<
-  string,
-  (event: SummaryEvent, accessLevel: SportradarAccessLevel) => string
-> = {
-  f1: (_event, accessLevel) => `formula1/${accessLevel}/v2/en/sport_events`,
-  global_american_football: (_event, accessLevel) =>
-    `americanfootball/${accessLevel}/v2/en/sport_events`,
-  global_baseball: (_event, accessLevel) =>
-    `baseball/${accessLevel}/v2/en/sport_events`,
-  global_basketball: (_event, accessLevel) =>
-    `basketball/${accessLevel}/v2/en/sport_events`,
-  global_ice_hockey: (_event, accessLevel) =>
-    `icehockey/${accessLevel}/v2/en/sport_events`,
-  mlb: (_event, accessLevel) => `mlb/${accessLevel}/v8/en/games`,
-  nba: (_event, accessLevel) => `nba/${accessLevel}/v8/en/games`,
-  ncaafb: (_event, accessLevel) => `ncaafb/${accessLevel}/v7/en/games`,
-  ncaamb: (_event, accessLevel) => `ncaamb/${accessLevel}/v8/en/games`,
-  ncaawb: (_event, accessLevel) => `ncaawb/${accessLevel}/v8/en/games`,
-  nfl: (_event, accessLevel) => `nfl/official/${accessLevel}/v7/en/games`,
-  nhl: (_event, accessLevel) => `nhl/${accessLevel}/v7/en/games`,
-  soccer: (_event, accessLevel) =>
-    `soccer-extended/${accessLevel}/v4/en/sport_events`,
-  tennis: (_event, accessLevel) => `tennis/${accessLevel}/v3/en/sport_events`,
-  ufc: (_event, accessLevel) => `mma/${accessLevel}/v2/en/sport_events`,
-  wnba: (_event, accessLevel) => `wnba/${accessLevel}/v8/en/games`,
+export const SPORTSAPI_SPORT_PATHS: Record<string, string> = {
+  baseball: "baseball",
+  basketball: "basketball",
+  football: "american-football",
+  golf: "golf",
+  hockey: "hockey",
+  mma: "mma",
+  racing: "motorsport",
+  soccer: "football",
+  tennis: "tennis",
 };
 
-const boxscoreLeagues = new Set([
-  "mlb",
-  "nba",
-  "ncaafb",
-  "ncaamb",
-  "ncaawb",
-  "nfl",
-  "nhl",
-  "wnba",
-]);
+const sportSlugFromId = (sportId: string): string =>
+  sportId.replace(/^sport:/u, "").toLowerCase();
+
+export const buildSportsApiMatchPath = (
+  sportSlug: string,
+  providerEventId: string
+): string => {
+  const apiSport = SPORTSAPI_SPORT_PATHS[sportSlug.toLowerCase()];
+  if (!apiSport) {
+    throw new Error(`Unsupported SportsAPI Pro sport: ${sportSlug}`);
+  }
+  return `/v2/${apiSport}/api/match/${encodeURIComponent(providerEventId)}`;
+};
+
+export const buildSportsApiLineupsPath = (
+  sportSlug: string,
+  providerEventId: string
+): string => `${buildSportsApiMatchPath(sportSlug, providerEventId)}/lineups`;
 
 const marketStatKeys = Object.fromEntries(
   Object.entries(marketDefinitions).map(([slug, definition]) => [
@@ -134,11 +119,30 @@ export const collectRecords = (
   if (!record) {
     return;
   }
+  const nestedPlayer = asRecord(record.player);
   if (
-    (typeof record.id === "string" || typeof record.sr_id === "string") &&
+    nestedPlayer &&
+    (typeof nestedPlayer.id === "number" ||
+      typeof nestedPlayer.id === "string") &&
+    record.statistics
+  ) {
+    records.push({
+      ...nestedPlayer,
+      id: String(nestedPlayer.id),
+      statistics: record.statistics,
+    });
+    return;
+  }
+  if (
+    (typeof record.id === "number" ||
+      typeof record.id === "string" ||
+      typeof record.sr_id === "string") &&
     (record.statistics || record.result || typeof record.position === "number")
   ) {
-    records.push(record);
+    records.push({
+      ...record,
+      ...(record.id === undefined ? {} : { id: String(record.id) }),
+    });
   }
   for (const child of Object.values(record)) {
     collectRecords(child, records);
@@ -171,23 +175,29 @@ export const normalizeStatus = (
   summary: Record<string, unknown>,
   previous: SportsEventStatus
 ): SportsEventStatus => {
+  const eventObj = asRecord(summary.event);
   const game = asRecord(summary.game);
   const eventStatus = asRecord(summary.sport_event_status);
+  const statusObj = asRecord(eventObj?.status ?? summary.status);
   const raw = String(
-    game?.status ??
+    statusObj?.type ??
+      game?.status ??
       eventStatus?.status ??
       eventStatus?.match_status ??
-      summary.status ??
+      (typeof summary.status === "string" ? summary.status : "") ??
       ""
   ).toLowerCase();
-  if (["inprogress", "live", "started"].includes(raw)) {
+  if (["inprogress", "live", "started", "pause"].includes(raw)) {
     return "live";
   }
-  if (["closed", "complete", "final", "ended"].includes(raw)) {
+  if (["closed", "complete", "final", "ended", "finished"].includes(raw)) {
     return "final";
   }
-  if (raw === "postponed" || raw === "cancelled") {
-    return raw;
+  if (raw === "postponed") {
+    return "postponed";
+  }
+  if (raw === "canceled" || raw === "cancelled") {
+    return "cancelled";
   }
   return previous;
 };
@@ -196,18 +206,23 @@ export const summaryScores = (
   summary: Record<string, unknown>,
   event: EventRow
 ): { away: number | null; home: number | null } => {
+  const eventObj = asRecord(summary.event);
   const game = asRecord(summary.game);
-  const home = asRecord(game?.home ?? summary.home);
-  const away = asRecord(game?.away ?? summary.away);
+  const home = asRecord(
+    eventObj?.homeScore ?? summary.homeScore ?? game?.home ?? summary.home
+  );
+  const away = asRecord(
+    eventObj?.awayScore ?? summary.awayScore ?? game?.away ?? summary.away
+  );
   const eventStatus = asRecord(summary.sport_event_status);
   return {
     away:
-      findNumber(away, ["points", "runs", "score"]) ??
+      findNumber(away, ["current", "display", "points", "runs", "score"]) ??
       (typeof eventStatus?.away_score === "number"
         ? eventStatus.away_score
         : event.away_score),
     home:
-      findNumber(home, ["points", "runs", "score"]) ??
+      findNumber(home, ["current", "display", "points", "runs", "score"]) ??
       (typeof eventStatus?.home_score === "number"
         ? eventStatus.home_score
         : event.home_score),
@@ -252,76 +267,29 @@ const upsertObservedParticipants = async (
       .slice(start, start + 100)
       .map(([providerId, record]) => {
         const name = participantName(record);
-        return workerEnv.DB.prepare(
-          `INSERT INTO participants (id, league_id, name, provider, provider_participant_id, short_name, sport_id, type, updated_at)
-         VALUES (?, ?, ?, 'sportradar', ?, ?, ?, 'player', ?)
+        return getDb(workerEnv)
+          .prepare(
+            `INSERT INTO participants (id, league_id, name, provider, provider_participant_id, short_name, sport_id, type, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, 'player', ?)
          ON CONFLICT(provider, provider_participant_id) DO UPDATE SET name = excluded.name,
            short_name = excluded.short_name, league_id = excluded.league_id,
            sport_id = excluded.sport_id, updated_at = excluded.updated_at`
-        ).bind(
-          `participant:${providerId}`,
-          event.league_id,
-          name,
-          providerId,
-          String(record.abbr_name ?? record.abbreviation ?? name),
-          event.sport_id,
-          Date.now()
-        );
+          )
+          .bind(
+            `participant:${SPORTSAPI_PRO_PROVIDER}:${providerId}`,
+            event.league_id,
+            name,
+            SPORTSAPI_PRO_PROVIDER,
+            providerId,
+            String(record.abbr_name ?? record.abbreviation ?? name),
+            event.sport_id,
+            Date.now()
+          );
       });
     if (statements.length > 0) {
-      await workerEnv.DB.batch(statements);
+      await getDb(workerEnv).batch(statements);
     }
   }
-};
-
-export const buildSportradarSummaryPath = (
-  event: SummaryEvent,
-  accessLevel: SportradarAccessLevel
-): string => {
-  const basePath = summaryPaths[event.league_slug];
-  if (
-    !(basePath || event.league_slug === "nascar" || event.league_slug === "pga")
-  ) {
-    throw new Error(`Unsupported Sportradar league: ${event.league_slug}`);
-  }
-  if (event.league_slug === "nascar") {
-    const tier = accessLevel === "trial" ? "ot3" : "t3";
-    return `nascar-${tier}/mc/races/${encodeURIComponent(event.provider_event_id)}/results.json`;
-  }
-  if (event.league_slug === "pga") {
-    const year = new Date(event.starts_at).getUTCFullYear();
-    return `golf/${accessLevel}/pga/v3/en/${year}/tournaments/${encodeURIComponent(event.provider_event_id)}/leaderboard.json`;
-  }
-  if (!basePath) {
-    throw new Error(`Unsupported Sportradar league: ${event.league_slug}`);
-  }
-  const suffix = boxscoreLeagues.has(event.league_slug)
-    ? "boxscore.json"
-    : "summary.json";
-  return `${basePath(event, accessLevel)}/${encodeURIComponent(event.provider_event_id)}/${suffix}`;
-};
-
-const fetchSummary = async (
-  event: EventRow,
-  workerEnv: Env
-): Promise<{ payload: Record<string, unknown>; sequence: string }> => {
-  const accessLevel = resolveSportradarAccessLevel(
-    workerEnv.SPORTRADAR_ACCESS_LEVEL
-  );
-  const requestPath = buildSportradarSummaryPath(event, accessLevel);
-  const url = new URL(requestPath, "https://api.sportradar.com/");
-  url.searchParams.set("api_key", workerEnv.SPORTRADAR_API_KEY);
-  const response = await fetch(url, {
-    headers: { accept: "application/json" },
-  });
-  const text = await response.text();
-  if (!response.ok) {
-    throw new Error(`Sportradar request failed (${response.status})`);
-  }
-  return {
-    payload: JSON.parse(text) as Record<string, unknown>,
-    sequence: await sha256Hex(text),
-  };
 };
 
 const positiveNumber = (
@@ -332,24 +300,127 @@ const positiveNumber = (
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 };
 
-export const acquireSportradarProductBudget = async (
-  leagueSlug: string,
+export const acquireSportsApiBudget = async (
   workerEnv: Env
 ): Promise<ProductBudgetDecision> => {
   const namespace = workerEnv.SPORTRADAR_PRODUCT_BUDGET;
-  const stub = namespace.get(namespace.idFromName(leagueSlug));
+  const stub = namespace.get(namespace.idFromName("sportsapipro:global"));
   return await stub.acquire({
-    qps: positiveNumber(workerEnv.SPORTRADAR_QPS, 1),
+    qps: positiveNumber(workerEnv.SPORTSAPI_PRO_QPS, 2),
     rollingQuota: Math.floor(
-      positiveNumber(workerEnv.SPORTRADAR_ROLLING_QUOTA, 1000)
+      positiveNumber(workerEnv.SPORTSAPI_PRO_DAILY_QUOTA, 100)
     ),
-    rollingWindowMs:
-      positiveNumber(workerEnv.SPORTRADAR_ROLLING_WINDOW_DAYS, 30) *
-      24 *
-      60 *
-      60 *
-      1000,
+    rollingWindowMs: 24 * 60 * 60 * 1000,
   });
+};
+
+const parseRateLimitResetMs = (rawHeader: string | null): number | null => {
+  if (!rawHeader) {
+    return null;
+  }
+  const trimmed = rawHeader.trim();
+  if (!trimmed) {
+    return null;
+  }
+  const numeric = Number(trimmed);
+  if (Number.isFinite(numeric) && numeric > 0) {
+    return numeric > 1_000_000_000_000 ? numeric : numeric * 1000;
+  }
+  const parsed = Date.parse(trimmed);
+  return Number.isNaN(parsed) ? null : parsed;
+};
+
+export const syncSportsApiQuotaHeaders = async (
+  headers: Headers,
+  workerEnv: Env
+): Promise<void> => {
+  const remainingHeader = headers.get("x-ratelimit-remaining");
+  const resetHeader = headers.get("x-ratelimit-reset");
+  const remaining =
+    remainingHeader !== null &&
+    remainingHeader.trim() !== "" &&
+    Number.isFinite(Number(remainingHeader))
+      ? Number(remainingHeader)
+      : null;
+  const resetAt = parseRateLimitResetMs(resetHeader);
+  if (remaining === null && resetAt === null) {
+    return;
+  }
+  const namespace = workerEnv.SPORTRADAR_PRODUCT_BUDGET;
+  const stub = namespace.get(namespace.idFromName("sportsapipro:global"));
+  await stub.syncQuota({ remaining, resetAt });
+};
+
+const fetchSportsApiJson = async (
+  path: string,
+  workerEnv: Env
+): Promise<{ payload: Record<string, unknown>; text: string }> => {
+  const apiKey = workerEnv.SPORTSAPI_PRO_API_KEY?.trim();
+  if (!apiKey) {
+    throw new Error("SPORTSAPI_PRO_API_KEY is not configured");
+  }
+  const url = new URL(path, SPORTSAPI_PRO_BASE_URL);
+  const response = await fetch(url, {
+    headers: {
+      accept: "application/json",
+      "user-agent": "ParlayPal/2.0",
+      "x-api-key": apiKey,
+    },
+  });
+  await syncSportsApiQuotaHeaders(response.headers, workerEnv);
+  const text = await response.text();
+  if (!response.ok) {
+    throw new Error(`SportsAPI Pro request failed (${response.status})`);
+  }
+  return {
+    payload: JSON.parse(text) as Record<string, unknown>,
+    text,
+  };
+};
+
+const fetchSummary = async (
+  event: EventRow,
+  needsPlayerBoxscore: boolean,
+  workerEnv: Env
+): Promise<{ payload: Record<string, unknown>; sequence: string }> => {
+  const sportSlug = sportSlugFromId(event.sport_id);
+  const matchPath = buildSportsApiMatchPath(sportSlug, event.provider_event_id);
+  const match = await fetchSportsApiJson(matchPath, workerEnv);
+  let combinedPayload: Record<string, unknown> = match.payload;
+  let hashInput = match.text;
+
+  if (needsPlayerBoxscore) {
+    const lineupBudget = await acquireSportsApiBudget(workerEnv);
+    if (lineupBudget.granted) {
+      try {
+        const lineups = await fetchSportsApiJson(
+          buildSportsApiLineupsPath(sportSlug, event.provider_event_id),
+          workerEnv
+        );
+        combinedPayload = {
+          ...match.payload,
+          lineups: lineups.payload,
+        };
+        hashInput = `${match.text}:${lineups.text}`;
+      } catch (error) {
+        // Lineups may not be published before tip-off/kickoff; continue with match scores.
+        workerEnv.ANALYTICS.writeDataPoint({
+          blobs: [
+            "sportsapipro.lineups_unavailable",
+            sportSlug,
+            error instanceof Error ? error.message.slice(0, 120) : "unknown",
+          ],
+          doubles: [1],
+          indexes: [event.id],
+        });
+      }
+    }
+  }
+
+  return {
+    payload: combinedPayload,
+    sequence: await sha256Hex(hashInput),
+  };
 };
 
 const releaseEventLease = async (
@@ -357,9 +428,10 @@ const releaseEventLease = async (
   leaseToken: number,
   workerEnv: Env
 ): Promise<void> => {
-  await workerEnv.DB.prepare(
-    "UPDATE sports_events SET poll_lease_until = NULL WHERE id = ? AND poll_lease_until = ?"
-  )
+  await getDb(workerEnv)
+    .prepare(
+      "UPDATE sports_events SET poll_lease_until = NULL WHERE id = ? AND poll_lease_until = ?"
+    )
     .bind(eventId, leaseToken)
     .run();
 };
@@ -418,8 +490,9 @@ const publishTicketProgress = async ({
   ) {
     return;
   }
-  const legs = await workerEnv.DB.prepare(
-    `SELECT away.name AS away_name, e.away_score, l.current_value,
+  const legs = await getDb(workerEnv)
+    .prepare(
+      `SELECT away.name AS away_name, e.away_score, l.current_value,
       home.name AS home_name, e.home_score, l.id, l.last_notified_snapshot,
       m.slug AS market_slug, l.status, l.subject_name, l.target_value
      FROM ticket_legs l
@@ -428,7 +501,7 @@ const publishTicketProgress = async ({
      LEFT JOIN participants away ON away.id = e.away_participant_id
      LEFT JOIN participants home ON home.id = e.home_participant_id
      WHERE l.ticket_id = ? ORDER BY l.created_at, l.id`
-  )
+    )
     .bind(ticketId)
     .all<ProgressLegRow>();
   const lines = legs.results
@@ -453,12 +526,13 @@ const publishTicketProgress = async ({
   }
 
   const cutoff = now - pollingDelayMs(ticketState.notificationIntervalMinutes);
-  const claim = await workerEnv.DB.prepare(
-    terminal
-      ? "UPDATE tickets SET last_progress_notified_at = ? WHERE id = ?"
-      : `UPDATE tickets SET last_progress_notified_at = ? WHERE id = ?
+  const claim = await getDb(workerEnv)
+    .prepare(
+      terminal
+        ? "UPDATE tickets SET last_progress_notified_at = ? WHERE id = ?"
+        : `UPDATE tickets SET last_progress_notified_at = ? WHERE id = ?
          AND (last_progress_notified_at IS NULL OR last_progress_notified_at <= ?)`
-  )
+    )
     .bind(...(terminal ? [now, ticketId] : [now, ticketId, cutoff]))
     .run();
   if (claim.meta.changes === 0) {
@@ -484,11 +558,13 @@ const publishTicketProgress = async ({
     workerEnv,
   });
   if (lines.length > 0) {
-    await workerEnv.DB.batch(
+    await getDb(workerEnv).batch(
       lines.map((line) =>
-        workerEnv.DB.prepare(
-          "UPDATE ticket_legs SET last_notified_snapshot = ? WHERE id = ?"
-        ).bind(line.snapshot, line.legId)
+        getDb(workerEnv)
+          .prepare(
+            "UPDATE ticket_legs SET last_notified_snapshot = ? WHERE id = ?"
+          )
+          .bind(line.snapshot, line.legId)
       )
     );
   }
@@ -501,32 +577,36 @@ export const processSportsMessage = async (
   workerEnv: Env
 ): Promise<void> => {
   const message = sportsPollQueueMessageSchema.parse(body);
-  const event = await workerEnv.DB.prepare(
-    `SELECT e.away_participant_id, e.away_score, e.home_participant_id,
+  const event = await getDb(workerEnv)
+    .prepare(
+      `SELECT e.away_participant_id, e.away_score, e.home_participant_id,
       e.home_score, e.id, e.league_id, e.provider_event_id, e.starts_at, e.status,
       l.slug AS league_slug, l.sport_id FROM sports_events e
       JOIN leagues l ON l.id = e.league_id
       WHERE e.id = ? AND e.poll_lease_until = ?`
-  )
+    )
     .bind(message.eventId, Number(message.leaseToken))
     .first<EventRow>();
   if (!event) {
     return;
   }
-  const cadence = await workerEnv.DB.prepare(
-    `SELECT MIN(t.notification_interval_minutes) AS minutes
+  const cadence = await getDb(workerEnv)
+    .prepare(
+      `SELECT MIN(t.notification_interval_minutes) AS minutes
      FROM tracking_subscriptions s
      JOIN ticket_legs l ON l.id = s.ticket_leg_id
      JOIN tickets t ON t.id = l.ticket_id
      WHERE s.sports_event_id = ? AND s.status = 'active'`
-  )
+    )
     .bind(event.id)
     .first<{ minutes: NotificationIntervalMinutes | null }>();
   if (cadence?.minutes === null || cadence?.minutes === undefined) {
-    await workerEnv.DB.batch([
-      workerEnv.DB.prepare(
-        "UPDATE sports_events SET next_poll_at = NULL, poll_lease_until = NULL, updated_at = ? WHERE id = ? AND poll_lease_until = ?"
-      ).bind(Date.now(), event.id, Number(message.leaseToken)),
+    await getDb(workerEnv).batch([
+      getDb(workerEnv)
+        .prepare(
+          "UPDATE sports_events SET next_poll_at = NULL, poll_lease_until = NULL, updated_at = ? WHERE id = ? AND poll_lease_until = ?"
+        )
+        .bind(Date.now(), event.id, Number(message.leaseToken)),
     ]);
     return;
   }
@@ -537,49 +617,58 @@ export const processSportsMessage = async (
     startsAt: event.starts_at,
   });
   if (event.status === "scheduled" && firstPollAt > now) {
-    await workerEnv.DB.prepare(
-      `UPDATE sports_events SET next_poll_at = ?, poll_lease_until = NULL,
+    await getDb(workerEnv)
+      .prepare(
+        `UPDATE sports_events SET next_poll_at = ?, poll_lease_until = NULL,
        updated_at = ? WHERE id = ? AND poll_lease_until = ?`
-    )
+      )
       .bind(firstPollAt, now, event.id, Number(message.leaseToken))
       .run();
     return;
   }
-  const budget = await acquireSportradarProductBudget(
-    event.league_slug,
-    workerEnv
-  );
+  const budget = await acquireSportsApiBudget(workerEnv);
   if (!budget.granted) {
     const retryAt = Date.now() + budget.retryAfterMs;
-    await workerEnv.DB.prepare(
-      `UPDATE sports_events SET next_poll_at = ?, poll_lease_until = NULL,
+    await getDb(workerEnv)
+      .prepare(
+        `UPDATE sports_events SET next_poll_at = ?, poll_lease_until = NULL,
        updated_at = ? WHERE id = ? AND poll_lease_until = ?`
-    )
+      )
       .bind(retryAt, Date.now(), event.id, Number(message.leaseToken))
       .run();
     return;
   }
+  const playerSubCount = await getDb(workerEnv)
+    .prepare(
+      `SELECT COUNT(*) AS count FROM tracking_subscriptions s
+       JOIN ticket_legs l ON l.id = s.ticket_leg_id
+       WHERE s.sports_event_id = ? AND s.status = 'active' AND l.subject_type = 'player'`
+    )
+    .bind(event.id)
+    .first<{ count: number }>();
+  const needsPlayerBoxscore = (playerSubCount?.count ?? 0) > 0;
   let summary: {
     payload: Record<string, unknown>;
     sequence: string;
   };
   try {
-    summary = await fetchSummary(event, workerEnv);
+    summary = await fetchSummary(event, needsPlayerBoxscore, workerEnv);
   } catch (error) {
-    // Provider outages, 429s, or an expired trial must not trigger the queue's
-    // rapid retries: park the event with backoff and return normally.
+    // Provider outages or 429s must not trigger the queue's rapid retries:
+    // park the event with backoff and return normally.
     const detail =
       error instanceof Error ? error.message : "Unknown provider error";
     const quotaHit = /(?<quota>429|403|quota|limit)/iu.test(detail);
     const retryAt = Date.now() + (quotaHit ? 15 * 60 * 1000 : 2 * 60 * 1000);
-    await workerEnv.DB.prepare(
-      `UPDATE sports_events SET next_poll_at = ?, poll_lease_until = NULL,
+    await getDb(workerEnv)
+      .prepare(
+        `UPDATE sports_events SET next_poll_at = ?, poll_lease_until = NULL,
        updated_at = ? WHERE id = ?`
-    )
+      )
       .bind(retryAt, Date.now(), event.id)
       .run();
     workerEnv.ANALYTICS.writeDataPoint({
-      blobs: ["sportradar.poll_failed", event.league_slug],
+      blobs: ["sportsapipro.poll_failed", event.league_slug],
       doubles: [quotaHit ? 1 : 0],
       indexes: [event.league_slug],
     });
@@ -599,11 +688,12 @@ export const processSportsMessage = async (
     );
   }
   const leaseToken = Number(message.leaseToken);
-  const eventUpdate = await workerEnv.DB.prepare(
-    `UPDATE sports_events SET away_score = ?, home_score = ?, last_synced_at = ?,
+  const eventUpdate = await getDb(workerEnv)
+    .prepare(
+      `UPDATE sports_events SET away_score = ?, home_score = ?, last_synced_at = ?,
       next_poll_at = ?, provider_payload = ?, status = ?, updated_at = ?
      WHERE id = ? AND poll_lease_until = ?`
-  )
+    )
     .bind(
       scores.away,
       scores.home,
@@ -621,8 +711,9 @@ export const processSportsMessage = async (
   }
 
   try {
-    const tracked = await workerEnv.DB.prepare(
-      `SELECT l.current_value, l.id AS leg_id, l.lost_at, l.operator,
+    const tracked = await getDb(workerEnv)
+      .prepare(
+        `SELECT l.current_value, l.id AS leg_id, l.lost_at, l.operator,
       l.market_components, l.participant_id, l.settled_at, l.status AS leg_status, l.target_value,
       l.ticket_id, l.won_at, m.id AS market_id, m.slug AS market_slug,
       p.provider_participant_id, t.historical_import_batch_id, t.ingestion_mode,
@@ -634,7 +725,7 @@ export const processSportsMessage = async (
      JOIN markets m ON m.id = s.market_id
      LEFT JOIN participants p ON p.id = s.participant_id
      WHERE s.sports_event_id = ? AND s.status = 'active'`
-    )
+      )
       .bind(event.id)
       .all<TrackingRow>();
     const playerRecords: Record<string, unknown>[] = [];
@@ -654,14 +745,18 @@ export const processSportsMessage = async (
     for (const trackedLeg of tracked.results) {
       if (status === "cancelled") {
         const cancelledAt = Date.now();
-        await workerEnv.DB.batch([
-          workerEnv.DB.prepare(
-            `UPDATE ticket_legs SET settled_at = ?, status = 'void', updated_at = ?, version = version + 1
+        await getDb(workerEnv).batch([
+          getDb(workerEnv)
+            .prepare(
+              `UPDATE ticket_legs SET settled_at = ?, status = 'void', updated_at = ?, version = version + 1
            WHERE id = ? AND status IN ('pending', 'live', 'unresolved')`
-          ).bind(cancelledAt, cancelledAt, trackedLeg.leg_id),
-          workerEnv.DB.prepare(
-            "UPDATE tracking_subscriptions SET status = 'completed', updated_at = ? WHERE ticket_leg_id = ?"
-          ).bind(cancelledAt, trackedLeg.leg_id),
+            )
+            .bind(cancelledAt, cancelledAt, trackedLeg.leg_id),
+          getDb(workerEnv)
+            .prepare(
+              "UPDATE tracking_subscriptions SET status = 'completed', updated_at = ? WHERE ticket_leg_id = ?"
+            )
+            .bind(cancelledAt, trackedLeg.leg_id),
         ]);
         affectedTickets.set(trackedLeg.ticket_id, {
           historicalImportBatchId: trackedLeg.historical_import_batch_id,
@@ -736,19 +831,21 @@ export const processSportsMessage = async (
         }
         continue;
       }
-      const observationKey = `sportradar:${event.id}:${trackedLeg.participant_id}:${trackedLeg.market_id}:${sequence}`;
-      await workerEnv.DB.prepare(
-        `INSERT INTO stat_observations (
+      const observationKey = `${SPORTSAPI_PRO_PROVIDER}:${event.id}:${trackedLeg.participant_id}:${trackedLeg.market_id}:${sequence}`;
+      await getDb(workerEnv)
+        .prepare(
+          `INSERT INTO stat_observations (
         idempotency_key, market_id, observed_at, participant_id, provider,
         provider_sequence, sports_event_id, value
-      ) VALUES (?, ?, ?, ?, 'sportradar', ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(idempotency_key) DO NOTHING`
-      )
+        )
         .bind(
           observationKey,
           trackedLeg.market_id,
           Date.now(),
           trackedLeg.participant_id,
+          SPORTSAPI_PRO_PROVIDER,
           sequence,
           event.id,
           value
@@ -778,10 +875,11 @@ export const processSportsMessage = async (
         },
         value
       );
-      await workerEnv.DB.prepare(
-        `UPDATE ticket_legs SET current_value = ?, lost_at = ?, settled_at = ?,
+      await getDb(workerEnv)
+        .prepare(
+          `UPDATE ticket_legs SET current_value = ?, lost_at = ?, settled_at = ?,
         status = ?, updated_at = ?, version = version + 1, won_at = ? WHERE id = ?`
-      )
+        )
         .bind(
           evaluation.currentValue,
           evaluation.lostAt?.getTime() ?? null,
@@ -803,9 +901,8 @@ export const processSportsMessage = async (
     }
 
     for (const [ticketId, ticketState] of affectedTickets) {
-      const legRows = await workerEnv.DB.prepare(
-        "SELECT status FROM ticket_legs WHERE ticket_id = ?"
-      )
+      const legRows = await getDb(workerEnv)
+        .prepare("SELECT status FROM ticket_legs WHERE ticket_id = ?")
         .bind(ticketId)
         .all<{ status: TicketLegStatus }>();
       const result = evaluateTicket({
@@ -819,11 +916,12 @@ export const processSportsMessage = async (
           (result.status === "won" ||
             result.status === "lost" ||
             result.status === "void");
-        await workerEnv.DB.prepare(
-          `UPDATE tickets SET result_source = CASE WHEN ? THEN 'historical_provider' ELSE result_source END,
+        await getDb(workerEnv)
+          .prepare(
+            `UPDATE tickets SET result_source = CASE WHEN ? THEN 'historical_provider' ELSE result_source END,
          settled_at = ?, status = ?, updated_at = ?, verification_status = CASE WHEN ? THEN 'verified' ELSE verification_status END,
          verified_at = CASE WHEN ? THEN ? ELSE verified_at END, version = version + 1 WHERE id = ?`
-        )
+          )
           .bind(
             Number(providerVerified),
             result.settledAt?.getTime() ?? null,
@@ -837,7 +935,7 @@ export const processSportsMessage = async (
           .run();
         if (ticketState.historicalImportBatchId) {
           await refreshHistoricalBatch(
-            workerEnv.DB,
+            getDb(workerEnv),
             ticketState.historicalImportBatchId
           );
         }
@@ -863,15 +961,20 @@ export const processSportsMessage = async (
 export const enqueueDueSportsEvents = async (workerEnv: Env): Promise<void> => {
   const now = Date.now();
   const leaseUntil = now + 60_000;
-  const due = await workerEnv.DB.prepare(
-    `UPDATE sports_events SET poll_lease_until = ?, updated_at = ?
+  const due = await getDb(workerEnv)
+    .prepare(
+      `UPDATE sports_events SET poll_lease_until = ?, updated_at = ?
      WHERE id IN (
-       SELECT id FROM sports_events
-       WHERE status IN ('scheduled', 'live') AND next_poll_at <= ?
-         AND (poll_lease_until IS NULL OR poll_lease_until < ?)
-       ORDER BY next_poll_at LIMIT 100
+       SELECT e.id FROM sports_events e
+       WHERE e.status IN ('scheduled', 'live') AND e.next_poll_at <= ?
+         AND (e.poll_lease_until IS NULL OR e.poll_lease_until < ?)
+         AND EXISTS (
+           SELECT 1 FROM tracking_subscriptions s
+           WHERE s.sports_event_id = e.id AND s.status = 'active'
+         )
+       ORDER BY e.next_poll_at LIMIT 100
      ) RETURNING id`
-  )
+    )
     .bind(leaseUntil, now, now, now)
     .all<{ id: string }>();
   if (due.results.length === 0) {

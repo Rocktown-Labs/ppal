@@ -1,23 +1,24 @@
 import { sql } from "drizzle-orm";
 import {
+  bigint,
   check,
   index,
   integer,
-  sqliteTable,
+  pgTable,
   text,
   uniqueIndex,
-} from "drizzle-orm/sqlite-core";
+} from "drizzle-orm/pg-core";
 
 import { user } from "./auth";
 import { createdAtColumn, updatedAtColumn } from "./columns";
 
-export const uploads = sqliteTable(
+export const uploads = pgTable(
   "uploads",
   {
     aiModel: text("ai_model"),
     aiResponseVersion: text("ai_response_version"),
     createdAt: createdAtColumn(),
-    deletedAt: integer("deleted_at", { mode: "timestamp_ms" }),
+    deletedAt: bigint("deleted_at", { mode: "number" }),
     fileSize: integer("file_size"),
     historicalImportBatchId: text("historical_import_batch_id"),
     id: text("id").primaryKey(),
@@ -25,10 +26,8 @@ export const uploads = sqliteTable(
     mimeType: text("mime_type"),
     objectKey: text("object_key").notNull().unique(),
     originalFilename: text("original_filename"),
-    readyAt: integer("ready_at", { mode: "timestamp_ms" }),
-    retentionExpiresAt: integer("retention_expires_at", {
-      mode: "timestamp_ms",
-    }),
+    readyAt: bigint("ready_at", { mode: "number" }),
+    retentionExpiresAt: bigint("retention_expires_at", { mode: "number" }),
     sha256: text("sha256"),
     status: text("status").notNull().default("pending"),
     updatedAt: updatedAtColumn(),
@@ -51,21 +50,16 @@ export const uploads = sqliteTable(
   ]
 );
 
-export const extractions = sqliteTable(
+export const extractions = pgTable(
   "extractions",
   {
     createdAt: createdAtColumn(),
     errorMessage: text("error_message"),
     id: text("id").primaryKey(),
     model: text("model"),
-    normalizedResponse: text("normalized_response", {
-      mode: "json",
-    }).$type<Record<string, unknown> | null>(),
+    normalizedResponse: text("normalized_response"),
     provider: text("provider").notNull(),
-    rawResponse: text("raw_response", { mode: "json" }).$type<Record<
-      string,
-      unknown
-    > | null>(),
+    rawResponse: text("raw_response"),
     schemaVersion: text("schema_version").notNull(),
     status: text("status").notNull().default("pending"),
     updatedAt: updatedAtColumn(),
@@ -85,10 +79,10 @@ export const extractions = sqliteTable(
   ]
 );
 
-export const historicalImportBatches = sqliteTable(
+export const historicalImportBatches = pgTable(
   "historical_import_batches",
   {
-    completedAt: integer("completed_at", { mode: "timestamp_ms" }),
+    completedAt: bigint("completed_at", { mode: "number" }),
     createdAt: createdAtColumn(),
     duplicateCount: integer("duplicate_count").notNull().default(0),
     failedCount: integer("failed_count").notNull().default(0),

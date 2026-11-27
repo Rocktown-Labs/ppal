@@ -1,13 +1,13 @@
 import { sql } from "drizzle-orm";
-import { integer } from "drizzle-orm/sqlite-core";
+import { bigint } from "drizzle-orm/pg-core";
+
+export const epochMsNowSql = sql`(extract(epoch from now()) * 1000)::bigint`;
 
 export const createdAtColumn = () =>
-  integer("created_at", { mode: "timestamp_ms" })
-    .default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)
-    .notNull();
+  bigint("created_at", { mode: "number" }).default(epochMsNowSql).notNull();
 
 export const updatedAtColumn = () =>
-  integer("updated_at", { mode: "timestamp_ms" })
-    .default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)
-    .$onUpdate(() => new Date())
+  bigint("updated_at", { mode: "number" })
+    .default(epochMsNowSql)
+    .$onUpdate(() => Date.now())
     .notNull();

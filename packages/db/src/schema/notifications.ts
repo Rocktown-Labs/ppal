@@ -1,47 +1,38 @@
 import { sql } from "drizzle-orm";
 import {
+  bigint,
   check,
   index,
   integer,
-  sqliteTable,
+  pgTable,
   text,
-} from "drizzle-orm/sqlite-core";
+} from "drizzle-orm/pg-core";
 
 import { user } from "./auth";
 import { createdAtColumn, updatedAtColumn } from "./columns";
 import { tickets } from "./tickets";
 
-export const notificationPreferences = sqliteTable("notification_preferences", {
-  emailEnabled: integer("email_enabled", { mode: "boolean" })
-    .notNull()
-    .default(true),
-  inAppEnabled: integer("in_app_enabled", { mode: "boolean" })
-    .notNull()
-    .default(true),
-  legLost: integer("leg_lost", { mode: "boolean" }).notNull().default(true),
-  legWon: integer("leg_won", { mode: "boolean" }).notNull().default(true),
-  pushEnabled: integer("push_enabled", { mode: "boolean" })
-    .notNull()
-    .default(true),
-  smsEnabled: integer("sms_enabled", { mode: "boolean" })
-    .notNull()
-    .default(false),
-  ticketLost: integer("ticket_lost", { mode: "boolean" })
-    .notNull()
-    .default(true),
-  ticketWon: integer("ticket_won", { mode: "boolean" }).notNull().default(true),
+export const notificationPreferences = pgTable("notification_preferences", {
+  emailEnabled: integer("email_enabled").notNull().default(1),
+  inAppEnabled: integer("in_app_enabled").notNull().default(1),
+  legLost: integer("leg_lost").notNull().default(1),
+  legWon: integer("leg_won").notNull().default(1),
+  pushEnabled: integer("push_enabled").notNull().default(1),
+  smsEnabled: integer("sms_enabled").notNull().default(0),
+  ticketLost: integer("ticket_lost").notNull().default(1),
+  ticketWon: integer("ticket_won").notNull().default(1),
   updatedAt: updatedAtColumn(),
   userId: text("user_id")
     .primaryKey()
     .references(() => user.id, { onDelete: "cascade" }),
 });
 
-export const deviceTokens = sqliteTable(
+export const deviceTokens = pgTable(
   "device_tokens",
   {
     createdAt: createdAtColumn(),
     id: text("id").primaryKey(),
-    lastSeenAt: integer("last_seen_at", { mode: "timestamp_ms" }).notNull(),
+    lastSeenAt: bigint("last_seen_at", { mode: "number" }).notNull(),
     platform: text("platform").notNull(),
     token: text("token").notNull(),
     tokenHash: text("token_hash").notNull().unique(),
@@ -59,21 +50,16 @@ export const deviceTokens = sqliteTable(
   ]
 );
 
-export const notifications = sqliteTable(
+export const notifications = pgTable(
   "notifications",
   {
     body: text("body").notNull(),
     createdAt: createdAtColumn(),
-    data: text("data", { mode: "json" }).$type<Record<
-      string,
-      unknown
-    > | null>(),
+    data: text("data"),
     id: text("id").primaryKey(),
-    inAppVisible: integer("in_app_visible", { mode: "boolean" })
-      .notNull()
-      .default(true),
+    inAppVisible: integer("in_app_visible").notNull().default(1),
     milestoneKey: text("milestone_key").notNull().unique(),
-    readAt: integer("read_at", { mode: "timestamp_ms" }),
+    readAt: bigint("read_at", { mode: "number" }),
     ticketId: text("ticket_id").references(() => tickets.id, {
       onDelete: "cascade",
     }),
@@ -92,13 +78,13 @@ export const notifications = sqliteTable(
   ]
 );
 
-export const notificationDeliveries = sqliteTable(
+export const notificationDeliveries = pgTable(
   "notification_deliveries",
   {
     attempts: integer("attempts").notNull().default(0),
     channel: text("channel").notNull(),
     createdAt: createdAtColumn(),
-    deliveredAt: integer("delivered_at", { mode: "timestamp_ms" }),
+    deliveredAt: bigint("delivered_at", { mode: "number" }),
     deliveryKey: text("delivery_key").notNull().unique(),
     destination: text("destination").notNull(),
     errorMessage: text("error_message"),
@@ -126,13 +112,13 @@ export const notificationDeliveries = sqliteTable(
   ]
 );
 
-export const webPushSubscriptions = sqliteTable(
+export const webPushSubscriptions = pgTable(
   "web_push_subscriptions",
   {
     auth: text("auth").notNull(),
     createdAt: createdAtColumn(),
     endpoint: text("endpoint").primaryKey(),
-    lastSeenAt: integer("last_seen_at", { mode: "timestamp_ms" }).notNull(),
+    lastSeenAt: bigint("last_seen_at", { mode: "number" }).notNull(),
     p256dh: text("p256dh").notNull(),
     updatedAt: updatedAtColumn(),
     userId: text("user_id")
@@ -142,11 +128,11 @@ export const webPushSubscriptions = sqliteTable(
   (table) => [index("web_push_subscriptions_user_idx").on(table.userId)]
 );
 
-export const notificationStreamLeases = sqliteTable(
+export const notificationStreamLeases = pgTable(
   "notification_stream_leases",
   {
     connectionId: text("connection_id").notNull(),
-    expiresAt: integer("expires_at", { mode: "timestamp_ms" }).notNull(),
+    expiresAt: bigint("expires_at", { mode: "number" }).notNull(),
     userId: text("user_id")
       .primaryKey()
       .references(() => user.id, { onDelete: "cascade" }),

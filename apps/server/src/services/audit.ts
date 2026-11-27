@@ -1,4 +1,4 @@
-import { env } from "@ppal/env/server";
+import { getDb } from "../lib/database";
 
 interface AuditEvent {
   action: string;
@@ -11,12 +11,13 @@ interface AuditEvent {
 }
 
 export const writeAuditEvent = async (event: AuditEvent): Promise<void> => {
-  await env.DB.prepare(
-    `INSERT INTO audit_logs (
+  await getDb()
+    .prepare(
+      `INSERT INTO audit_logs (
       action, actor_user_id, id, ip_country, metadata, occurred_at, outcome,
       request_id, target_id, target_type
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-  )
+    )
     .bind(
       event.action,
       event.actorUserId,

@@ -4,6 +4,7 @@ import { Hono } from "hono";
 import { z } from "zod";
 
 import { getAuthUser } from "../lib/auth";
+import { getDb } from "../lib/database";
 
 const revenueCatEventSchema = z.object({
   aliases: z.array(z.string()).default([]),
@@ -139,9 +140,10 @@ const processRevenueCatEvent = async (
   const status = resolveRevenueCatStatus(event);
   const now = Date.now();
   if (!status) {
-    await env.DB.prepare(
-      "UPDATE webhook_receipts SET status = 'processed', processed_at = ? WHERE provider = 'revenuecat' AND provider_event_id = ?"
-    )
+    await getDb()
+      .prepare(
+        "UPDATE webhook_receipts SET status = 'processed', processed_at = ? WHERE provider = 'revenuecat' AND provider_event_id = ?"
+      )
       .bind(now, event.id)
       .run();
     return;
@@ -155,9 +157,8 @@ const processRevenueCatEvent = async (
     ]),
   ];
   const placeholders = candidateIds.map(() => "?").join(", ");
-  const matchedUser = await env.DB.prepare(
-    `SELECT id FROM user WHERE id IN (${placeholders}) LIMIT 1`
-  )
+  const matchedUser = await getDb()
+    .prepare(`SELECT id FROM user WHERE id IN (${placeholders}) LIMIT 1`)
     .bind(...candidateIds)
     .first<{ id: string }>();
   if (!matchedUser) {
@@ -166,9 +167,10 @@ const processRevenueCatEvent = async (
   const entitlementIds = event.entitlement_ids ?? [];
   const plan = resolveRevenueCatPlan(entitlementIds);
   if (!plan && status !== "expired") {
-    await env.DB.prepare(
-      "UPDATE webhook_receipts SET status = 'processed', processed_at = ? WHERE provider = 'revenuecat' AND provider_event_id = ?"
-    )
+    await getDb()
+      .prepare(
+        "UPDATE webhook_receipts SET status = 'processed', processed_at = ? WHERE provider = 'revenuecat' AND provider_event_id = ?"
+      )
       .bind(now, event.id)
       .run();
     return;
@@ -178,9 +180,10 @@ const processRevenueCatEvent = async (
   const expiresAt =
     event.grace_period_expiration_at_ms ?? event.expiration_at_ms ?? null;
   const effectiveAt = event.event_timestamp_ms;
-  await env.DB.batch([
-    env.DB.prepare(
-      `INSERT INTO billing_entitlements (
+  await getDb().batch([
+    getDb()
+      .prepare(
+        `INSERT INTO billing_entitlements (
         created_at, current_period_end, current_period_start, effective_at,
         expires_at, id, plan, provider_reference, source, status, updated_at, user_id
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'revenuecat', ?, ?, ?)
@@ -194,22 +197,25 @@ const processRevenueCatEvent = async (
         updated_at = excluded.updated_at,
         user_id = excluded.user_id
       WHERE excluded.effective_at >= billing_entitlements.effective_at`
-    ).bind(
-      now,
-      event.expiration_at_ms,
-      event.purchased_at_ms ?? event.event_timestamp_ms,
-      effectiveAt,
-      expiresAt,
-      `revenuecat:${providerReference}`,
-      plan ?? "pro",
-      providerReference,
-      status,
-      now,
-      matchedUser.id
-    ),
-    env.DB.prepare(
-      "UPDATE webhook_receipts SET status = 'processed', processed_at = ? WHERE provider = 'revenuecat' AND provider_event_id = ?"
-    ).bind(now, event.id),
+      )
+      .bind(
+        now,
+        event.expiration_at_ms,
+        event.purchased_at_ms ?? event.event_timestamp_ms,
+        effectiveAt,
+        expiresAt,
+        `revenuecat:${providerReference}`,
+        plan ?? "pro",
+        providerReference,
+        status,
+        now,
+        matchedUser.id
+      ),
+    getDb()
+      .prepare(
+        "UPDATE webhook_receipts SET status = 'processed', processed_at = ? WHERE provider = 'revenuecat' AND provider_event_id = ?"
+      )
+      .bind(now, event.id),
   ]);
 };
 
@@ -222,14 +228,15 @@ export const createBillingRoutes = (auth: Auth) =>
       if (!user) {
         return c.json({ code: "UNAUTHORIZED", error: "Unauthorized" }, 401);
       }
-      const entitlement = await env.DB.prepare(
-        `SELECT plan, source, status, current_period_end
+      const entitlement = await getDb()
+        .prepare(
+          `SELECT plan, source, status, current_period_end
          FROM billing_entitlements
          WHERE user_id = ? AND status IN ('trialing', 'active', 'grace_period')
            AND (expires_at IS NULL OR expires_at > ?)
          ORDER BY CASE plan WHEN 'creator' THEN 2 ELSE 1 END DESC,
            effective_at DESC LIMIT 1`
-      )
+        )
         .bind(user.id, Date.now())
         .first<{
           current_period_end: number | null;
@@ -279,8 +286,9 @@ export const createBillingRoutes = (auth: Auth) =>
           400
         );
       }
-      const receipt = await env.DB.prepare(
-        `INSERT INTO webhook_receipts (
+      const receipt = await getDb()
+        .prepare(
+          `INSERT INTO webhook_receipts (
           id, provider, provider_event_id, status, type
         ) VALUES (?, 'revenuecat', ?, 'processing', ?)
         ON CONFLICT(provider, provider_event_id) DO UPDATE SET
@@ -288,7 +296,7 @@ export const createBillingRoutes = (auth: Auth) =>
           status = 'processing', type = excluded.type
         WHERE webhook_receipts.status = 'failed'
           OR (webhook_receipts.status = 'processing' AND webhook_receipts.created_at < ?)`
-      )
+        )
         .bind(
           crypto.randomUUID(),
           payload.data.event.id,
@@ -302,9 +310,10 @@ export const createBillingRoutes = (auth: Auth) =>
       try {
         await processRevenueCatEvent(payload.data.event);
       } catch (error) {
-        await env.DB.prepare(
-          "UPDATE webhook_receipts SET status = 'failed', error_message = ? WHERE provider = 'revenuecat' AND provider_event_id = ?"
-        )
+        await getDb()
+          .prepare(
+            "UPDATE webhook_receipts SET status = 'failed', error_message = ? WHERE provider = 'revenuecat' AND provider_event_id = ?"
+          )
           .bind(
             error instanceof Error
               ? error.message.slice(0, 1000)

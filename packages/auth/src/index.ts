@@ -5,7 +5,7 @@ import { passkey } from "@better-auth/passkey";
 import { stripe } from "@better-auth/stripe";
 import type { Subscription } from "@better-auth/stripe";
 import { webSubscriptionPlans } from "@ppal/contracts/billing";
-import { createDb } from "@ppal/db";
+import { createDb, createSqlDatabase } from "@ppal/db";
 import { hasEncryptionKey, setEncryptionKey } from "@ppal/db/encryption";
 import * as schema from "@ppal/db/schema/auth";
 import { env } from "@ppal/env/server";
@@ -118,8 +118,10 @@ const synchronizeStripeEntitlement = async (
   }
   const providerReference =
     subscription.stripeSubscriptionId ?? subscription.id;
-  await env.DB.prepare(
-    `INSERT INTO billing_entitlements (
+  const db = createSqlDatabase();
+  await db
+    .prepare(
+      `INSERT INTO billing_entitlements (
       created_at, current_period_end, current_period_start, effective_at, expires_at,
       id, plan, provider_reference, source, status, updated_at, user_id
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'stripe', ?, ?, ?)
@@ -131,7 +133,7 @@ const synchronizeStripeEntitlement = async (
       status = excluded.status,
       updated_at = excluded.updated_at,
       user_id = excluded.user_id`
-  )
+    )
     .bind(
       now,
       subscription.periodEnd?.getTime() ?? null,
@@ -212,12 +214,12 @@ const createStripePlugin = () => {
 };
 
 export const createAuth = () => {
-  const db = createDb();
+  const db = createDb(env);
   const stripePlugin = createStripePlugin();
 
   return betterAuth({
     database: drizzleAdapter(db, {
-      provider: "sqlite",
+      provider: "pg",
 
       schema,
     }),

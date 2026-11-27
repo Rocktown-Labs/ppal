@@ -49,6 +49,15 @@ jobs:
           CLOUDFLARE_ZONE_ID: ${{ vars.CLOUDFLARE_ZONE_ID || 'f982a1aacdf38eb2657092788c32d113' }}
       - run: bun run check-types
       - run: bun test packages/domain apps/server/tests
+      - name: Run PostgreSQL migrations
+        run: |
+          if [ -z "$DATABASE_URL" ]; then
+            echo "::error::DATABASE_URL secret is required to run PostgreSQL migrations"
+            exit 1
+          fi
+          bun run db:migrate
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
       - name: Deploy Cloudflare stack
         working-directory: packages/infra
         run: bun alchemy deploy --stage "$ALCHEMY_DEPLOY_STAGE" --yes --force
@@ -59,6 +68,7 @@ jobs:
           BETTER_AUTH_SECRET: ${{ secrets.BETTER_AUTH_SECRET }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID || vars.CLOUDFLARE_ACCOUNT_ID }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
           DATA_ENCRYPTION_KEY: ${{ secrets.DATA_ENCRYPTION_KEY }}
           FACEBOOK_CLIENT_ID: ${{ secrets.FACEBOOK_CLIENT_ID }}
           FACEBOOK_CLIENT_SECRET: ${{ secrets.FACEBOOK_CLIENT_SECRET }}
@@ -73,8 +83,7 @@ jobs:
           REVENUECAT_WEBHOOK_SECRET: ${{ secrets.REVENUECAT_WEBHOOK_SECRET }}
           SENT_DM_API_KEY: ${{ secrets.SENT_DM_API_KEY }}
           SENT_DM_TEMPLATE_NAME: ${{ vars.SENT_DM_TEMPLATE_NAME || '' }}
-          SPORTRADAR_API_KEY: ${{ secrets.SPORTRADAR_API_KEY }}
-          SPORTRADAR_LEAGUES: ${{ vars.SPORTRADAR_LEAGUES || '' }}
+          SPORTSAPI_PRO_API_KEY: ${{ secrets.SPORTSAPI_PRO_API_KEY }}
           STRIPE_CREATOR_PRICE_ID: ${{ secrets.STRIPE_CREATOR_PRICE_ID }}
           STRIPE_PRICE_CREATOR_YEARLY: ${{ secrets.STRIPE_PRICE_CREATOR_YEARLY }}
           STRIPE_PRICE_PRO_YEARLY: ${{ secrets.STRIPE_PRICE_PRO_YEARLY }}
@@ -109,6 +118,7 @@ jobs:
           BETTER_AUTH_SECRET: ${{ secrets.BETTER_AUTH_SECRET }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID || vars.CLOUDFLARE_ACCOUNT_ID }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
           FACEBOOK_CLIENT_ID: ${{ secrets.FACEBOOK_CLIENT_ID }}
           FACEBOOK_CLIENT_SECRET: ${{ secrets.FACEBOOK_CLIENT_SECRET }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
@@ -120,7 +130,7 @@ jobs:
           RESEND_FROM_EMAIL: ${{ vars.RESEND_FROM_EMAIL || 'noreply@bets.myparlaypal.com' }}
           RESEND_REPLY_TO_EMAIL: ${{ vars.RESEND_REPLY_TO_EMAIL || 'support@bets.myparlaypal.com' }}
           REVENUECAT_WEBHOOK_SECRET: ${{ secrets.REVENUECAT_WEBHOOK_SECRET }}
-          SPORTRADAR_API_KEY: ${{ secrets.SPORTRADAR_API_KEY }}
+          SPORTSAPI_PRO_API_KEY: ${{ secrets.SPORTSAPI_PRO_API_KEY }}
           STRIPE_CREATOR_PRICE_ID: ${{ secrets.STRIPE_CREATOR_PRICE_ID }}
           STRIPE_PRICE_CREATOR_YEARLY: ${{ secrets.STRIPE_PRICE_CREATOR_YEARLY }}
           STRIPE_PRICE_PRO_YEARLY: ${{ secrets.STRIPE_PRICE_PRO_YEARLY }}

@@ -1,9 +1,11 @@
 import { Database } from "bun:sqlite";
 import { describe, expect, test } from "bun:test";
 
+import type { SqlDatabase } from "@ppal/db";
+
 import { resolveExtractedLeg } from "../src/services/ticket-resolution";
 
-const createTestDatabase = (): D1Database => {
+const createTestDatabase = (): SqlDatabase => {
   const sqlite = new Database(":memory:");
   sqlite.run(`
     CREATE TABLE sports (
@@ -93,7 +95,7 @@ const createTestDatabase = (): D1Database => {
         };
       },
     }),
-  } as unknown as D1Database;
+  } as unknown as SqlDatabase;
 };
 
 describe("ticket resolution service", () => {

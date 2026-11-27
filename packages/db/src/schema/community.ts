@@ -1,23 +1,25 @@
 import { sql } from "drizzle-orm";
 import {
+  bigint,
   check,
   index,
   integer,
-  sqliteTable,
+  pgTable,
+  primaryKey,
   text,
   uniqueIndex,
-} from "drizzle-orm/sqlite-core";
+} from "drizzle-orm/pg-core";
 
 import { user } from "./auth";
-import { createdAtColumn, updatedAtColumn } from "./columns";
+import { createdAtColumn, epochMsNowSql, updatedAtColumn } from "./columns";
 
-export const profiles = sqliteTable(
+export const profiles = pgTable(
   "profiles",
   {
     avatarObjectKey: text("avatar_object_key"),
     bio: text("bio"),
     createdAt: createdAtColumn(),
-    isPublic: integer("is_public", { mode: "boolean" }).notNull().default(true),
+    isPublic: integer("is_public").notNull().default(1),
     updatedAt: updatedAtColumn(),
     userId: text("user_id")
       .primaryKey()
@@ -29,7 +31,7 @@ export const profiles = sqliteTable(
   ]
 );
 
-export const follows = sqliteTable(
+export const follows = pgTable(
   "follows",
   {
     createdAt: createdAtColumn(),
@@ -54,12 +56,12 @@ export const follows = sqliteTable(
   ]
 );
 
-export const referrals = sqliteTable(
+export const referrals = pgTable(
   "referrals",
   {
-    claimedAt: integer("claimed_at", { mode: "timestamp_ms" }),
+    claimedAt: bigint("claimed_at", { mode: "number" }),
     code: text("code").notNull(),
-    completedAt: integer("completed_at", { mode: "timestamp_ms" }),
+    completedAt: bigint("completed_at", { mode: "number" }),
     createdAt: createdAtColumn(),
     id: text("id").primaryKey(),
     referredUserId: text("referred_user_id").references(() => user.id, {
@@ -88,11 +90,11 @@ export const referrals = sqliteTable(
   ]
 );
 
-export const communities = sqliteTable(
+export const communities = pgTable(
   "communities",
   {
     access: text("access").notNull().default("free"),
-    archivedAt: integer("archived_at", { mode: "timestamp_ms" }),
+    archivedAt: bigint("archived_at", { mode: "number" }),
     createdAt: createdAtColumn(),
     description: text("description"),
     id: text("id").primaryKey(),
@@ -121,16 +123,16 @@ export const communities = sqliteTable(
   ]
 );
 
-export const communityMembers = sqliteTable(
+export const communityMembers = pgTable(
   "community_members",
   {
     communityId: text("community_id")
       .notNull()
       .references(() => communities.id, { onDelete: "cascade" }),
-    joinedAt: integer("joined_at", { mode: "timestamp_ms" })
-      .default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)
+    joinedAt: bigint("joined_at", { mode: "number" })
+      .default(epochMsNowSql)
       .notNull(),
-    paidAt: integer("paid_at", { mode: "timestamp_ms" }),
+    paidAt: bigint("paid_at", { mode: "number" }),
     paymentReference: text("payment_reference"),
     role: text("role").notNull().default("member"),
     status: text("status").notNull().default("active"),
@@ -161,7 +163,7 @@ export const communityMembers = sqliteTable(
   ]
 );
 
-export const communityChannels = sqliteTable(
+export const communityChannels = pgTable(
   "community_channels",
   {
     communityId: text("community_id")
@@ -170,12 +172,8 @@ export const communityChannels = sqliteTable(
     createdAt: createdAtColumn(),
     description: text("description"),
     id: text("id").primaryKey(),
-    isArchived: integer("is_archived", { mode: "boolean" })
-      .notNull()
-      .default(false),
-    isDefault: integer("is_default", { mode: "boolean" })
-      .notNull()
-      .default(false),
+    isArchived: integer("is_archived").notNull().default(0),
+    isDefault: integer("is_default").notNull().default(0),
     name: text("name").notNull(),
     position: integer("position").notNull().default(0),
     slug: text("slug").notNull(),
@@ -193,7 +191,7 @@ export const communityChannels = sqliteTable(
   ]
 );
 
-export const communityMessages = sqliteTable(
+export const communityMessages = pgTable(
   "community_messages",
   {
     authorUserId: text("author_user_id")
@@ -207,8 +205,8 @@ export const communityMessages = sqliteTable(
       .notNull()
       .references(() => communities.id, { onDelete: "cascade" }),
     createdAt: createdAtColumn(),
-    deletedAt: integer("deleted_at", { mode: "timestamp_ms" }),
-    editedAt: integer("edited_at", { mode: "timestamp_ms" }),
+    deletedAt: bigint("deleted_at", { mode: "number" }),
+    editedAt: bigint("edited_at", { mode: "number" }),
     id: text("id").primaryKey(),
     mentions: text("mentions").notNull().default("[]"),
     replyToId: text("reply_to_id"),
@@ -226,7 +224,32 @@ export const communityMessages = sqliteTable(
   ]
 );
 
-export const communityReports = sqliteTable(
+export const communityMessageReactions = pgTable(
+  "community_message_reactions",
+  {
+    createdAt: createdAtColumn(),
+    emoji: text("emoji").notNull(),
+    messageId: text("message_id")
+      .notNull()
+      .references(() => communityMessages.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+  },
+  (table) => [
+    primaryKey({ columns: [table.messageId, table.userId, table.emoji] }),
+    check(
+      "community_message_reactions_emoji_length_check",
+      sql`length(${table.emoji}) between 1 and 16`
+    ),
+    index("community_message_reactions_message_idx").on(
+      table.messageId,
+      table.emoji
+    ),
+  ]
+);
+
+export const communityReports = pgTable(
   "community_reports",
   {
     communityId: text("community_id")
@@ -241,7 +264,7 @@ export const communityReports = sqliteTable(
     reporterUserId: text("reporter_user_id")
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
-    resolvedAt: integer("resolved_at", { mode: "timestamp_ms" }),
+    resolvedAt: bigint("resolved_at", { mode: "number" }),
     resolvedBy: text("resolved_by").references(() => user.id, {
       onDelete: "set null",
     }),

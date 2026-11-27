@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
+import type { SqlDatabase, SqlPreparedStatement } from "@ppal/db";
+
 import {
   assertPlan,
   EntitlementError,
@@ -7,14 +9,14 @@ import {
   hasPlan,
 } from "../src/lib/entitlements";
 
-const mockDb = (row: unknown): D1Database => {
+const mockDb = (row: unknown): SqlDatabase => {
   const prepared = {
     bind: () => prepared,
     first: () => Promise.resolve(row),
-  } as unknown as D1PreparedStatement;
+  } as unknown as SqlPreparedStatement;
   return {
     prepare: () => prepared,
-  } as unknown as D1Database;
+  } as unknown as SqlDatabase;
 };
 
 describe("entitlements", () => {

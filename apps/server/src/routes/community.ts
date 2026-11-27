@@ -26,7 +26,7 @@ import {
   canViewCommunity,
 } from "../lib/community-access";
 import { encryptValue, hashValue } from "../lib/crypto";
-import { escapeLikePattern } from "../lib/database";
+import { escapeLikePattern, getDb } from "../lib/database";
 import { escapeHtml } from "../lib/html";
 import { matchesDeclaredMimeType } from "../lib/upload-security";
 import { writeAuditEvent } from "../services/audit";
@@ -129,14 +129,15 @@ const reactionsByMessage = async (
     return new Map();
   }
   const placeholders = messageIds.map(() => "?").join(", ");
-  const rows = await env.DB.prepare(
-    `SELECT r.message_id, r.emoji, COUNT(*) AS count,
+  const rows = await getDb()
+    .prepare(
+      `SELECT r.message_id, r.emoji, COUNT(*) AS count,
             MAX(CASE WHEN r.user_id = ? THEN 1 ELSE 0 END) AS mine
        FROM community_message_reactions r
       WHERE r.message_id IN (${placeholders})
       GROUP BY r.message_id, r.emoji
       ORDER BY count DESC, r.emoji`
-  )
+    )
     .bind(viewerId ?? "", ...messageIds)
     .all<{ count: number; emoji: string; message_id: string; mine: number }>();
   const grouped = new Map<string, ReactionSummary[]>();
@@ -153,21 +154,23 @@ const unauthorized = (c: Context) =>
 
 const creatorCanCreate = async (userId: string): Promise<boolean> => {
   const now = Date.now();
-  const entitlement = await env.DB.prepare(
-    `SELECT 1 AS eligible FROM billing_entitlements
+  const entitlement = await getDb()
+    .prepare(
+      `SELECT 1 AS eligible FROM billing_entitlements
      WHERE user_id = ? AND plan = 'creator'
        AND status IN ('active', 'trialing', 'grace_period')
        AND (expires_at IS NULL OR expires_at > ?)
      ORDER BY updated_at DESC LIMIT 1`
-  )
+    )
     .bind(userId, now)
     .first<{ eligible: number }>();
   return Boolean(entitlement);
 };
 
 const getCommunity = (slug: string): Promise<CommunityRow | null> =>
-  env.DB.prepare(
-    `SELECT c.access, c.archived_at, c.description, c.id, c.name,
+  getDb()
+    .prepare(
+      `SELECT c.access, c.archived_at, c.description, c.id, c.name,
             c.owner_user_id, c.price_cents, c.rules, c.slug, c.visibility,
             COALESCE(p.username, '') AS owner_username,
             (SELECT COUNT(*) FROM community_members m
@@ -175,7 +178,7 @@ const getCommunity = (slug: string): Promise<CommunityRow | null> =>
        FROM communities c
        LEFT JOIN profiles p ON p.user_id = c.owner_user_id
       WHERE c.slug = ? AND c.archived_at IS NULL`
-  )
+    )
     .bind(slug)
     .first<CommunityRow>();
 
@@ -183,9 +186,10 @@ const getMembership = (
   communityId: string,
   userId: string
 ): Promise<MembershipRow | null> =>
-  env.DB.prepare(
-    "SELECT role, status FROM community_members WHERE community_id = ? AND user_id = ?"
-  )
+  getDb()
+    .prepare(
+      "SELECT role, status FROM community_members WHERE community_id = ? AND user_id = ?"
+    )
     .bind(communityId, userId)
     .first<MembershipRow>();
 
@@ -262,9 +266,8 @@ const uploadAvatar = async (c: Context, auth: Auth) => {
       400
     );
   }
-  const current = await env.DB.prepare(
-    "SELECT avatar_object_key FROM profiles WHERE user_id = ?"
-  )
+  const current = await getDb()
+    .prepare("SELECT avatar_object_key FROM profiles WHERE user_id = ?")
     .bind(user.id)
     .first<{ avatar_object_key: string | null }>();
   const ext = file.type === "image/jpeg" ? "jpg" : file.type.split("/")[1];
@@ -281,17 +284,19 @@ const uploadAvatar = async (c: Context, auth: Auth) => {
     user.name?.toLowerCase().replaceAll(/[^a-z0-9_]/gu, "") ||
     `user_${user.id.slice(0, 8)}`;
   try {
-    await env.DB.batch([
-      env.DB.prepare(
-        "UPDATE user SET image = ?, updated_at = ? WHERE id = ?"
-      ).bind(avatarUrl, now, user.id),
-      env.DB.prepare(
-        `INSERT INTO profiles (avatar_object_key, updated_at, user_id, username)
+    await getDb().batch([
+      getDb()
+        .prepare("UPDATE user SET image = ?, updated_at = ? WHERE id = ?")
+        .bind(avatarUrl, new Date(now), user.id),
+      getDb()
+        .prepare(
+          `INSERT INTO profiles (avatar_object_key, updated_at, user_id, username)
          VALUES (?, ?, ?, ?)
          ON CONFLICT(user_id) DO UPDATE SET
            avatar_object_key = excluded.avatar_object_key,
            updated_at = excluded.updated_at`
-      ).bind(objectKey, now, user.id, fallbackUsername),
+        )
+        .bind(objectKey, now, user.id, fallbackUsername),
     ]);
   } catch (error) {
     await env.R2_AVATARS.delete(objectKey);
@@ -315,9 +320,8 @@ const getCurrentUserProfile = async (c: Context, auth: Auth) => {
   if (!user) {
     return c.json({ code: "UNAUTHORIZED", error: "Unauthorized" }, 401);
   }
-  const profile = await env.DB.prepare(
-    `SELECT bio, is_public, username FROM profiles WHERE user_id = ?`
-  )
+  const profile = await getDb()
+    .prepare(`SELECT bio, is_public, username FROM profiles WHERE user_id = ?`)
     .bind(user.id)
     .first<{ bio: string | null; is_public: number; username: string }>();
   return c.json({
@@ -345,9 +349,8 @@ const updateCurrentUserProfile = async (
   if (!user) {
     return c.json({ code: "UNAUTHORIZED", error: "Unauthorized" }, 401);
   }
-  const current = await env.DB.prepare(
-    "SELECT bio, is_public, username FROM profiles WHERE user_id = ?"
-  )
+  const current = await getDb()
+    .prepare("SELECT bio, is_public, username FROM profiles WHERE user_id = ?")
     .bind(user.id)
     .first<{ bio: string | null; is_public: number; username: string }>();
   const username = input.username ?? current?.username;
@@ -362,28 +365,38 @@ const updateCurrentUserProfile = async (
   }
   const now = Date.now();
   try {
-    await env.DB.batch([
-      env.DB.prepare(
-        "UPDATE user SET name = COALESCE(?, name), updated_at = ? WHERE id = ?"
-      ).bind(input.name ?? null, now, user.id),
-      env.DB.prepare(
-        `INSERT INTO profiles (bio, is_public, updated_at, user_id, username)
+    await getDb().batch([
+      getDb()
+        .prepare(
+          "UPDATE user SET name = COALESCE(?, name), updated_at = ? WHERE id = ?"
+        )
+        .bind(input.name ?? null, new Date(now), user.id),
+      getDb()
+        .prepare(
+          `INSERT INTO profiles (bio, is_public, updated_at, user_id, username)
          VALUES (?, ?, ?, ?, ?)
          ON CONFLICT(user_id) DO UPDATE SET bio = excluded.bio,
            is_public = excluded.is_public, updated_at = excluded.updated_at,
            username = excluded.username`
-      ).bind(
-        input.bio === undefined ? (current?.bio ?? null) : input.bio,
-        input.isPublic === undefined
-          ? (current?.is_public ?? 1)
-          : Number(input.isPublic),
-        now,
-        user.id,
-        username
-      ),
+        )
+        .bind(
+          input.bio === undefined ? (current?.bio ?? null) : input.bio,
+          input.isPublic === undefined
+            ? (current?.is_public ?? 1)
+            : Number(input.isPublic),
+          now,
+          user.id,
+          username
+        ),
     ]);
   } catch (error) {
-    if (error instanceof Error && error.message.includes("UNIQUE")) {
+    const isUniqueViolation =
+      (typeof error === "object" &&
+        error !== null &&
+        "code" in error &&
+        (error as { code?: unknown }).code === "23505") ||
+      (error instanceof Error && /unique|duplicate key/iu.test(error.message));
+    if (isUniqueViolation) {
       return c.json(
         { code: "USERNAME_TAKEN", error: "Username is already taken" },
         409
@@ -424,9 +437,8 @@ export const createCommunityRoutes = (auth: Auth) =>
           encryptValue(input.token),
         ]);
         const now = Date.now();
-        const existingOwner = await env.DB.prepare(
-          "SELECT user_id FROM device_tokens WHERE token_hash = ?"
-        )
+        const existingOwner = await getDb()
+          .prepare("SELECT user_id FROM device_tokens WHERE token_hash = ?")
           .bind(tokenHash)
           .first<{ user_id: string }>();
         if (existingOwner && existingOwner.user_id !== user.id) {
@@ -438,9 +450,10 @@ export const createCommunityRoutes = (auth: Auth) =>
             409
           );
         }
-        const tokenCount = await env.DB.prepare(
-          "SELECT COUNT(*) AS count FROM device_tokens WHERE user_id = ?"
-        )
+        const tokenCount = await getDb()
+          .prepare(
+            "SELECT COUNT(*) AS count FROM device_tokens WHERE user_id = ?"
+          )
           .bind(user.id)
           .first<{ count: number }>();
         if (!existingOwner && (tokenCount?.count ?? 0) >= 10) {
@@ -450,19 +463,21 @@ export const createCommunityRoutes = (auth: Auth) =>
           );
         }
         if (existingOwner) {
-          await env.DB.prepare(
-            `UPDATE device_tokens SET last_seen_at = ?, platform = ?,
+          await getDb()
+            .prepare(
+              `UPDATE device_tokens SET last_seen_at = ?, platform = ?,
                token = ?, updated_at = ?
              WHERE token_hash = ? AND user_id = ?`
-          )
+            )
             .bind(now, input.platform, encryptedToken, now, tokenHash, user.id)
             .run();
           return c.json({ registered: true }, 200);
         }
-        await env.DB.prepare(
-          `INSERT INTO device_tokens (id, last_seen_at, platform, token, token_hash, updated_at, user_id)
+        await getDb()
+          .prepare(
+            `INSERT INTO device_tokens (id, last_seen_at, platform, token, token_hash, updated_at, user_id)
            VALUES (?, ?, ?, ?, ?, ?, ?)`
-        )
+          )
           .bind(
             crypto.randomUUID(),
             now,
@@ -494,9 +509,10 @@ export const createCommunityRoutes = (auth: Auth) =>
         );
       }
       const tokenHash = await hashValue(token);
-      const result = await env.DB.prepare(
-        "DELETE FROM device_tokens WHERE user_id = ? AND token_hash = ?"
-      )
+      const result = await getDb()
+        .prepare(
+          "DELETE FROM device_tokens WHERE user_id = ? AND token_hash = ?"
+        )
         .bind(user.id, tokenHash)
         .run();
       return c.json({ deleted: result.meta.changes > 0 });
@@ -511,10 +527,11 @@ export const createCommunityRoutes = (auth: Auth) =>
       const viewer = await getAuthUser(auth, c.req.raw.headers, {
         authoritative: true,
       });
-      const owner = await env.DB.prepare(
-        `SELECT avatar_object_key, is_public FROM profiles
+      const owner = await getDb()
+        .prepare(
+          `SELECT avatar_object_key, is_public FROM profiles
          WHERE user_id = ? AND avatar_object_key IN (?, ?)`
-      )
+        )
         .bind(userId, `${userId}/${filename}`, `avatars/${userId}/${filename}`)
         .first<{ avatar_object_key: string; is_public: number }>();
       if (!owner || (owner.is_public !== 1 && viewer?.id !== userId)) {
@@ -541,13 +558,14 @@ export const createCommunityRoutes = (auth: Auth) =>
     .get("/profiles", async (c) => {
       const query = (c.req.query("q") ?? "").trim().toLowerCase();
       const pattern = `%${escapeLikePattern(query)}%`;
-      const rows = await env.DB.prepare(
-        `SELECT p.bio, p.username, u.image, u.name,
+      const rows = await getDb()
+        .prepare(
+          `SELECT p.bio, p.username, u.image, u.name,
           (SELECT COUNT(*) FROM follows f WHERE f.followed_user_id = p.user_id) AS followers
          FROM profiles p JOIN user u ON u.id = p.user_id
          WHERE p.is_public = 1 AND (? = '' OR lower(p.username) LIKE ? ESCAPE '\\' OR lower(u.name) LIKE ? ESCAPE '\\')
          ORDER BY followers DESC, p.username LIMIT 50`
-      )
+        )
         .bind(query, pattern, pattern)
         .all<{
           bio: string | null;
@@ -567,8 +585,9 @@ export const createCommunityRoutes = (auth: Auth) =>
       });
     })
     .get("/profiles/:username", async (c) => {
-      const profile = await env.DB.prepare(
-        `SELECT p.bio, p.username, u.image, u.name,
+      const profile = await getDb()
+        .prepare(
+          `SELECT p.bio, p.username, u.image, u.name,
           (SELECT COUNT(*) FROM follows f WHERE f.followed_user_id = p.user_id) AS followers,
           (SELECT COUNT(*) FROM tickets t WHERE t.user_id = p.user_id AND t.status = 'won'
             AND t.verification_status = 'verified') AS wins,
@@ -576,7 +595,7 @@ export const createCommunityRoutes = (auth: Auth) =>
             AND t.verification_status = 'verified') AS losses
          FROM profiles p JOIN user u ON u.id = p.user_id
          WHERE p.username = ? AND p.is_public = 1`
-      )
+        )
         .bind(c.req.param("username"))
         .first<{
           bio: string | null;
@@ -611,9 +630,10 @@ export const createCommunityRoutes = (auth: Auth) =>
       if (!user) {
         return c.json({ code: "UNAUTHORIZED", error: "Unauthorized" }, 401);
       }
-      const followed = await env.DB.prepare(
-        "SELECT user_id FROM profiles WHERE username = ? AND is_public = 1"
-      )
+      const followed = await getDb()
+        .prepare(
+          "SELECT user_id FROM profiles WHERE username = ? AND is_public = 1"
+        )
         .bind(c.req.param("username"))
         .first<{ user_id: string }>();
       if (!followed) {
@@ -625,10 +645,11 @@ export const createCommunityRoutes = (auth: Auth) =>
           400
         );
       }
-      await env.DB.prepare(
-        `INSERT INTO follows (id, followed_user_id, follower_user_id)
+      await getDb()
+        .prepare(
+          `INSERT INTO follows (id, followed_user_id, follower_user_id)
          VALUES (?, ?, ?) ON CONFLICT(follower_user_id, followed_user_id) DO NOTHING`
-      )
+        )
         .bind(crypto.randomUUID(), followed.user_id, user.id)
         .run();
       return c.json({ following: true });
@@ -640,10 +661,11 @@ export const createCommunityRoutes = (auth: Auth) =>
       if (!user) {
         return c.json({ code: "UNAUTHORIZED", error: "Unauthorized" }, 401);
       }
-      await env.DB.prepare(
-        `DELETE FROM follows WHERE follower_user_id = ? AND followed_user_id =
+      await getDb()
+        .prepare(
+          `DELETE FROM follows WHERE follower_user_id = ? AND followed_user_id =
          (SELECT user_id FROM profiles WHERE username = ?)`
-      )
+        )
         .bind(user.id, c.req.param("username"))
         .run();
       return c.json({ following: false });
@@ -670,8 +692,9 @@ export const createCommunityRoutes = (auth: Auth) =>
         const limit = communityListLimit(
           c.req.valid("query").limit?.toString()
         );
-        const rows = await env.DB.prepare(
-          `SELECT c.access, c.description, c.id, c.name, c.owner_user_id,
+        const rows = await getDb()
+          .prepare(
+            `SELECT c.access, c.description, c.id, c.name, c.owner_user_id,
                   c.price_cents, c.rules, c.slug, c.visibility,
                   COALESCE(p.username, '') AS owner_username,
                   (SELECT COUNT(*) FROM community_members m
@@ -680,7 +703,7 @@ export const createCommunityRoutes = (auth: Auth) =>
              LEFT JOIN profiles p ON p.user_id = c.owner_user_id
             WHERE c.visibility = 'public' AND c.archived_at IS NULL
             ORDER BY c.created_at DESC LIMIT ?`
-        )
+          )
           .bind(limit)
           .all<CommunityRow>();
         return c.json({ communities: rows.results.map(communityResponse) });
@@ -693,8 +716,9 @@ export const createCommunityRoutes = (auth: Auth) =>
       if (!user) {
         return unauthorized(c);
       }
-      const rows = await env.DB.prepare(
-        `SELECT c.access, c.description, c.id, c.name, c.owner_user_id,
+      const rows = await getDb()
+        .prepare(
+          `SELECT c.access, c.description, c.id, c.name, c.owner_user_id,
                 c.price_cents, c.rules, c.slug, c.visibility,
                 m.role, m.status,
                 COALESCE(p.username, '') AS owner_username,
@@ -705,7 +729,7 @@ export const createCommunityRoutes = (auth: Auth) =>
            LEFT JOIN profiles p ON p.user_id = c.owner_user_id
           WHERE m.user_id = ? AND c.archived_at IS NULL
           ORDER BY c.created_at DESC`
-      )
+        )
         .bind(user.id)
         .all<CommunityRow & MembershipRow>();
       return c.json({
@@ -729,12 +753,13 @@ export const createCommunityRoutes = (auth: Auth) =>
       if (!canViewCommunity(community, membership)) {
         return c.json({ code: "NOT_FOUND", error: "Community not found" }, 404);
       }
-      const channels = await env.DB.prepare(
-        `SELECT description, id, is_archived, is_default, name, position, slug
+      const channels = await getDb()
+        .prepare(
+          `SELECT description, id, is_archived, is_default, name, position, slug
            FROM community_channels
           WHERE community_id = ? AND is_archived = 0
           ORDER BY position, created_at`
-      )
+        )
         .bind(community.id)
         .all<{
           description: string | null;
@@ -793,33 +818,39 @@ export const createCommunityRoutes = (auth: Auth) =>
         const channelId = crypto.randomUUID();
         const now = Date.now();
         try {
-          await env.DB.batch([
-            env.DB.prepare(
-              `INSERT INTO communities (access, created_at, description, id, name,
+          await getDb().batch([
+            getDb()
+              .prepare(
+                `INSERT INTO communities (access, created_at, description, id, name,
                  owner_user_id, price_cents, rules, slug, updated_at, visibility)
                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-            ).bind(
-              input.access,
-              now,
-              input.description ?? null,
-              id,
-              input.name,
-              user.id,
-              input.access === "paid" ? input.priceCents : null,
-              input.rules ?? null,
-              input.slug,
-              now,
-              input.visibility
-            ),
-            env.DB.prepare(
-              `INSERT INTO community_members (community_id, joined_at, role, status, updated_at, user_id)
+              )
+              .bind(
+                input.access,
+                now,
+                input.description ?? null,
+                id,
+                input.name,
+                user.id,
+                input.access === "paid" ? input.priceCents : null,
+                input.rules ?? null,
+                input.slug,
+                now,
+                input.visibility
+              ),
+            getDb()
+              .prepare(
+                `INSERT INTO community_members (community_id, joined_at, role, status, updated_at, user_id)
                VALUES (?, ?, 'owner', 'active', ?, ?)`
-            ).bind(id, now, now, user.id),
-            env.DB.prepare(
-              `INSERT INTO community_channels
+              )
+              .bind(id, now, now, user.id),
+            getDb()
+              .prepare(
+                `INSERT INTO community_channels
                  (community_id, created_at, id, is_default, name, position, slug, updated_at)
                VALUES (?, ?, ?, 1, 'General', 0, 'general', ?)`
-            ).bind(id, now, channelId, now),
+              )
+              .bind(id, now, channelId, now),
           ]);
         } catch (error) {
           if (error instanceof Error && /unique/iu.test(error.message)) {
@@ -901,10 +932,11 @@ export const createCommunityRoutes = (auth: Auth) =>
         }
         const now = Date.now();
         try {
-          await env.DB.prepare(
-            `UPDATE communities SET access = ?, description = ?, name = ?, price_cents = ?,
+          await getDb()
+            .prepare(
+              `UPDATE communities SET access = ?, description = ?, name = ?, price_cents = ?,
              rules = ?, slug = ?, updated_at = ?, visibility = ? WHERE id = ?`
-          )
+            )
             .bind(
               access,
               input.description === undefined
@@ -965,17 +997,19 @@ export const createCommunityRoutes = (auth: Auth) =>
         }
         const input = c.req.valid("json");
         const now = Date.now();
-        const maxPosition = await env.DB.prepare(
-          "SELECT COALESCE(MAX(position), -1) AS position FROM community_channels WHERE community_id = ?"
-        )
+        const maxPosition = await getDb()
+          .prepare(
+            "SELECT COALESCE(MAX(position), -1) AS position FROM community_channels WHERE community_id = ?"
+          )
           .bind(community.id)
           .first<{ position: number }>();
         const id = crypto.randomUUID();
         try {
-          await env.DB.prepare(
-            `INSERT INTO community_channels (community_id, created_at, description, id, name, position, slug, updated_at)
+          await getDb()
+            .prepare(
+              `INSERT INTO community_channels (community_id, created_at, description, id, name, position, slug, updated_at)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
-          )
+            )
             .bind(
               community.id,
               now,
@@ -1039,11 +1073,12 @@ export const createCommunityRoutes = (auth: Auth) =>
           );
         }
         const input = c.req.valid("json");
-        const result = await env.DB.prepare(
-          `UPDATE community_channels SET description = COALESCE(?, description),
+        const result = await getDb()
+          .prepare(
+            `UPDATE community_channels SET description = COALESCE(?, description),
              name = COALESCE(?, name), slug = COALESCE(?, slug), updated_at = ?
            WHERE id = ? AND community_id = ? AND is_archived = 0`
-        )
+          )
           .bind(
             input.description ?? null,
             input.name ?? null,
@@ -1077,9 +1112,10 @@ export const createCommunityRoutes = (auth: Auth) =>
           403
         );
       }
-      const channel = await env.DB.prepare(
-        "SELECT is_default FROM community_channels WHERE id = ? AND community_id = ?"
-      )
+      const channel = await getDb()
+        .prepare(
+          "SELECT is_default FROM community_channels WHERE id = ? AND community_id = ?"
+        )
         .bind(c.req.param("channelId"), community.id)
         .first<{ is_default: number }>();
       if (!channel) {
@@ -1094,9 +1130,10 @@ export const createCommunityRoutes = (auth: Auth) =>
           400
         );
       }
-      await env.DB.prepare(
-        "UPDATE community_channels SET is_archived = 1, updated_at = ? WHERE id = ?"
-      )
+      await getDb()
+        .prepare(
+          "UPDATE community_channels SET is_archived = 1, updated_at = ? WHERE id = ?"
+        )
         .bind(Date.now(), c.req.param("channelId"))
         .run();
       return c.json({ archived: true });
@@ -1155,11 +1192,12 @@ export const createCommunityRoutes = (auth: Auth) =>
         return c.json({ checkoutUrl: session.url });
       }
       const status = community.visibility === "private" ? "pending" : "active";
-      await env.DB.prepare(
-        `INSERT INTO community_members (community_id, joined_at, role, status, updated_at, user_id)
+      await getDb()
+        .prepare(
+          `INSERT INTO community_members (community_id, joined_at, role, status, updated_at, user_id)
          VALUES (?, ?, 'member', ?, ?, ?)
          ON CONFLICT(community_id, user_id) DO UPDATE SET status = excluded.status, updated_at = excluded.updated_at`
-      )
+        )
         .bind(community.id, Date.now(), status, Date.now(), user.id)
         .run();
       return c.json({ membership: { role: "member", status } }, 201);
@@ -1238,12 +1276,13 @@ export const createCommunityRoutes = (auth: Auth) =>
           );
         }
         const now = Date.now();
-        const activation = await env.DB.prepare(
-          `INSERT INTO community_members (community_id, joined_at, paid_at, payment_reference, role, status, updated_at, user_id)
+        const activation = await getDb()
+          .prepare(
+            `INSERT INTO community_members (community_id, joined_at, paid_at, payment_reference, role, status, updated_at, user_id)
          SELECT id, ?, ?, ?, 'member', 'active', ?, ? FROM communities
          WHERE id = ? AND archived_at IS NULL AND access = 'paid' AND price_cents = ?
          ON CONFLICT(community_id, user_id) DO UPDATE SET paid_at = excluded.paid_at, payment_reference = excluded.payment_reference, status = 'active', updated_at = excluded.updated_at`
-        )
+          )
           .bind(now, now, session.id, now, user.id, community.id, paidAmount)
           .run();
         if (activation.meta.changes === 0) {
@@ -1289,9 +1328,10 @@ export const createCommunityRoutes = (auth: Auth) =>
           409
         );
       }
-      await env.DB.prepare(
-        "DELETE FROM community_members WHERE community_id = ? AND user_id = ?"
-      )
+      await getDb()
+        .prepare(
+          "DELETE FROM community_members WHERE community_id = ? AND user_id = ?"
+        )
         .bind(community.id, user.id)
         .run();
       return c.json({ left: true });
@@ -1337,9 +1377,10 @@ export const createCommunityRoutes = (auth: Auth) =>
             404
           );
         }
-        const channel = await env.DB.prepare(
-          "SELECT id FROM community_channels WHERE id = ? AND community_id = ? AND is_archived = 0"
-        )
+        const channel = await getDb()
+          .prepare(
+            "SELECT id FROM community_channels WHERE id = ? AND community_id = ? AND is_archived = 0"
+          )
           .bind(c.req.param("channelId"), community.id)
           .first<{ id: string }>();
         if (!channel) {
@@ -1362,14 +1403,18 @@ export const createCommunityRoutes = (auth: Auth) =>
              LEFT JOIN profiles p ON p.user_id = m.author_user_id
             WHERE m.channel_id = ? ORDER BY m.created_at DESC, m.id DESC LIMIT ?`;
         const statement = cursor
-          ? env.DB.prepare(query).bind(
-              channel.id,
-              cursor.createdAt,
-              cursor.createdAt,
-              cursor.id,
-              limit + 1
-            )
-          : env.DB.prepare(query).bind(channel.id, limit + 1);
+          ? getDb()
+              .prepare(query)
+              .bind(
+                channel.id,
+                cursor.createdAt,
+                cursor.createdAt,
+                cursor.id,
+                limit + 1
+              )
+          : getDb()
+              .prepare(query)
+              .bind(channel.id, limit + 1);
         const rows = await statement.all<{
           author_user_id: string;
           body: string;
@@ -1445,9 +1490,10 @@ export const createCommunityRoutes = (auth: Auth) =>
             403
           );
         }
-        const channel = await env.DB.prepare(
-          "SELECT id FROM community_channels WHERE id = ? AND community_id = ? AND is_archived = 0"
-        )
+        const channel = await getDb()
+          .prepare(
+            "SELECT id FROM community_channels WHERE id = ? AND community_id = ? AND is_archived = 0"
+          )
           .bind(c.req.param("channelId"), community.id)
           .first<{ id: string }>();
         if (!channel) {
@@ -1524,19 +1570,21 @@ export const createCommunityRoutes = (auth: Auth) =>
             403
           );
         }
-        const channel = await env.DB.prepare(
-          "SELECT id FROM community_channels WHERE id = ? AND community_id = ? AND is_archived = 0"
-        )
+        const channel = await getDb()
+          .prepare(
+            "SELECT id FROM community_channels WHERE id = ? AND community_id = ? AND is_archived = 0"
+          )
           .bind(c.req.param("channelId"), community.id)
           .first<{ id: string }>();
         if (!channel) {
           return c.json({ code: "NOT_FOUND", error: "Channel not found" }, 404);
         }
         const messageId = c.req.param("messageId");
-        const target = await env.DB.prepare(
-          `SELECT m.id FROM community_messages m
+        const target = await getDb()
+          .prepare(
+            `SELECT m.id FROM community_messages m
             WHERE m.id = ? AND m.channel_id = ? AND m.community_id = ?`
-        )
+          )
           .bind(messageId, channel.id, community.id)
           .first<{ id: string }>();
         if (!target) {
@@ -1546,27 +1594,30 @@ export const createCommunityRoutes = (auth: Auth) =>
         // Atomic flip: DELETE first (statement-level atomic), INSERT only when
         // nothing was deleted. No read-then-write window for racing toggles;
         // each request converges to exactly one state transition.
-        const removal = await env.DB.prepare(
-          `DELETE FROM community_message_reactions
+        const removal = await getDb()
+          .prepare(
+            `DELETE FROM community_message_reactions
             WHERE message_id = ? AND user_id = ? AND emoji = ?`
-        )
+          )
           .bind(messageId, user.id, input.emoji)
           .run();
         if (removal.meta.changes === 0) {
-          const insert = await env.DB.prepare(
-            `INSERT INTO community_message_reactions (created_at, emoji, message_id, user_id)
+          const insert = await getDb()
+            .prepare(
+              `INSERT INTO community_message_reactions (created_at, emoji, message_id, user_id)
              VALUES (?, ?, ?, ?)
              ON CONFLICT (message_id, user_id, emoji) DO NOTHING`
-          )
+            )
             .bind(Date.now(), input.emoji, messageId, user.id)
             .run();
           if (insert.meta.changes === 0) {
             // Rare race: the row appeared between our DELETE and INSERT.
             // Complete the flip to removed.
-            await env.DB.prepare(
-              `DELETE FROM community_message_reactions
+            await getDb()
+              .prepare(
+                `DELETE FROM community_message_reactions
                 WHERE message_id = ? AND user_id = ? AND emoji = ?`
-            )
+              )
               .bind(messageId, user.id, input.emoji)
               .run();
           }
@@ -1615,9 +1666,10 @@ export const createCommunityRoutes = (auth: Auth) =>
           403
         );
       }
-      const channel = await env.DB.prepare(
-        "SELECT id FROM community_channels WHERE id = ? AND community_id = ? AND is_archived = 0"
-      )
+      const channel = await getDb()
+        .prepare(
+          "SELECT id FROM community_channels WHERE id = ? AND community_id = ? AND is_archived = 0"
+        )
         .bind(c.req.param("channelId"), community.id)
         .first<{ id: string }>();
       if (!channel) {
@@ -1659,12 +1711,13 @@ export const createCommunityRoutes = (auth: Auth) =>
           403
         );
       }
-      const rows = await env.DB.prepare(
-        `SELECT m.role, m.status, m.joined_at, u.id, u.image, u.name, p.username AS pusername
+      const rows = await getDb()
+        .prepare(
+          `SELECT m.role, m.status, m.joined_at, u.id, u.image, u.name, p.username AS pusername
            FROM community_members m JOIN user u ON u.id = m.user_id
            LEFT JOIN profiles p ON p.user_id = m.user_id
           WHERE m.community_id = ? ORDER BY m.joined_at`
-      )
+        )
         .bind(community.id)
         .all<{
           email: string;
@@ -1721,9 +1774,10 @@ export const createCommunityRoutes = (auth: Auth) =>
           );
         }
         const input = c.req.valid("json");
-        await env.DB.prepare(
-          "UPDATE community_members SET role = COALESCE(?, role), status = COALESCE(?, status), updated_at = ? WHERE community_id = ? AND user_id = ?"
-        )
+        await getDb()
+          .prepare(
+            "UPDATE community_members SET role = COALESCE(?, role), status = COALESCE(?, status), updated_at = ? WHERE community_id = ? AND user_id = ?"
+          )
           .bind(
             input.role ?? null,
             input.status ?? null,
@@ -1762,9 +1816,10 @@ export const createCommunityRoutes = (auth: Auth) =>
             403
           );
         }
-        const message = await env.DB.prepare(
-          "SELECT 1 AS present FROM community_messages WHERE id = ? AND community_id = ? AND channel_id = ?"
-        )
+        const message = await getDb()
+          .prepare(
+            "SELECT 1 AS present FROM community_messages WHERE id = ? AND community_id = ? AND channel_id = ?"
+          )
           .bind(
             c.req.param("messageId"),
             community.id,
@@ -1776,9 +1831,10 @@ export const createCommunityRoutes = (auth: Auth) =>
         }
         const input = c.req.valid("json");
         try {
-          await env.DB.prepare(
-            "INSERT INTO community_reports (community_id, created_at, id, message_id, reason, reporter_user_id, status, updated_at) VALUES (?, ?, ?, ?, ?, ?, 'open', ?)"
-          )
+          await getDb()
+            .prepare(
+              "INSERT INTO community_reports (community_id, created_at, id, message_id, reason, reporter_user_id, status, updated_at) VALUES (?, ?, ?, ?, ?, ?, 'open', ?)"
+            )
             .bind(
               community.id,
               Date.now(),
@@ -1822,9 +1878,10 @@ export const createCommunityRoutes = (auth: Auth) =>
           403
         );
       }
-      const rows = await env.DB.prepare(
-        "SELECT created_at, id, message_id, reason, reporter_user_id, resolved_at, status FROM community_reports WHERE community_id = ? ORDER BY created_at DESC LIMIT 100"
-      )
+      const rows = await getDb()
+        .prepare(
+          "SELECT created_at, id, message_id, reason, reporter_user_id, resolved_at, status FROM community_reports WHERE community_id = ? ORDER BY created_at DESC LIMIT 100"
+        )
         .bind(community.id)
         .all<{
           created_at: number;
@@ -1874,9 +1931,10 @@ export const createCommunityRoutes = (auth: Auth) =>
           );
         }
         const input = c.req.valid("json");
-        const result = await env.DB.prepare(
-          "UPDATE community_reports SET resolved_at = ?, resolved_by = ?, status = ?, updated_at = ? WHERE id = ? AND community_id = ?"
-        )
+        const result = await getDb()
+          .prepare(
+            "UPDATE community_reports SET resolved_at = ?, resolved_by = ?, status = ?, updated_at = ? WHERE id = ? AND community_id = ?"
+          )
           .bind(
             Date.now(),
             user.id,
@@ -1909,9 +1967,10 @@ export const createCommunityRoutes = (auth: Auth) =>
           );
         }
         const membership = await getMembership(community.id, user.id);
-        const message = await env.DB.prepare(
-          "SELECT author_user_id FROM community_messages WHERE id = ? AND community_id = ? AND channel_id = ? AND deleted_at IS NULL"
-        )
+        const message = await getDb()
+          .prepare(
+            "SELECT author_user_id FROM community_messages WHERE id = ? AND community_id = ? AND channel_id = ? AND deleted_at IS NULL"
+          )
           .bind(
             c.req.param("messageId"),
             community.id,
@@ -1927,9 +1986,10 @@ export const createCommunityRoutes = (auth: Auth) =>
             403
           );
         }
-        await env.DB.prepare(
-          "UPDATE community_messages SET body = '', deleted_at = ? WHERE id = ?"
-        )
+        await getDb()
+          .prepare(
+            "UPDATE community_messages SET body = '', deleted_at = ? WHERE id = ?"
+          )
           .bind(Date.now(), c.req.param("messageId"))
           .run();
         const stub = env.COMMUNITY_CHANNEL_ROOMS.getByName(

@@ -1,16 +1,17 @@
 import { sql } from "drizzle-orm";
 import {
+  bigint,
   check,
   index,
   integer,
-  sqliteTable,
+  pgTable,
   text,
   uniqueIndex,
-} from "drizzle-orm/sqlite-core";
+} from "drizzle-orm/pg-core";
 
 import { createdAtColumn, updatedAtColumn } from "./columns";
 
-export const operationFailures = sqliteTable(
+export const operationFailures = pgTable(
   "operation_failures",
   {
     attempts: integer("attempts").notNull(),
@@ -18,9 +19,9 @@ export const operationFailures = sqliteTable(
     errorMessage: text("error_message").notNull(),
     id: text("id").primaryKey(),
     messageId: text("message_id").notNull(),
-    payload: text("payload", { mode: "json" }).$type<unknown>().notNull(),
+    payload: text("payload").notNull(),
     queue: text("queue").notNull(),
-    replayedAt: integer("replayed_at", { mode: "timestamp_ms" }),
+    replayedAt: bigint("replayed_at", { mode: "number" }),
     status: text("status").notNull().default("failed"),
     updatedAt: updatedAtColumn(),
   },
@@ -40,7 +41,7 @@ export const operationFailures = sqliteTable(
   ]
 );
 
-export const migrationReceipts = sqliteTable(
+export const migrationReceipts = pgTable(
   "migration_receipts",
   {
     createdAt: createdAtColumn(),

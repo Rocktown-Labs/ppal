@@ -6,12 +6,11 @@ import type {
   TicketLegContract,
 } from "@ppal/contracts/tickets";
 import { reviewTicketRequestSchema } from "@ppal/contracts/tickets";
-import { env } from "@ppal/env/server";
 import { Hono } from "hono";
 import { z } from "zod";
 
 import { getAuthUser } from "../lib/auth";
-import { safeJsonParse } from "../lib/database";
+import { getDb, safeJsonParse } from "../lib/database";
 import { getUserPlan } from "../lib/entitlements";
 import { writeAuditEvent } from "../services/audit";
 import { refreshHistoricalBatch } from "../services/historical-imports";
@@ -105,26 +104,28 @@ const mapLeg = (leg: TicketLegRow): TicketLegContract => ({
 });
 
 const getTicket = async (ticketId: string, userId: string) => {
-  const ticket = await env.DB.prepare(
-    `SELECT confirmed_at, created_at, displayed_result, id, ingestion_mode,
+  const ticket = await getDb()
+    .prepare(
+      `SELECT confirmed_at, created_at, displayed_result, id, ingestion_mode,
       notification_interval_minutes, result_source,
       settled_at, source_name, source_upload_id, status, ticket_type,
       tracking_started_at, updated_at, verification_status, verified_at
      FROM tickets WHERE id = ? AND user_id = ?`
-  )
+    )
     .bind(ticketId, userId)
     .first<TicketRow>();
   if (!ticket) {
     return null;
   }
-  const legs = await env.DB.prepare(
-    `SELECT current_value, display_description, id, league_id, lost_at,
+  const legs = await getDb()
+    .prepare(
+      `SELECT current_value, display_description, id, league_id, lost_at,
       market_id, market_components, operator, participant_id, raw_description,
       resolver_confidence, resolver_status, secondary_target_value,
       settled_at, sport_id, sports_event_id, status, subject_name,
       subject_type, target_value, ticket_id, won_at
      FROM ticket_legs WHERE ticket_id = ? ORDER BY created_at, id`
-  )
+    )
     .bind(ticketId)
     .all<TicketLegRow>();
   return {
@@ -181,15 +182,25 @@ export const createTicketRoutes = (auth: Auth) =>
         if (!user) {
           return c.json({ code: "UNAUTHORIZED", error: "Unauthorized" }, 401);
         }
-        // D1 rejects `undefined` bindings, so absent query params coalesce.
         const { cursor = null, limit = 20 } = c.req.valid("query");
-        const rows = await env.DB.prepare(
-          `SELECT id, created_at FROM tickets WHERE user_id = ?
-           AND (? IS NULL OR created_at < ?)
-           ORDER BY created_at DESC LIMIT ?`
-        )
-          .bind(user.id, cursor, cursor ? Number(cursor) : null, limit + 1)
-          .all<{ created_at: number; id: string }>();
+        const parsedCursor = cursor ? Number(cursor) : null;
+        const rows =
+          parsedCursor === null
+            ? await getDb()
+                .prepare(
+                  `SELECT id, created_at FROM tickets WHERE user_id = ?
+                   ORDER BY created_at DESC LIMIT ?`
+                )
+                .bind(user.id, limit + 1)
+                .all<{ created_at: number; id: string }>()
+            : await getDb()
+                .prepare(
+                  `SELECT id, created_at FROM tickets WHERE user_id = ?
+                   AND created_at < ?
+                   ORDER BY created_at DESC LIMIT ?`
+                )
+                .bind(user.id, parsedCursor, limit + 1)
+                .all<{ created_at: number; id: string }>();
         const hasMore = rows.results.length > limit;
         const page = rows.results.slice(0, limit);
         const loadedTickets = await Promise.all(
@@ -228,9 +239,10 @@ export const createTicketRoutes = (auth: Auth) =>
           return c.json({ code: "UNAUTHORIZED", error: "Unauthorized" }, 401);
         }
         const ticketId = c.req.param("ticketId");
-        const ticket = await env.DB.prepare(
-          "SELECT id, status FROM tickets WHERE id = ? AND user_id = ?"
-        )
+        const ticket = await getDb()
+          .prepare(
+            "SELECT id, status FROM tickets WHERE id = ? AND user_id = ?"
+          )
           .bind(ticketId, user.id)
           .first<{ id: string; status: string }>();
         if (!ticket) {
@@ -250,9 +262,8 @@ export const createTicketRoutes = (auth: Auth) =>
           );
         }
         const input = c.req.valid("json");
-        const existingLegs = await env.DB.prepare(
-          "SELECT id FROM ticket_legs WHERE ticket_id = ?"
-        )
+        const existingLegs = await getDb()
+          .prepare("SELECT id FROM ticket_legs WHERE ticket_id = ?")
           .bind(ticketId)
           .all<{ id: string }>();
         const existingIds = new Set(existingLegs.results.map(({ id }) => id));
@@ -274,8 +285,9 @@ export const createTicketRoutes = (auth: Auth) =>
         const completeLegs = input.legs.filter(hasRequiredCatalogReferences);
         const catalogMatches = await Promise.all(
           completeLegs.map((leg) =>
-            env.DB.prepare(
-              `SELECT CASE WHEN m.id IS NOT NULL
+            getDb()
+              .prepare(
+                `SELECT CASE WHEN m.id IS NOT NULL
                  AND (m.sport_id IS NULL OR m.sport_id = event_league.sport_id)
                  AND m.subject_type = ?
                  AND ((? = 'game' AND p.id IS NULL)
@@ -291,7 +303,7 @@ export const createTicketRoutes = (auth: Auth) =>
                LEFT JOIN markets m ON m.id = ?
                LEFT JOIN participants p ON p.id = ?
                WHERE e.id = ?`
-            )
+              )
               .bind(
                 leg.subjectType,
                 leg.subjectType,
@@ -322,41 +334,45 @@ export const createTicketRoutes = (auth: Auth) =>
           completeLegs.map((leg, index) => [leg.id, catalogMatches[index]])
         );
         const now = Date.now();
-        const plan = await getUserPlan(env.DB, user.id);
+        const plan = await getUserPlan(getDb(), user.id);
         const notificationIntervalMinutes =
           plan === "free" ? 15 : input.notificationIntervalMinutes;
         const updates = input.legs.map((leg) =>
-          env.DB.prepare(
-            `UPDATE ticket_legs SET display_description = ?, league_id = ?,
+          getDb()
+            .prepare(
+              `UPDATE ticket_legs SET display_description = ?, league_id = ?,
               market_id = ?, operator = ?, participant_id = ?,
               resolver_status = ?,
               secondary_target_value = ?, sport_id = ?, sports_event_id = ?,
               subject_name = ?, subject_type = ?, target_value = ?,
               updated_at = ?, version = version + 1 WHERE id = ? AND ticket_id = ?`
-          ).bind(
-            leg.displayDescription,
-            catalogMatchByLegId.get(leg.id)?.league_id ?? leg.leagueId,
-            leg.marketId,
-            leg.operator,
-            leg.participantId,
-            hasRequiredCatalogReferences(leg) ? "resolved" : "ambiguous",
-            leg.secondaryTargetValue,
-            catalogMatchByLegId.get(leg.id)?.sport_id ?? leg.sportId,
-            leg.sportsEventId,
-            leg.subjectName,
-            leg.subjectType,
-            leg.targetValue,
-            now,
-            leg.id,
-            ticketId
-          )
+            )
+            .bind(
+              leg.displayDescription,
+              catalogMatchByLegId.get(leg.id)?.league_id ?? leg.leagueId,
+              leg.marketId,
+              leg.operator,
+              leg.participantId,
+              hasRequiredCatalogReferences(leg) ? "resolved" : "ambiguous",
+              leg.secondaryTargetValue,
+              catalogMatchByLegId.get(leg.id)?.sport_id ?? leg.sportId,
+              leg.sportsEventId,
+              leg.subjectName,
+              leg.subjectType,
+              leg.targetValue,
+              now,
+              leg.id,
+              ticketId
+            )
         );
-        const reviewBatch = await env.DB.batch([
+        const reviewBatch = await getDb().batch([
           ...updates,
-          env.DB.prepare(
-            `UPDATE tickets SET notification_interval_minutes = ?, updated_at = ?,
+          getDb()
+            .prepare(
+              `UPDATE tickets SET notification_interval_minutes = ?, updated_at = ?,
               version = version + 1 WHERE id = ? AND user_id = ? AND status IN ('draft', 'needs_review')`
-          ).bind(notificationIntervalMinutes, now, ticketId, user.id),
+            )
+            .bind(notificationIntervalMinutes, now, ticketId, user.id),
         ]);
         const ticketUpdate = reviewBatch.at(-1);
         if (!ticketUpdate || ticketUpdate.meta.changes === 0) {
@@ -393,11 +409,12 @@ export const createTicketRoutes = (auth: Auth) =>
         return c.json({ code: "UNAUTHORIZED", error: "Unauthorized" }, 401);
       }
       const ticketId = c.req.param("ticketId");
-      const unresolved = await env.DB.prepare(
-        `SELECT COUNT(*) AS count FROM ticket_legs l
+      const unresolved = await getDb()
+        .prepare(
+          `SELECT COUNT(*) AS count FROM ticket_legs l
          JOIN tickets t ON t.id = l.ticket_id
          WHERE t.id = ? AND t.user_id = ? AND l.resolver_status != 'resolved'`
-      )
+        )
         .bind(ticketId, user.id)
         .first<{ count: number }>();
       if (!unresolved) {
@@ -422,9 +439,8 @@ export const createTicketRoutes = (auth: Auth) =>
         );
       }
       const now = Date.now();
-      const ticketRow = await env.DB.prepare(
-        "SELECT status FROM tickets WHERE id = ? AND user_id = ?"
-      )
+      const ticketRow = await getDb()
+        .prepare("SELECT status FROM tickets WHERE id = ? AND user_id = ?")
         .bind(ticketId, user.id)
         .first<{ status: string }>();
       if (!ticketRow) {
@@ -439,14 +455,15 @@ export const createTicketRoutes = (auth: Auth) =>
           409
         );
       }
-      const legs = await env.DB.prepare(
-        `SELECT l.id, l.market_id, l.participant_id, l.sports_event_id,
+      const legs = await getDb()
+        .prepare(
+          `SELECT l.id, l.market_id, l.participant_id, l.sports_event_id,
           e.starts_at, t.notification_interval_minutes
          FROM ticket_legs l
          JOIN tickets t ON t.id = l.ticket_id
          JOIN sports_events e ON e.id = l.sports_event_id
          WHERE l.ticket_id = ? AND t.user_id = ?`
-      )
+        )
         .bind(ticketId, user.id)
         .all<{
           id: string;
@@ -457,21 +474,23 @@ export const createTicketRoutes = (auth: Auth) =>
           starts_at: number;
         }>();
       const trackingStatements = legs.results.map((leg) =>
-        env.DB.prepare(
-          `INSERT INTO tracking_subscriptions (
+        getDb()
+          .prepare(
+            `INSERT INTO tracking_subscriptions (
             id, market_id, participant_id, sports_event_id, status,
             subscription_key, ticket_leg_id, updated_at
           ) VALUES (?, ?, ?, ?, 'active', ?, ?, ?)
           ON CONFLICT(subscription_key) DO NOTHING`
-        ).bind(
-          crypto.randomUUID(),
-          leg.market_id,
-          leg.participant_id,
-          leg.sports_event_id,
-          `${leg.id}:${leg.sports_event_id}:${leg.participant_id ?? "game"}:${leg.market_id}`,
-          leg.id,
-          now
-        )
+          )
+          .bind(
+            crypto.randomUUID(),
+            leg.market_id,
+            leg.participant_id,
+            leg.sports_event_id,
+            `${leg.id}:${leg.sports_event_id}:${leg.participant_id ?? "game"}:${leg.market_id}`,
+            leg.id,
+            now
+          )
       );
       const eventPollTimes = new Map<string, number>();
       for (const leg of legs.results) {
@@ -486,16 +505,20 @@ export const createTicketRoutes = (auth: Auth) =>
         }
       }
       const eventStatements = [...eventPollTimes].map(([eventId, pollAt]) =>
-        env.DB.prepare(
-          "UPDATE sports_events SET next_poll_at = MIN(COALESCE(next_poll_at, ?), ?), updated_at = ? WHERE id = ?"
-        ).bind(pollAt, pollAt, now, eventId)
+        getDb()
+          .prepare(
+            "UPDATE sports_events SET next_poll_at = LEAST(COALESCE(next_poll_at, ?), ?), updated_at = ? WHERE id = ?"
+          )
+          .bind(pollAt, pollAt, now, eventId)
       );
-      const confirmBatch = await env.DB.batch([
-        env.DB.prepare(
-          `UPDATE tickets SET confirmed_at = ?, last_progress_notified_at = ?, status = 'scheduled',
+      const confirmBatch = await getDb().batch([
+        getDb()
+          .prepare(
+            `UPDATE tickets SET confirmed_at = ?, last_progress_notified_at = ?, status = 'scheduled',
             tracking_started_at = ?, updated_at = ?, version = version + 1
            WHERE id = ? AND user_id = ? AND status IN ('draft', 'needs_review')`
-        ).bind(now, now, now, now, ticketId, user.id),
+          )
+          .bind(now, now, now, now, ticketId, user.id),
         ...trackingStatements,
         ...eventStatements,
       ]);
@@ -516,7 +539,7 @@ export const createTicketRoutes = (auth: Auth) =>
         targetId: ticketId,
         targetType: "ticket",
       });
-      await qualifyReferral(env.DB, user.id);
+      await qualifyReferral(getDb(), user.id);
       const confirmed = await getTicket(ticketId, user.id);
       return c.json({ ticket: confirmed }, 200);
     })
@@ -529,10 +552,11 @@ export const createTicketRoutes = (auth: Auth) =>
       }
       const ticketId = c.req.param("ticketId");
       const now = Date.now();
-      const result = await env.DB.prepare(
-        `UPDATE tickets SET result_source = 'manual', settled_at = ?, status = 'void', updated_at = ?, version = version + 1
+      const result = await getDb()
+        .prepare(
+          `UPDATE tickets SET result_source = 'manual', settled_at = ?, status = 'void', updated_at = ?, version = version + 1
          WHERE id = ? AND user_id = ? AND status NOT IN ('won', 'lost', 'push', 'void', 'partially_void', 'settled')`
-      )
+        )
         .bind(now, now, ticketId, user.id)
         .run();
       if (result.meta.changes === 0) {
@@ -541,17 +565,23 @@ export const createTicketRoutes = (auth: Auth) =>
           409
         );
       }
-      await env.DB.batch([
-        env.DB.prepare(
-          "UPDATE ticket_legs SET status = 'cancelled', settled_at = ?, updated_at = ? WHERE ticket_id = ? AND status IN ('pending', 'live', 'unresolved')"
-        ).bind(now, now, ticketId),
-        env.DB.prepare(
-          "UPDATE tracking_subscriptions SET status = 'cancelled', updated_at = ? WHERE ticket_leg_id IN (SELECT id FROM ticket_legs WHERE ticket_id = ?)"
-        ).bind(now, ticketId),
-        env.DB.prepare(
-          `INSERT INTO ticket_timeline_events (id, occurred_at, ticket_id, title, transition_key, type)
+      await getDb().batch([
+        getDb()
+          .prepare(
+            "UPDATE ticket_legs SET status = 'cancelled', settled_at = ?, updated_at = ? WHERE ticket_id = ? AND status IN ('pending', 'live', 'unresolved')"
+          )
+          .bind(now, now, ticketId),
+        getDb()
+          .prepare(
+            "UPDATE tracking_subscriptions SET status = 'cancelled', updated_at = ? WHERE ticket_leg_id IN (SELECT id FROM ticket_legs WHERE ticket_id = ?)"
+          )
+          .bind(now, ticketId),
+        getDb()
+          .prepare(
+            `INSERT INTO ticket_timeline_events (id, occurred_at, ticket_id, title, transition_key, type)
            VALUES (?, ?, ?, 'Ticket cancelled', ?, 'ticket.cancelled') ON CONFLICT(transition_key) DO NOTHING`
-        ).bind(crypto.randomUUID(), now, ticketId, `${ticketId}:cancelled`),
+          )
+          .bind(crypto.randomUUID(), now, ticketId, `${ticketId}:cancelled`),
       ]);
       await writeAuditEvent({
         action: "ticket.cancel",
@@ -574,10 +604,11 @@ export const createTicketRoutes = (auth: Auth) =>
           return c.json({ code: "UNAUTHORIZED", error: "Unauthorized" }, 401);
         }
         const ticketId = c.req.param("ticketId");
-        const ticket = await env.DB.prepare(
-          `SELECT historical_import_batch_id, id, ingestion_mode, status, verification_status, version
+        const ticket = await getDb()
+          .prepare(
+            `SELECT historical_import_batch_id, id, ingestion_mode, status, verification_status, version
            FROM tickets WHERE id = ? AND user_id = ?`
-        )
+          )
           .bind(ticketId, user.id)
           .first<{
             historical_import_batch_id: string | null;
@@ -606,9 +637,8 @@ export const createTicketRoutes = (auth: Auth) =>
           );
         }
         const input = c.req.valid("json");
-        const ownedLegs = await env.DB.prepare(
-          "SELECT id FROM ticket_legs WHERE ticket_id = ?"
-        )
+        const ownedLegs = await getDb()
+          .prepare("SELECT id FROM ticket_legs WHERE ticket_id = ?")
           .bind(ticketId)
           .all<{ id: string }>();
         const ownedIds = new Set(ownedLegs.results.map((leg) => leg.id));
@@ -638,10 +668,11 @@ export const createTicketRoutes = (auth: Auth) =>
         } else if (statuses.includes("void") || statuses.includes("push")) {
           ticketStatus = "partially_void";
         }
-        const settlementResults = await env.DB.batch([
+        const settlementResults = await getDb().batch([
           ...input.legs.map((leg) =>
-            env.DB.prepare(
-              `UPDATE ticket_legs SET current_value = ?, lost_at = ?, settled_at = ?, status = ?, updated_at = ?, won_at = ?
+            getDb()
+              .prepare(
+                `UPDATE ticket_legs SET current_value = ?, lost_at = ?, settled_at = ?, status = ?, updated_at = ?, won_at = ?
                WHERE id = ? AND ticket_id = ? AND EXISTS (
                  SELECT 1 FROM tickets t WHERE t.id = ? AND t.user_id = ?
                    AND t.version = ?
@@ -649,22 +680,24 @@ export const createTicketRoutes = (auth: Auth) =>
                    AND t.status IN ('draft', 'needs_review')
                    AND t.verification_status != 'verified'
                )`
-            ).bind(
-              leg.value,
-              leg.status === "lost" ? now : null,
-              now,
-              leg.status,
-              now,
-              leg.status === "won" ? now : null,
-              leg.id,
-              ticketId,
-              ticketId,
-              user.id,
-              ticket.version
-            )
+              )
+              .bind(
+                leg.value,
+                leg.status === "lost" ? now : null,
+                now,
+                leg.status,
+                now,
+                leg.status === "won" ? now : null,
+                leg.id,
+                ticketId,
+                ticketId,
+                user.id,
+                ticket.version
+              )
           ),
-          env.DB.prepare(
-            `UPDATE tracking_subscriptions SET status = 'completed', updated_at = ?
+          getDb()
+            .prepare(
+              `UPDATE tracking_subscriptions SET status = 'completed', updated_at = ?
              WHERE ticket_leg_id IN (SELECT id FROM ticket_legs WHERE ticket_id = ?)
                AND EXISTS (
                  SELECT 1 FROM tickets t WHERE t.id = ? AND t.user_id = ?
@@ -673,45 +706,50 @@ export const createTicketRoutes = (auth: Auth) =>
                    AND t.status IN ('draft', 'needs_review')
                    AND t.verification_status != 'verified'
                )`
-          ).bind(now, ticketId, ticketId, user.id, ticket.version),
-          env.DB.prepare(
-            `INSERT INTO ticket_timeline_events (id, message, occurred_at, ticket_id, title, transition_key, type)
+            )
+            .bind(now, ticketId, ticketId, user.id, ticket.version),
+          getDb()
+            .prepare(
+              `INSERT INTO ticket_timeline_events (id, message, occurred_at, ticket_id, title, transition_key, type)
            SELECT ?, ?, ?, ?, 'Ticket manually settled', ?, 'ticket.manual_settlement'
            FROM tickets t WHERE t.id = ? AND t.user_id = ? AND t.version = ?
              AND t.ingestion_mode = 'historical'
              AND t.status IN ('draft', 'needs_review')
              AND t.verification_status != 'verified'
            ON CONFLICT(transition_key) DO NOTHING`
-          ).bind(
-            crypto.randomUUID(),
-            `Recorded from ${input.source}`,
-            now,
-            ticketId,
-            `${ticketId}:manual-settlement:v${ticket.version + 1}`,
-            ticketId,
-            user.id,
-            ticket.version
-          ),
-          env.DB.prepare(
-            `UPDATE tickets SET result_source = ?, settled_at = ?, status = ?, updated_at = ?,
+            )
+            .bind(
+              crypto.randomUUID(),
+              `Recorded from ${input.source}`,
+              now,
+              ticketId,
+              `${ticketId}:manual-settlement:v${ticket.version + 1}`,
+              ticketId,
+              user.id,
+              ticket.version
+            ),
+          getDb()
+            .prepare(
+              `UPDATE tickets SET result_source = ?, settled_at = ?, status = ?, updated_at = ?,
              verification_status = ?, verified_at = ?, version = version + 1
              WHERE id = ? AND user_id = ? AND version = ?
                AND ingestion_mode = 'historical'
                AND status IN ('draft', 'needs_review')
                AND verification_status != 'verified'`
-          ).bind(
-            input.source,
-            now,
-            ticketStatus,
-            now,
-            input.source === "settled_slip"
-              ? "partially_verified"
-              : "unverified",
-            input.source === "settled_slip" ? now : null,
-            ticketId,
-            user.id,
-            ticket.version
-          ),
+            )
+            .bind(
+              input.source,
+              now,
+              ticketStatus,
+              now,
+              input.source === "settled_slip"
+                ? "partially_verified"
+                : "unverified",
+              input.source === "settled_slip" ? now : null,
+              ticketId,
+              user.id,
+              ticket.version
+            ),
         ]);
         const settlement = settlementResults.at(-1);
         if (!settlement || settlement.meta.changes === 0) {
@@ -725,7 +763,7 @@ export const createTicketRoutes = (auth: Auth) =>
         }
         if (ticket.historical_import_batch_id) {
           await refreshHistoricalBatch(
-            env.DB,
+            getDb(),
             ticket.historical_import_batch_id
           );
         }
@@ -749,9 +787,10 @@ export const createTicketRoutes = (auth: Auth) =>
         return c.json({ code: "UNAUTHORIZED", error: "Unauthorized" }, 401);
       }
       const ticketId = c.req.param("ticketId");
-      const result = await env.DB.prepare(
-        "DELETE FROM tickets WHERE id = ? AND user_id = ? AND status IN ('draft', 'needs_review', 'void')"
-      )
+      const result = await getDb()
+        .prepare(
+          "DELETE FROM tickets WHERE id = ? AND user_id = ? AND status IN ('draft', 'needs_review', 'void')"
+        )
         .bind(ticketId, user.id)
         .run();
       if (result.meta.changes === 0) {
@@ -780,12 +819,13 @@ export const createTicketRoutes = (auth: Auth) =>
       if (!user) {
         return c.json({ code: "UNAUTHORIZED", error: "Unauthorized" }, 401);
       }
-      const rows = await env.DB.prepare(
-        `SELECT e.id, e.message, e.metadata, e.occurred_at, e.ticket_leg_id,
+      const rows = await getDb()
+        .prepare(
+          `SELECT e.id, e.message, e.metadata, e.occurred_at, e.ticket_leg_id,
           e.title, e.type FROM ticket_timeline_events e
          JOIN tickets t ON t.id = e.ticket_id
          WHERE e.ticket_id = ? AND t.user_id = ? ORDER BY e.occurred_at DESC`
-      )
+        )
         .bind(c.req.param("ticketId"), user.id)
         .all<{
           id: string;

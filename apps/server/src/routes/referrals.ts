@@ -1,10 +1,10 @@
-/* oxlint-disable no-await-in-loop -- Referral-code collision retries must observe each unique constraint result. */
-
 import type { Auth } from "@ppal/auth";
-import { env } from "@ppal/env/server";
+import type { SqlDatabase } from "@ppal/db";
+/* oxlint-disable no-await-in-loop -- Referral-code collision retries must observe each unique constraint result. */
 import { Hono } from "hono";
 
 import { getAuthUser } from "../lib/auth";
+import { getDb } from "../lib/database";
 
 const CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
 const CODE_LENGTH = 8;
@@ -51,9 +51,8 @@ const randomCode = (): string => {
 };
 
 const ensureReferralCode = async (userId: string): Promise<string> => {
-  const current = await env.DB.prepare(
-    "SELECT referral_code FROM user WHERE id = ?"
-  )
+  const current = await getDb()
+    .prepare("SELECT referral_code FROM user WHERE id = ?")
     .bind(userId)
     .first<{ referral_code: string | null }>();
   if (current?.referral_code) {
@@ -62,24 +61,31 @@ const ensureReferralCode = async (userId: string): Promise<string> => {
   for (let attempt = 0; attempt < 5; attempt += 1) {
     const code = randomCode();
     try {
-      const result = await env.DB.prepare(
-        "UPDATE user SET referral_code = ?, updated_at = ? WHERE id = ? AND referral_code IS NULL RETURNING referral_code"
-      )
-        .bind(code, Date.now(), userId)
+      const result = await getDb()
+        .prepare(
+          "UPDATE user SET referral_code = ?, updated_at = ? WHERE id = ? AND referral_code IS NULL RETURNING referral_code"
+        )
+        .bind(code, new Date(), userId)
         .first<{ referral_code: string }>();
       if (result?.referral_code) {
         return result.referral_code;
       }
-      const raced = await env.DB.prepare(
-        "SELECT referral_code FROM user WHERE id = ?"
-      )
+      const raced = await getDb()
+        .prepare("SELECT referral_code FROM user WHERE id = ?")
         .bind(userId)
         .first<{ referral_code: string | null }>();
       if (raced?.referral_code) {
         return raced.referral_code;
       }
     } catch (error) {
-      if (!(error instanceof Error && error.message.includes("UNIQUE"))) {
+      const isUniqueViolation =
+        (typeof error === "object" &&
+          error !== null &&
+          "code" in error &&
+          (error as { code?: unknown }).code === "23505") ||
+        (error instanceof Error &&
+          /unique|duplicate key/iu.test(error.message));
+      if (!isUniqueViolation) {
         throw error;
       }
     }
@@ -97,10 +103,11 @@ export const createReferralRoutes = (auth: Auth) =>
         return c.json({ code: "UNAUTHORIZED", error: "Unauthorized" }, 401);
       }
       const code = await ensureReferralCode(user.id);
-      const rows = await env.DB.prepare(
-        `SELECT claimed_at, code, completed_at, created_at, id, status FROM referrals
+      const rows = await getDb()
+        .prepare(
+          `SELECT claimed_at, code, completed_at, created_at, id, status FROM referrals
          WHERE referrer_user_id = ? ORDER BY created_at DESC LIMIT 100`
-      )
+        )
         .bind(user.id)
         .all<ReferralRow>();
       const completed = rows.results.filter(
@@ -132,9 +139,8 @@ export const createReferralRoutes = (auth: Auth) =>
     })
     .get("/referrals/:code", async (c) => {
       const code = c.req.param("code").trim().toUpperCase();
-      const owner = await env.DB.prepare(
-        "SELECT id FROM user WHERE referral_code = ?"
-      )
+      const owner = await getDb()
+        .prepare("SELECT id FROM user WHERE referral_code = ?")
         .bind(code)
         .first<{ id: string }>();
       return owner
@@ -152,13 +158,14 @@ export const createReferralRoutes = (auth: Auth) =>
       }
       const code = c.req.param("code").trim().toUpperCase();
       const referralId = crypto.randomUUID();
-      const result = await env.DB.prepare(
-        `INSERT INTO referrals (claimed_at, code, id, referred_user_id, referrer_user_id, status)
+      const result = await getDb()
+        .prepare(
+          `INSERT INTO referrals (claimed_at, code, id, referred_user_id, referrer_user_id, status)
          SELECT ?, u.referral_code, ?, ?, u.id, 'pending' FROM user u
          WHERE u.referral_code = ? AND u.id != ?
            AND NOT EXISTS (SELECT 1 FROM referrals r WHERE r.referred_user_id = ?)
          ON CONFLICT(referred_user_id) DO NOTHING`
-      )
+        )
         .bind(Date.now(), referralId, user.id, code, user.id, user.id)
         .run();
       if (result.meta.changes === 0) {
@@ -174,7 +181,7 @@ export const createReferralRoutes = (auth: Auth) =>
     });
 
 export const qualifyReferral = async (
-  db: D1Database,
+  db: SqlDatabase,
   referredUserId: string
 ): Promise<void> => {
   await db

@@ -1,8 +1,14 @@
 import { extractionQueueMessageSchema } from "@ppal/contracts/queues";
 import type { ExtractionResult } from "@ppal/contracts/uploads";
+import type { SqlDatabase, SqlPreparedStatement } from "@ppal/db";
 
+import { getDb } from "../lib/database";
 import { refreshHistoricalBatch } from "./historical-imports";
 import { publishNotification } from "./notifications";
+import {
+  ensureSportScheduleHydrated,
+  resolveSportSlugFromHint,
+} from "./schedules";
 import { resolveExtractedLeg } from "./ticket-resolution";
 import {
   applySettledOverride,
@@ -32,19 +38,56 @@ interface UploadRow {
   user_id: string;
 }
 
+const ISO_DATE_PATTERN = /\d{4}-\d{2}-\d{2}/u;
+
+const hydrateSchedulesForExtraction = async (
+  extraction: ExtractionResult,
+  workerEnv: Env
+): Promise<void> => {
+  const seen = new Set<string>();
+  const targets: { date?: string; sportSlug: string }[] = [];
+  for (const leg of extraction.legs) {
+    const sportSlug = resolveSportSlugFromHint(leg.sport, leg.league);
+    if (!sportSlug) {
+      continue;
+    }
+    const rawDate = leg.eventHint?.match(ISO_DATE_PATTERN)?.[0];
+    const key = `${sportSlug}:${rawDate ?? "today"}`;
+    if (!seen.has(key)) {
+      seen.add(key);
+      targets.push({ date: rawDate, sportSlug });
+    }
+  }
+  for (const target of targets) {
+    // oxlint-disable-next-line no-await-in-loop -- Hydrate distinct sport schedules sequentially to respect QPS.
+    await ensureSportScheduleHydrated({
+      date: target.date,
+      sportSlug: target.sportSlug,
+      workerEnv,
+    });
+  }
+};
+
 const createTicketStatements = async ({
   db,
   extraction,
   extractionId,
   ticketId,
   upload,
+  workerEnv,
 }: {
-  db: D1Database;
+  db: SqlDatabase;
   extraction: ExtractionResult;
   extractionId: string;
   ticketId: string;
   upload: UploadRow;
-}): Promise<D1PreparedStatement[]> => {
+  workerEnv: Env;
+}): Promise<SqlPreparedStatement[]> => {
+  try {
+    await hydrateSchedulesForExtraction(extraction, workerEnv);
+  } catch {
+    // Schedule hydration is best-effort and must never fail ticket creation.
+  }
   const now = Date.now();
   const resolutions = await Promise.all(
     extraction.legs.map((leg) => resolveExtractedLeg(db, leg))
@@ -157,22 +200,28 @@ const rejectNonSlipUpload = async (
   reason: string,
   upload: UploadRow
 ): Promise<void> => {
-  await workerEnv.DB.batch([
-    workerEnv.DB.prepare(
-      `UPDATE extractions SET status = 'failed', error_message = ?, updated_at = ?
+  await getDb(workerEnv).batch([
+    getDb(workerEnv)
+      .prepare(
+        `UPDATE extractions SET status = 'failed', error_message = ?, updated_at = ?
        WHERE id = ?`
-    ).bind(reason, Date.now(), extractionId),
-    workerEnv.DB.prepare(
-      "UPDATE uploads SET status = 'failed', updated_at = ? WHERE id = ?"
-    ).bind(Date.now(), upload.id),
-    workerEnv.DB.prepare(
-      `UPDATE usage_events SET status = 'released', updated_at = ?
+      )
+      .bind(reason, Date.now(), extractionId),
+    getDb(workerEnv)
+      .prepare(
+        "UPDATE uploads SET status = 'failed', updated_at = ? WHERE id = ?"
+      )
+      .bind(Date.now(), upload.id),
+    getDb(workerEnv)
+      .prepare(
+        `UPDATE usage_events SET status = 'released', updated_at = ?
        WHERE idempotency_key = ? AND status = 'reserved'`
-    ).bind(Date.now(), upload.usage_reservation_key),
+      )
+      .bind(Date.now(), upload.usage_reservation_key),
   ]);
   if (upload.historical_import_batch_id) {
     await refreshHistoricalBatch(
-      workerEnv.DB,
+      getDb(workerEnv),
       upload.historical_import_batch_id
     );
   }
@@ -192,29 +241,32 @@ const runPostCommitExtractionEffects = async ({
   workerEnv: Env;
 }): Promise<void> => {
   if (upload.historical_import_batch_id) {
-    const batch = await workerEnv.DB.prepare(
-      "SELECT status FROM historical_import_batches WHERE id = ?"
-    )
+    const batch = await getDb(workerEnv)
+      .prepare("SELECT status FROM historical_import_batches WHERE id = ?")
       .bind(upload.historical_import_batch_id)
       .first<{ status: string }>();
     if (batch?.status === "cancelled") {
-      await workerEnv.DB.batch([
-        workerEnv.DB.prepare("DELETE FROM tickets WHERE id = ?").bind(
-          committedTicketId
-        ),
-        workerEnv.DB.prepare(
-          "UPDATE uploads SET status = 'failed', updated_at = ? WHERE id = ?"
-        ).bind(Date.now(), upload.id),
-        workerEnv.DB.prepare(
-          `UPDATE usage_events SET status = 'released', updated_at = ?
+      await getDb(workerEnv).batch([
+        getDb(workerEnv)
+          .prepare("DELETE FROM tickets WHERE id = ?")
+          .bind(committedTicketId),
+        getDb(workerEnv)
+          .prepare(
+            "UPDATE uploads SET status = 'failed', updated_at = ? WHERE id = ?"
+          )
+          .bind(Date.now(), upload.id),
+        getDb(workerEnv)
+          .prepare(
+            `UPDATE usage_events SET status = 'released', updated_at = ?
            WHERE idempotency_key = ? AND status IN ('reserved', 'finalized')`
-        ).bind(Date.now(), upload.usage_reservation_key),
+          )
+          .bind(Date.now(), upload.usage_reservation_key),
       ]);
       return;
     }
     try {
       await refreshHistoricalBatch(
-        workerEnv.DB,
+        getDb(workerEnv),
         upload.historical_import_batch_id
       );
     } catch {
@@ -251,17 +303,17 @@ export const processExtractionMessage = async (
   workerEnv: Env
 ): Promise<void> => {
   const message = extractionQueueMessageSchema.parse(body);
-  const claim = await workerEnv.DB.prepare(
-    `UPDATE uploads SET status = 'processing', updated_at = ?
+  const claim = await getDb(workerEnv)
+    .prepare(
+      `UPDATE uploads SET status = 'processing', updated_at = ?
      WHERE id = ? AND status = 'ready'`
-  )
+    )
     .bind(Date.now(), message.uploadId)
     .run();
 
   if (claim.meta.changes === 0) {
-    const current = await workerEnv.DB.prepare(
-      "SELECT status FROM uploads WHERE id = ?"
-    )
+    const current = await getDb(workerEnv)
+      .prepare("SELECT status FROM uploads WHERE id = ?")
       .bind(message.uploadId)
       .first<{ status: string }>();
     if (current?.status === "processing") {
@@ -270,10 +322,11 @@ export const processExtractionMessage = async (
     return;
   }
 
-  const upload = await workerEnv.DB.prepare(
-    `SELECT historical_import_batch_id, id, ingestion_mode, mime_type, object_key, status,
+  const upload = await getDb(workerEnv)
+    .prepare(
+      `SELECT historical_import_batch_id, id, ingestion_mode, mime_type, object_key, status,
       usage_reservation_key, user_id FROM uploads WHERE id = ?`
-  )
+    )
     .bind(message.uploadId)
     .first<UploadRow>();
   if (!upload?.mime_type) {
@@ -281,11 +334,12 @@ export const processExtractionMessage = async (
   }
 
   const extractionId = crypto.randomUUID();
-  await workerEnv.DB.prepare(
-    `INSERT INTO extractions (
+  await getDb(workerEnv)
+    .prepare(
+      `INSERT INTO extractions (
       id, provider, schema_version, status, updated_at, upload_id
     ) VALUES (?, 'workers-ai', '2', 'pending', ?, ?)`
-  )
+    )
     .bind(extractionId, Date.now(), upload.id)
     .run();
 
@@ -326,69 +380,83 @@ export const processExtractionMessage = async (
         });
     applySettledOverride(extracted.result, qualification);
     if (upload.historical_import_batch_id) {
-      const activeBatch = await workerEnv.DB.prepare(
-        `SELECT id FROM historical_import_batches
+      const activeBatch = await getDb(workerEnv)
+        .prepare(
+          `SELECT id FROM historical_import_batches
          WHERE id = ? AND status IN ('pending', 'processing')`
-      )
+        )
         .bind(upload.historical_import_batch_id)
         .first<{ id: string }>();
       if (!activeBatch) {
-        await workerEnv.DB.batch([
-          workerEnv.DB.prepare(
-            "UPDATE uploads SET status = 'failed', updated_at = ? WHERE id = ?"
-          ).bind(Date.now(), upload.id),
-          workerEnv.DB.prepare(
-            `UPDATE extractions SET status = 'failed', error_message = 'Import cancelled', updated_at = ?
+        await getDb(workerEnv).batch([
+          getDb(workerEnv)
+            .prepare(
+              "UPDATE uploads SET status = 'failed', updated_at = ? WHERE id = ?"
+            )
+            .bind(Date.now(), upload.id),
+          getDb(workerEnv)
+            .prepare(
+              `UPDATE extractions SET status = 'failed', error_message = 'Import cancelled', updated_at = ?
              WHERE id = ?`
-          ).bind(Date.now(), extractionId),
-          workerEnv.DB.prepare(
-            `UPDATE usage_events SET status = 'released', updated_at = ?
+            )
+            .bind(Date.now(), extractionId),
+          getDb(workerEnv)
+            .prepare(
+              `UPDATE usage_events SET status = 'released', updated_at = ?
              WHERE idempotency_key = ? AND status = 'reserved'`
-          ).bind(Date.now(), upload.usage_reservation_key),
+            )
+            .bind(Date.now(), upload.usage_reservation_key),
         ]);
         return;
       }
     }
     const ticketId = crypto.randomUUID();
     const statements = await createTicketStatements({
-      db: workerEnv.DB,
+      db: getDb(workerEnv),
       extraction: extracted.result,
       extractionId,
       ticketId,
       upload,
+      workerEnv,
     });
     statements.unshift(
-      workerEnv.DB.prepare(
-        "UPDATE extractions SET model = ?, raw_response = ?, updated_at = ? WHERE id = ?"
-      ).bind(
-        extracted.model,
-        JSON.stringify({
-          clef: qualification?.raw ?? null,
-          extraction: extracted.raw,
-        }),
-        Date.now(),
-        extractionId
-      )
+      getDb(workerEnv)
+        .prepare(
+          "UPDATE extractions SET model = ?, raw_response = ?, updated_at = ? WHERE id = ?"
+        )
+        .bind(
+          extracted.model,
+          JSON.stringify({
+            clef: qualification?.raw ?? null,
+            extraction: extracted.raw,
+          }),
+          Date.now(),
+          extractionId
+        )
     );
-    await workerEnv.DB.batch(statements);
+    await getDb(workerEnv).batch(statements);
     committedTicketId = ticketId;
     committedModel = extracted.model;
     committedLegCount = extracted.result.legs.length;
   } catch (error) {
     const messageText =
       error instanceof Error ? error.message : "Unknown extraction error";
-    await workerEnv.DB.batch([
-      workerEnv.DB.prepare(
-        "UPDATE extractions SET status = 'failed', error_message = ?, updated_at = ? WHERE id = ?"
-      ).bind(messageText.slice(0, 1000), Date.now(), extractionId),
-      workerEnv.DB.prepare(
-        `UPDATE uploads SET status = CASE
+    await getDb(workerEnv).batch([
+      getDb(workerEnv)
+        .prepare(
+          "UPDATE extractions SET status = 'failed', error_message = ?, updated_at = ? WHERE id = ?"
+        )
+        .bind(messageText.slice(0, 1000), Date.now(), extractionId),
+      getDb(workerEnv)
+        .prepare(
+          `UPDATE uploads SET status = CASE
            WHEN historical_import_batch_id IS NOT NULL AND EXISTS (
              SELECT 1 FROM historical_import_batches b
              WHERE b.id = uploads.historical_import_batch_id AND b.status = 'cancelled'
            ) THEN 'failed' ELSE 'ready' END,
          updated_at = ? WHERE id = ? AND status != 'extracted'`
-      ).bind(Date.now(), upload.id),
+        )
+        .bind(Date.now(), upload.id),
     ]);
     throw error;
   }
@@ -413,39 +481,41 @@ export const markExtractionTerminalFailure = async (
   if (!message.success) {
     return;
   }
-  const upload = await workerEnv.DB.prepare(
-    "SELECT usage_reservation_key FROM uploads WHERE id = ?"
-  )
+  const upload = await getDb(workerEnv)
+    .prepare("SELECT usage_reservation_key FROM uploads WHERE id = ?")
     .bind(message.data.uploadId)
     .first<{ usage_reservation_key: string }>();
   if (!upload) {
     return;
   }
-  await workerEnv.DB.batch([
-    workerEnv.DB.prepare(
-      "UPDATE uploads SET status = 'failed', updated_at = ? WHERE id = ? AND status != 'extracted'"
-    ).bind(Date.now(), message.data.uploadId),
-    workerEnv.DB.prepare(
-      "UPDATE usage_events SET status = 'released', updated_at = ?, metadata = ? WHERE idempotency_key = ? AND status = 'reserved'"
-    ).bind(
-      Date.now(),
-      JSON.stringify({
-        terminalError:
-          error instanceof Error
-            ? error.message.slice(0, 500)
-            : "Unknown error",
-      }),
-      upload.usage_reservation_key
-    ),
+  await getDb(workerEnv).batch([
+    getDb(workerEnv)
+      .prepare(
+        "UPDATE uploads SET status = 'failed', updated_at = ? WHERE id = ? AND status != 'extracted'"
+      )
+      .bind(Date.now(), message.data.uploadId),
+    getDb(workerEnv)
+      .prepare(
+        "UPDATE usage_events SET status = 'released', updated_at = ?, metadata = ? WHERE idempotency_key = ? AND status = 'reserved'"
+      )
+      .bind(
+        Date.now(),
+        JSON.stringify({
+          terminalError:
+            error instanceof Error
+              ? error.message.slice(0, 500)
+              : "Unknown error",
+        }),
+        upload.usage_reservation_key
+      ),
   ]);
-  const failedUpload = await workerEnv.DB.prepare(
-    "SELECT historical_import_batch_id FROM uploads WHERE id = ?"
-  )
+  const failedUpload = await getDb(workerEnv)
+    .prepare("SELECT historical_import_batch_id FROM uploads WHERE id = ?")
     .bind(message.data.uploadId)
     .first<{ historical_import_batch_id: string | null }>();
   if (failedUpload?.historical_import_batch_id) {
     await refreshHistoricalBatch(
-      workerEnv.DB,
+      getDb(workerEnv),
       failedUpload.historical_import_batch_id
     );
   }

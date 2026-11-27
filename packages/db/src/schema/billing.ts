@@ -1,26 +1,25 @@
 import { sql } from "drizzle-orm";
 import {
+  bigint,
   check,
   index,
   integer,
-  sqliteTable,
+  pgTable,
   text,
   uniqueIndex,
-} from "drizzle-orm/sqlite-core";
+} from "drizzle-orm/pg-core";
 
 import { user } from "./auth";
 import { createdAtColumn, updatedAtColumn } from "./columns";
 
-export const billingEntitlements = sqliteTable(
+export const billingEntitlements = pgTable(
   "billing_entitlements",
   {
     createdAt: createdAtColumn(),
-    currentPeriodEnd: integer("current_period_end", { mode: "timestamp_ms" }),
-    currentPeriodStart: integer("current_period_start", {
-      mode: "timestamp_ms",
-    }),
-    effectiveAt: integer("effective_at", { mode: "timestamp_ms" }).notNull(),
-    expiresAt: integer("expires_at", { mode: "timestamp_ms" }),
+    currentPeriodEnd: bigint("current_period_end", { mode: "number" }),
+    currentPeriodStart: bigint("current_period_start", { mode: "number" }),
+    effectiveAt: bigint("effective_at", { mode: "number" }).notNull(),
+    expiresAt: bigint("expires_at", { mode: "number" }),
     id: text("id").primaryKey(),
     plan: text("plan").notNull(),
     providerReference: text("provider_reference").notNull(),
@@ -56,19 +55,16 @@ export const billingEntitlements = sqliteTable(
   ]
 );
 
-export const usageEvents = sqliteTable(
+export const usageEvents = pgTable(
   "usage_events",
   {
     createdAt: createdAtColumn(),
     id: text("id").primaryKey(),
     idempotencyKey: text("idempotency_key").notNull().unique(),
-    metadata: text("metadata", { mode: "json" }).$type<Record<
-      string,
-      unknown
-    > | null>(),
-    occurredAt: integer("occurred_at", { mode: "timestamp_ms" }).notNull(),
-    periodEnd: integer("period_end", { mode: "timestamp_ms" }).notNull(),
-    periodStart: integer("period_start", { mode: "timestamp_ms" }).notNull(),
+    metadata: text("metadata"),
+    occurredAt: bigint("occurred_at", { mode: "number" }).notNull(),
+    periodEnd: bigint("period_end", { mode: "number" }).notNull(),
+    periodStart: bigint("period_start", { mode: "number" }).notNull(),
     quantity: integer("quantity").notNull().default(1),
     resourceId: text("resource_id"),
     resourceType: text("resource_type"),
@@ -95,13 +91,13 @@ export const usageEvents = sqliteTable(
   ]
 );
 
-export const webhookReceipts = sqliteTable(
+export const webhookReceipts = pgTable(
   "webhook_receipts",
   {
     createdAt: createdAtColumn(),
     errorMessage: text("error_message"),
     id: text("id").primaryKey(),
-    processedAt: integer("processed_at", { mode: "timestamp_ms" }),
+    processedAt: bigint("processed_at", { mode: "number" }),
     provider: text("provider").notNull(),
     providerEventId: text("provider_event_id").notNull(),
     status: text("status").notNull().default("processing"),

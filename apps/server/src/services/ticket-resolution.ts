@@ -1,4 +1,5 @@
 import type { ExtractionResult } from "@ppal/contracts/uploads";
+import type { SqlDatabase } from "@ppal/db";
 
 import { escapeLikePattern } from "../lib/database";
 
@@ -157,7 +158,7 @@ const normalizeMarketSlug = (market: string): string => {
 };
 
 const resolveMarket = async (
-  db: D1Database,
+  db: SqlDatabase,
   leg: ExtractedLeg
 ): Promise<MarketRow | null> => {
   const targetSlug = normalizeMarketSlug(leg.market);
@@ -176,7 +177,7 @@ const resolveParticipant = async ({
   leg,
   sportId,
 }: {
-  db: D1Database;
+  db: SqlDatabase;
   leagueId: string | null;
   leg: ExtractedLeg;
   sportId: string | null;
@@ -189,26 +190,27 @@ const resolveParticipant = async ({
   );
   const searchToken = tokens[0] ?? normalizeText(leg.subjectName);
   const pattern = `%${escapeLikePattern(searchToken)}%`;
+  const conditions = [
+    "p.type = ?",
+    "(lower(p.name) LIKE ? ESCAPE '\\' OR lower(p.short_name) LIKE ? ESCAPE '\\')",
+  ];
+  const params: unknown[] = [leg.subjectType, pattern, pattern];
+  if (sportId !== null) {
+    conditions.push("p.sport_id = ?");
+    params.push(sportId);
+  }
+  if (leagueId !== null) {
+    conditions.push("(p.league_id = ? OR p.league_id IS NULL)");
+    params.push(leagueId);
+  }
   const candidates = await db
     .prepare(
       `SELECT p.id, p.league_id, p.name, p.short_name
        FROM participants p
-       WHERE p.type = ?
-         AND (? IS NULL OR p.sport_id = ?)
-         AND (? IS NULL OR p.league_id = ? OR p.league_id IS NULL)
-         AND (lower(p.name) LIKE ? ESCAPE '\\'
-           OR lower(p.short_name) LIKE ? ESCAPE '\\')
+       WHERE ${conditions.join(" AND ")}
        ORDER BY p.name LIMIT 30`
     )
-    .bind(
-      leg.subjectType,
-      sportId,
-      sportId,
-      leagueId,
-      leagueId,
-      pattern,
-      pattern
-    )
+    .bind(...params)
     .all<ParticipantCandidate>();
   const selected = selectParticipant(leg.subjectName, candidates.results);
   return {
@@ -223,12 +225,22 @@ const resolveEvent = async ({
   participantId,
   eventHint,
 }: {
-  db: D1Database;
+  db: SqlDatabase;
   leagueId: string | null;
   participantId: string;
   eventHint: string | null;
 }): Promise<EventCandidate | null> => {
   const now = Date.now();
+  const eventConditions = [
+    "(e.home_participant_id = ? OR e.away_participant_id = ?)",
+    "e.status != 'cancelled'",
+  ];
+  const eventParams: unknown[] = [participantId, participantId];
+  if (leagueId !== null) {
+    eventConditions.push("e.league_id = ?");
+    eventParams.push(leagueId);
+  }
+  eventParams.push(now);
   const events = await db
     .prepare(
       `SELECT e.away_participant_id, away.name AS away_name,
@@ -239,12 +251,10 @@ const resolveEvent = async ({
        JOIN leagues l ON l.id = e.league_id
        LEFT JOIN participants home ON home.id = e.home_participant_id
        LEFT JOIN participants away ON away.id = e.away_participant_id
-       WHERE (e.home_participant_id = ? OR e.away_participant_id = ?)
-         AND (? IS NULL OR e.league_id = ?)
-         AND e.status != 'cancelled'
+       WHERE ${eventConditions.join(" AND ")}
        ORDER BY abs(e.starts_at - ?) LIMIT 20`
     )
-    .bind(participantId, participantId, leagueId, leagueId, now)
+    .bind(...eventParams)
     .all<EventCandidate>();
   const ranked = events.results
     .map((event) => ({
@@ -261,7 +271,7 @@ const resolveEvent = async ({
 };
 
 const resolveLeague = async (
-  db: D1Database,
+  db: SqlDatabase,
   leagueName: string | null
 ): Promise<{ id: string; sport_id: string } | null> => {
   if (!leagueName) {
@@ -282,7 +292,7 @@ const resolveParticipantLeg = async ({
   leg,
   market,
 }: {
-  db: D1Database;
+  db: SqlDatabase;
   league: { id: string; sport_id: string } | null;
   leg: ExtractedLeg;
   market: MarketRow;
@@ -350,7 +360,7 @@ const resolveParticipantLeg = async ({
 };
 
 export const resolveExtractedLeg = async (
-  db: D1Database,
+  db: SqlDatabase,
   leg: ExtractedLeg
 ): Promise<CatalogResolution> => {
   const market = await resolveMarket(db, leg);

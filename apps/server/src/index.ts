@@ -10,6 +10,7 @@ import { cors } from "hono/cors";
 import { HTTPException } from "hono/http-exception";
 import { secureHeaders } from "hono/secure-headers";
 
+import { getDb } from "./lib/database";
 import { getRateLimitKey } from "./lib/rate-limit";
 import { createAdminBillingRoutes } from "./routes/admin-billing";
 import { createAnalyticsRoutes } from "./routes/analytics";
@@ -316,26 +317,29 @@ const queue = async (batch: MessageBatch, workerEnv: Env): Promise<void> => {
 };
 
 const scheduled = async (
-  controller: ScheduledController,
+  _controller: ScheduledController,
   workerEnv: Env
 ): Promise<void> => {
-  const catalog = await workerEnv.DB.prepare(
-    "SELECT COUNT(*) AS count FROM sports"
-  ).first<{ count: number }>();
-  if (controller.cron !== "*/1 * * * *" || (catalog?.count ?? 0) === 0) {
+  const catalog = await getDb(workerEnv)
+    .prepare("SELECT COUNT(*) AS count FROM sports")
+    .first<{ count: number }>();
+  if ((catalog?.count ?? 0) === 0) {
     await synchronizeSportsCatalog(workerEnv);
   }
   await enqueueDueSportsEvents(workerEnv);
   const staleBefore = Date.now() - 10 * 60 * 1000;
-  const stale = await workerEnv.DB.prepare(
-    `UPDATE uploads SET status = 'ready', updated_at = ?
+  const stale = await getDb(workerEnv)
+    .prepare(
+      `UPDATE uploads SET status = 'ready', updated_at = ?
      WHERE status = 'processing' AND updated_at < ? RETURNING id`
-  )
+    )
     .bind(Date.now(), staleBefore)
     .all<{ id: string }>();
-  const ready = await workerEnv.DB.prepare(
-    "SELECT id FROM uploads WHERE status = 'ready' ORDER BY updated_at LIMIT 100"
-  ).all<{ id: string }>();
+  const ready = await getDb(workerEnv)
+    .prepare(
+      "SELECT id FROM uploads WHERE status = 'ready' ORDER BY updated_at LIMIT 100"
+    )
+    .all<{ id: string }>();
   const extractionIds = new Set([
     ...stale.results.map(({ id }) => id),
     ...ready.results.map(({ id }) => id),
@@ -352,11 +356,13 @@ const scheduled = async (
       }))
     );
   }
-  const pendingDeliveries = await workerEnv.DB.prepare(
-    `SELECT id FROM notification_deliveries
+  const pendingDeliveries = await getDb(workerEnv)
+    .prepare(
+      `SELECT id FROM notification_deliveries
      WHERE status IN ('pending', 'failed') AND attempts < 10
      ORDER BY updated_at LIMIT 100`
-  ).all<{ id: string }>();
+    )
+    .all<{ id: string }>();
   if (pendingDeliveries.results.length > 0) {
     await workerEnv.NOTIFICATION_QUEUE.sendBatch(
       pendingDeliveries.results.map(({ id }) => ({

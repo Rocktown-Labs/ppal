@@ -3,11 +3,12 @@ import type { Auth } from "@ppal/auth";
 import type { ExtractionQueueMessage } from "@ppal/contracts/queues";
 import { createUploadRequestSchema } from "@ppal/contracts/uploads";
 import type { UploadContract } from "@ppal/contracts/uploads";
+import type { SqlDatabase } from "@ppal/db";
 import { env } from "@ppal/env/server";
 import { Hono } from "hono";
 
 import { getAuthUser } from "../lib/auth";
-import { scopeIdempotencyKey } from "../lib/database";
+import { getDb, scopeIdempotencyKey } from "../lib/database";
 import { toIsoString } from "../lib/time";
 import { inspectStreamSignature } from "../lib/upload-security";
 import { releaseUploadUsage, reserveUploadUsage } from "../services/usage";
@@ -41,7 +42,7 @@ const toContract = (row: UploadRow): UploadContract => ({
 });
 
 const selectUpload = (
-  db: D1Database,
+  db: SqlDatabase,
   uploadId: string,
   userId: string
 ): Promise<UploadRow | null> =>
@@ -86,14 +87,15 @@ export const createUploadRoutes = (auth: Auth) =>
           user.id,
           input.idempotencyKey
         );
-        const existing = await env.DB.prepare(
-          `SELECT id FROM uploads
+        const existing = await getDb()
+          .prepare(
+            `SELECT id FROM uploads
          WHERE usage_reservation_key = ? AND user_id = ?`
-        )
+          )
           .bind(scopedIdempotencyKey, user.id)
           .first<{ id: string }>();
         if (existing) {
-          const row = await selectUpload(env.DB, existing.id, user.id);
+          const row = await selectUpload(getDb(), existing.id, user.id);
           return row
             ? c.json(
                 {
@@ -110,7 +112,7 @@ export const createUploadRoutes = (auth: Auth) =>
 
         const uploadId = crypto.randomUUID();
         const reservation = await reserveUploadUsage({
-          db: env.DB,
+          db: getDb(),
           idempotencyKey: scopedIdempotencyKey,
           uploadId,
           userId: user.id,
@@ -125,13 +127,14 @@ export const createUploadRoutes = (auth: Auth) =>
         const now = Date.now();
         const objectKey = `users/${user.id}/uploads/${uploadId}`;
         try {
-          await env.DB.prepare(
-            `INSERT INTO uploads (
+          await getDb()
+            .prepare(
+              `INSERT INTO uploads (
             file_size, id, ingestion_mode, mime_type, object_key,
             original_filename, retention_expires_at, sha256, status,
             updated_at, usage_reservation_key, user_id
           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'uploading', ?, ?, ?)`
-          )
+            )
             .bind(
               input.size,
               uploadId,
@@ -147,10 +150,10 @@ export const createUploadRoutes = (auth: Auth) =>
             )
             .run();
         } catch (error) {
-          await releaseUploadUsage(env.DB, scopedIdempotencyKey);
+          await releaseUploadUsage(getDb(), scopedIdempotencyKey);
           throw error;
         }
-        const row = await selectUpload(env.DB, uploadId, user.id);
+        const row = await selectUpload(getDb(), uploadId, user.id);
         if (!row) {
           return c.json(
             { code: "INTERNAL_ERROR", error: "Upload could not be created" },
@@ -173,10 +176,11 @@ export const createUploadRoutes = (auth: Auth) =>
       if (!user) {
         return c.json({ code: "UNAUTHORIZED", error: "Unauthorized" }, 401);
       }
-      const upload = await env.DB.prepare(
-        `SELECT file_size, id, mime_type, object_key, sha256, status
+      const upload = await getDb()
+        .prepare(
+          `SELECT file_size, id, mime_type, object_key, sha256, status
          FROM uploads WHERE id = ? AND user_id = ? AND deleted_at IS NULL`
-      )
+        )
         .bind(c.req.param("uploadId"), user.id)
         .first<{
           file_size: number;
@@ -248,9 +252,10 @@ export const createUploadRoutes = (auth: Auth) =>
         sha256: hexToBuffer(upload.sha256),
       });
       const now = new Date();
-      const readyResult = await env.DB.prepare(
-        "UPDATE uploads SET status = 'ready', ready_at = ?, updated_at = ? WHERE id = ? AND status = 'uploading'"
-      )
+      const readyResult = await getDb()
+        .prepare(
+          "UPDATE uploads SET status = 'ready', ready_at = ?, updated_at = ? WHERE id = ? AND status = 'uploading'"
+        )
         .bind(now.getTime(), now.getTime(), upload.id)
         .run();
       if (readyResult.meta.changes > 0) {
@@ -270,10 +275,11 @@ export const createUploadRoutes = (auth: Auth) =>
       if (!user) {
         return c.json({ code: "UNAUTHORIZED", error: "Unauthorized" }, 401);
       }
-      const upload = await env.DB.prepare(
-        `SELECT mime_type, object_key FROM uploads
+      const upload = await getDb()
+        .prepare(
+          `SELECT mime_type, object_key FROM uploads
          WHERE id = ? AND user_id = ? AND deleted_at IS NULL`
-      )
+        )
         .bind(c.req.param("uploadId"), user.id)
         .first<{ mime_type: string; object_key: string }>();
       if (!upload) {
@@ -328,7 +334,7 @@ export const createUploadRoutes = (auth: Auth) =>
       if (!user) {
         return c.json({ code: "UNAUTHORIZED", error: "Unauthorized" }, 401);
       }
-      const row = await selectUpload(env.DB, c.req.param("uploadId"), user.id);
+      const row = await selectUpload(getDb(), c.req.param("uploadId"), user.id);
       return row
         ? c.json({ upload: toContract(row) }, 200)
         : c.json({ code: "NOT_FOUND", error: "Upload not found" }, 404);

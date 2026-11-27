@@ -1,9 +1,9 @@
-import { customType } from "drizzle-orm/sqlite-core";
+import { customType } from "drizzle-orm/pg-core";
 
 import { decryptSync, encryptSync } from "../encryption";
 
 /**
- * A SQLite text column that is transparently encrypted when written and
+ * A PostgreSQL text column that is transparently encrypted when written and
  * decrypted when read. Use this for long-lived secrets managed by Better Auth
  * such as OAuth tokens and two-factor credentials.
  *

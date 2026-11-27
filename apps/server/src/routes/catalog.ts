@@ -1,11 +1,10 @@
 import { zValidator } from "@hono/zod-validator";
 import type { Auth } from "@ppal/auth";
-import { env } from "@ppal/env/server";
 import { Hono } from "hono";
 import { z } from "zod";
 
 import { getAuthUser } from "../lib/auth";
-import { escapeLikePattern } from "../lib/database";
+import { escapeLikePattern, getDb } from "../lib/database";
 
 export const createCatalogRoutes = (auth: Auth) =>
   new Hono().get(
@@ -36,14 +35,15 @@ export const createCatalogRoutes = (auth: Auth) =>
       const query = c.req.valid("query").q.toLowerCase();
       const pattern = `%${escapeLikePattern(query)}%`;
       const [participants, markets, events] = await Promise.all([
-        env.DB.prepare(
-          `SELECT p.id, p.name, p.short_name, p.type, p.league_id, p.sport_id,
+        getDb()
+          .prepare(
+            `SELECT p.id, p.name, p.short_name, p.type, p.league_id, p.sport_id,
           l.name AS league_name, s.name AS sport_name
          FROM participants p JOIN sports s ON s.id = p.sport_id
          LEFT JOIN leagues l ON l.id = p.league_id
          WHERE lower(p.name) LIKE ? ESCAPE '\\' OR lower(p.short_name) LIKE ? ESCAPE '\\'
          ORDER BY p.name LIMIT 30`
-        )
+          )
           .bind(pattern, pattern)
           .all<{
             id: string;
@@ -55,11 +55,12 @@ export const createCatalogRoutes = (auth: Auth) =>
             sport_name: string;
             type: "player" | "team";
           }>(),
-        env.DB.prepare(
-          `SELECT m.id, m.name, m.slug, m.subject_type, m.value_type, m.sport_id
+        getDb()
+          .prepare(
+            `SELECT m.id, m.name, m.slug, m.subject_type, m.value_type, m.sport_id
          FROM markets m WHERE lower(m.name) LIKE ? ESCAPE '\\' OR lower(m.slug) LIKE ? ESCAPE '\\'
          ORDER BY m.name LIMIT 30`
-        )
+          )
           .bind(pattern, pattern)
           .all<{
             id: string;
@@ -69,8 +70,9 @@ export const createCatalogRoutes = (auth: Auth) =>
             subject_type: "player" | "team" | "game";
             value_type: "binary" | "moneyline" | "numeric" | "spread";
           }>(),
-        env.DB.prepare(
-          `SELECT e.id, e.provider_event_id, e.starts_at, e.status,
+        getDb()
+          .prepare(
+            `SELECT e.id, e.provider_event_id, e.starts_at, e.status,
           home.name AS home_name, away.name AS away_name, l.name AS league_name
          FROM sports_events e JOIN leagues l ON l.id = e.league_id
          LEFT JOIN participants home ON home.id = e.home_participant_id
@@ -78,7 +80,7 @@ export const createCatalogRoutes = (auth: Auth) =>
          WHERE lower(home.name) LIKE ? ESCAPE '\\' OR lower(away.name) LIKE ? ESCAPE '\\'
            OR lower(l.name) LIKE ? ESCAPE '\\'
          ORDER BY e.starts_at DESC LIMIT 30`
-        )
+          )
           .bind(pattern, pattern, pattern)
           .all<{
             away_name: string | null;

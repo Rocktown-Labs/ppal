@@ -1,13 +1,15 @@
 import type { PushPayload, PushSubscriptionData } from "@mmmike/web-push";
 import { sendPushNotification, WebPushError } from "@mmmike/web-push/send";
 import { notificationQueueMessageSchema } from "@ppal/contracts/queues";
+import type { SqlPreparedStatement } from "@ppal/db";
 
 import { decryptValue } from "../lib/crypto";
+import { getDb } from "../lib/database";
 import { getUserPlan } from "../lib/entitlements";
 import { sendSms } from "../lib/sent";
 
 export interface NotificationServiceEnv {
-  DB: D1Database;
+  HYPERDRIVE: Hyperdrive;
   NOTIFICATION_QUEUE: Queue;
   RESEND_API_KEY: string;
   RESEND_FROM_EMAIL: string;
@@ -82,17 +84,19 @@ export const publishNotification = async ({
   workerEnv: NotificationServiceEnv;
 }): Promise<void> => {
   const notificationId = crypto.randomUUID();
-  const preferences = await workerEnv.DB.prepare(
-    "SELECT in_app_enabled FROM notification_preferences WHERE user_id = ?"
-  )
+  const preferences = await getDb(workerEnv)
+    .prepare(
+      "SELECT in_app_enabled FROM notification_preferences WHERE user_id = ?"
+    )
     .bind(userId)
     .first<{ in_app_enabled: number }>();
   const inAppVisible = (preferences?.in_app_enabled ?? 1) === 1;
-  const inserted = await workerEnv.DB.prepare(
-    `INSERT INTO notifications
+  const inserted = await getDb(workerEnv)
+    .prepare(
+      `INSERT INTO notifications
      (body, id, in_app_visible, milestone_key, ticket_id, title, type, user_id)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(milestone_key) DO NOTHING`
-  )
+    )
     .bind(
       body,
       notificationId,
@@ -121,7 +125,7 @@ export const publishNotification = async ({
 
   // Email goes to everyone. SMS is Pro/Creator only and settlement-only,
   // so the message count stays under the 10DLC frequency cap.
-  const plan = await getUserPlan(workerEnv.DB, userId);
+  const plan = await getUserPlan(getDb(workerEnv), userId);
   const includeSms = plan !== "free" && shouldSendSms(type);
 
   fragments.push(
@@ -149,7 +153,8 @@ export const publishNotification = async ({
     bindings.push(userId);
   }
 
-  const destinations = await workerEnv.DB.prepare(fragments.join(" UNION ALL "))
+  const destinations = await getDb(workerEnv)
+    .prepare(fragments.join(" UNION ALL "))
     .bind(...bindings)
     .all<{
       channel: "email" | "push" | "sms" | "web_push";
@@ -157,30 +162,32 @@ export const publishNotification = async ({
     }>();
 
   const messages: MessageSendRequest[] = [];
-  const statements: D1PreparedStatement[] = [];
+  const statements: SqlPreparedStatement[] = [];
   const now = Date.now();
 
   for (const destination of destinations.results) {
     const deliveryId = crypto.randomUUID();
     statements.push(
-      workerEnv.DB.prepare(
-        `INSERT INTO notification_deliveries
+      getDb(workerEnv)
+        .prepare(
+          `INSERT INTO notification_deliveries
          (channel, delivery_key, destination, id, notification_id, status, updated_at)
          VALUES (?, ?, ?, ?, ?, 'pending', ?) ON CONFLICT(delivery_key) DO NOTHING`
-      ).bind(
-        destination.channel,
-        `${notificationId}:${destination.channel}:${destination.destination}`,
-        destination.destination,
-        deliveryId,
-        notificationId,
-        now
-      )
+        )
+        .bind(
+          destination.channel,
+          `${notificationId}:${destination.channel}:${destination.destination}`,
+          destination.destination,
+          deliveryId,
+          notificationId,
+          now
+        )
     );
     messages.push({ body: { deliveryId }, contentType: "json" });
   }
 
   if (statements.length > 0) {
-    await workerEnv.DB.batch(statements);
+    await getDb(workerEnv).batch(statements);
   }
   if (messages.length > 0) {
     await workerEnv.NOTIFICATION_QUEUE.sendBatch(messages);
@@ -216,12 +223,13 @@ const markDeliveryDelivered = async (
   providerReceiptId: string | null = null
 ): Promise<void> => {
   const now = Date.now();
-  await workerEnv.DB.prepare(
-    `UPDATE notification_deliveries
+  await getDb(workerEnv)
+    .prepare(
+      `UPDATE notification_deliveries
      SET status = 'delivered', delivered_at = ?, provider_receipt_id = ?,
          error_message = NULL, updated_at = ?
      WHERE id = ?`
-  )
+    )
     .bind(now, providerReceiptId, now, delivery.id)
     .run();
 };
@@ -231,9 +239,10 @@ const markDeliveryFailed = async (
   errorMessage: string,
   workerEnv: NotificationServiceEnv
 ): Promise<void> => {
-  await workerEnv.DB.prepare(
-    "UPDATE notification_deliveries SET status = 'failed', error_message = ?, updated_at = ? WHERE id = ?"
-  )
+  await getDb(workerEnv)
+    .prepare(
+      "UPDATE notification_deliveries SET status = 'failed', error_message = ?, updated_at = ? WHERE id = ?"
+    )
     .bind(errorMessage, Date.now(), deliveryId)
     .run();
 };
@@ -286,13 +295,15 @@ const processWebPushDelivery = async (
     { ttl: 86_400, urgency: "normal" }
   );
   if (!delivered) {
-    await workerEnv.DB.batch([
-      workerEnv.DB.prepare(
-        "DELETE FROM web_push_subscriptions WHERE endpoint = ?"
-      ).bind(delivery.destination),
-      workerEnv.DB.prepare(
-        "UPDATE notification_deliveries SET status = 'failed', error_message = ?, updated_at = ? WHERE id = ?"
-      ).bind("Push subscription expired", Date.now(), delivery.id),
+    await getDb(workerEnv).batch([
+      getDb(workerEnv)
+        .prepare("DELETE FROM web_push_subscriptions WHERE endpoint = ?")
+        .bind(delivery.destination),
+      getDb(workerEnv)
+        .prepare(
+          "UPDATE notification_deliveries SET status = 'failed', error_message = ?, updated_at = ? WHERE id = ?"
+        )
+        .bind("Push subscription expired", Date.now(), delivery.id),
     ]);
     return;
   }
@@ -327,9 +338,8 @@ const sendEmailOrExpoDelivery = async (
     if (!response.ok || result.data?.status === "error") {
       const errorDetail = result.data?.details?.error;
       if (errorDetail === "DeviceNotRegistered") {
-        await workerEnv.DB.prepare(
-          "DELETE FROM device_tokens WHERE token_hash = ?"
-        )
+        await getDb(workerEnv)
+          .prepare("DELETE FROM device_tokens WHERE token_hash = ?")
           .bind(delivery.destination)
           .run();
       }
@@ -372,17 +382,19 @@ export const processNotificationMessage = async (
   workerEnv: NotificationServiceEnv
 ): Promise<void> => {
   const { deliveryId } = notificationQueueMessageSchema.parse(body);
-  const claim = await workerEnv.DB.prepare(
-    `UPDATE notification_deliveries SET status = 'processing', attempts = attempts + 1,
+  const claim = await getDb(workerEnv)
+    .prepare(
+      `UPDATE notification_deliveries SET status = 'processing', attempts = attempts + 1,
       updated_at = ? WHERE id = ? AND status IN ('pending', 'failed')`
-  )
+    )
     .bind(Date.now(), deliveryId)
     .run();
   if (claim.meta.changes === 0) {
     return;
   }
-  const delivery = await workerEnv.DB.prepare(
-    `SELECT d.channel, d.destination, d.id, d.notification_id, d.status,
+  const delivery = await getDb(workerEnv)
+    .prepare(
+      `SELECT d.channel, d.destination, d.id, d.notification_id, d.status,
       n.body, n.title, n.ticket_id, dt.token AS push_token, w.p256dh, w.auth
       FROM notification_deliveries d
       JOIN notifications n ON n.id = d.notification_id
@@ -391,7 +403,7 @@ export const processNotificationMessage = async (
       LEFT JOIN device_tokens dt
         ON d.channel = 'push' AND dt.token_hash = d.destination
       WHERE d.id = ?`
-  )
+    )
     .bind(deliveryId)
     .first<DeliveryRow>();
   if (!delivery) {
@@ -456,11 +468,12 @@ export const processExpoPushReceipts = async (
   workerEnv: NotificationServiceEnv
 ): Promise<void> => {
   const oneDayAgo = Date.now() - 24 * 60 * 60 * 1000;
-  const recentDeliveries = await workerEnv.DB.prepare(
-    `SELECT id, provider_receipt_id, destination FROM notification_deliveries
+  const recentDeliveries = await getDb(workerEnv)
+    .prepare(
+      `SELECT id, provider_receipt_id, destination FROM notification_deliveries
      WHERE channel = 'push' AND status = 'delivered' AND provider_receipt_id IS NOT NULL
        AND delivered_at > ? LIMIT 100`
-  )
+    )
     .bind(oneDayAgo)
     .all<{ destination: string; id: string; provider_receipt_id: string }>();
 
@@ -504,7 +517,8 @@ export const processExpoPushReceipts = async (
       return;
     }
 
-    const updates: Promise<unknown>[] = [];
+    const db = getDb(workerEnv);
+    const statements = [];
     for (const delivery of recentDeliveries.results) {
       const receipt = json.data[delivery.provider_receipt_id];
       if (!receipt) {
@@ -513,18 +527,17 @@ export const processExpoPushReceipts = async (
 
       if (receipt.status === "error") {
         if (receipt.details?.error === "DeviceNotRegistered") {
-          updates.push(
-            workerEnv.DB.prepare(
-              "DELETE FROM device_tokens WHERE token_hash = ?"
-            )
+          statements.push(
+            db
+              .prepare("DELETE FROM device_tokens WHERE token_hash = ?")
               .bind(delivery.destination)
-              .run()
           );
         }
-        updates.push(
-          workerEnv.DB.prepare(
-            "UPDATE notification_deliveries SET status = 'failed', error_message = ?, updated_at = ? WHERE id = ?"
-          )
+        statements.push(
+          db
+            .prepare(
+              "UPDATE notification_deliveries SET status = 'failed', error_message = ?, updated_at = ? WHERE id = ?"
+            )
             .bind(
               receipt.message ??
                 receipt.details?.error ??
@@ -532,12 +545,11 @@ export const processExpoPushReceipts = async (
               Date.now(),
               delivery.id
             )
-            .run()
         );
       }
     }
-    if (updates.length > 0) {
-      await Promise.all(updates);
+    if (statements.length > 0) {
+      await db.batch(statements);
     }
   } catch {
     // Network or receipt fetch issue; retried next schedule
