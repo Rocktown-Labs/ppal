@@ -127,8 +127,22 @@ export const createPostgresClient = (
   source: { HYPERDRIVE?: Hyperdrive } | string
 ) => createRawPostgresClient(resolveConnectionStringSync(source));
 
-export const createDb = (source: { HYPERDRIVE?: Hyperdrive } | string) =>
-  drizzle(createPostgresClient(source));
+/**
+ * Returns a lazy Drizzle PostgreSQL proxy so `createAuth()` can be constructed
+ * in Worker global scope without touching `env.HYPERDRIVE.connectionString`
+ * (which Cloudflare forbids outside a request handler) and without sharing
+ * Hyperdrive TCP sockets across separate Worker invocations.
+ */
+export const createDb = (source: { HYPERDRIVE?: Hyperdrive } | string) => {
+  type DrizzleClient = ReturnType<typeof drizzle>;
+  return new Proxy({} as DrizzleClient, {
+    get: (_target, prop) => {
+      const instance = drizzle(createPostgresClient(source));
+      const value = Reflect.get(instance, prop, instance);
+      return typeof value === "function" ? value.bind(instance) : value;
+    },
+  });
+};
 
 interface BoundStatement extends SqlPreparedStatement {
   readonly params: unknown[];
