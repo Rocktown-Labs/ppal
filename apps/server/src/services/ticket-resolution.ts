@@ -1,4 +1,5 @@
 import type { ExtractionResult } from "@ppal/contracts/uploads";
+import type { SqlDatabase } from "@ppal/db";
 
 import { escapeLikePattern } from "../lib/database";
 
@@ -157,7 +158,7 @@ const normalizeMarketSlug = (market: string): string => {
 };
 
 const resolveMarket = async (
-  db: D1Database,
+  db: SqlDatabase,
   leg: ExtractedLeg
 ): Promise<MarketRow | null> => {
   const targetSlug = normalizeMarketSlug(leg.market);
@@ -176,7 +177,7 @@ const resolveParticipant = async ({
   leg,
   sportId,
 }: {
-  db: D1Database;
+  db: SqlDatabase;
   leagueId: string | null;
   leg: ExtractedLeg;
   sportId: string | null;
@@ -223,7 +224,7 @@ const resolveEvent = async ({
   participantId,
   eventHint,
 }: {
-  db: D1Database;
+  db: SqlDatabase;
   leagueId: string | null;
   participantId: string;
   eventHint: string | null;
@@ -261,7 +262,7 @@ const resolveEvent = async ({
 };
 
 const resolveLeague = async (
-  db: D1Database,
+  db: SqlDatabase,
   leagueName: string | null
 ): Promise<{ id: string; sport_id: string } | null> => {
   if (!leagueName) {
@@ -282,7 +283,7 @@ const resolveParticipantLeg = async ({
   leg,
   market,
 }: {
-  db: D1Database;
+  db: SqlDatabase;
   league: { id: string; sport_id: string } | null;
   leg: ExtractedLeg;
   market: MarketRow;
@@ -350,7 +351,7 @@ const resolveParticipantLeg = async ({
 };
 
 export const resolveExtractedLeg = async (
-  db: D1Database,
+  db: SqlDatabase,
   leg: ExtractedLeg
 ): Promise<CatalogResolution> => {
   const market = await resolveMarket(db, leg);

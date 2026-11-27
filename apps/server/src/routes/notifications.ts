@@ -12,7 +12,7 @@ import { streamSSE } from "hono/streaming";
 
 import { getAuthUser } from "../lib/auth";
 import { encryptValue, hashValue } from "../lib/crypto";
-import { safeJsonParse } from "../lib/database";
+import { getDb, safeJsonParse } from "../lib/database";
 
 const STREAM_DURATION_MS = 60_000;
 const STREAM_LEASE_MS = 75_000;
@@ -89,11 +89,12 @@ export const createNotificationRoutes = (auth: Auth) =>
       if (!user) {
         return c.json({ code: "UNAUTHORIZED", error: "Unauthorized" }, 401);
       }
-      const rows = await env.DB.prepare(
-        `SELECT body, created_at, data, id, read_at, ticket_id, title, type
+      const rows = await getDb()
+        .prepare(
+          `SELECT body, created_at, data, id, read_at, ticket_id, title, type
          FROM notifications WHERE user_id = ? AND in_app_visible = 1
          ORDER BY created_at DESC LIMIT 100`
-      )
+        )
         .bind(user.id)
         .all<NotificationRow>();
       return c.json({ notifications: rows.results.map(mapNotification) });
@@ -116,9 +117,10 @@ export const createNotificationRoutes = (auth: Auth) =>
       }
       const lastEventId = c.req.header("last-event-id");
       const resumed = lastEventId
-        ? await env.DB.prepare(
-            "SELECT created_at FROM notifications WHERE id = ? AND user_id = ?"
-          )
+        ? await getDb()
+            .prepare(
+              "SELECT created_at FROM notifications WHERE id = ? AND user_id = ?"
+            )
             .bind(lastEventId, user.id)
             .first<{ created_at: number }>()
         : null;
@@ -127,15 +129,16 @@ export const createNotificationRoutes = (auth: Auth) =>
         Math.max(now - MAX_REPLAY_AGE_MS, resumed?.created_at ?? requestedAfter)
       );
       const connectionId = crypto.randomUUID();
-      const lease = await env.DB.prepare(
-        `INSERT INTO notification_stream_leases (connection_id, expires_at, user_id)
+      const lease = await getDb()
+        .prepare(
+          `INSERT INTO notification_stream_leases (connection_id, expires_at, user_id)
          VALUES (?, ?, ?)
          ON CONFLICT(user_id) DO UPDATE SET
            connection_id = excluded.connection_id,
            expires_at = excluded.expires_at
          WHERE notification_stream_leases.expires_at <= ?
          RETURNING connection_id`
-      )
+        )
         .bind(connectionId, now + STREAM_LEASE_MS, user.id, now)
         .first<{ connection_id: string }>();
       if (!lease) {
@@ -155,12 +158,13 @@ export const createNotificationRoutes = (auth: Auth) =>
             Date.now() - streamStartedAt < STREAM_DURATION_MS &&
             !stream.aborted
           ) {
-            const rows = await env.DB.prepare(
-              `SELECT body, created_at, data, id, read_at, ticket_id, title, type
+            const rows = await getDb()
+              .prepare(
+                `SELECT body, created_at, data, id, read_at, ticket_id, title, type
                FROM notifications WHERE user_id = ? AND in_app_visible = 1
                  AND created_at > ?
                ORDER BY created_at, id LIMIT 100`
-            )
+              )
               .bind(user.id, after)
               .all<NotificationRow>();
             for (const row of rows.results) {
@@ -178,9 +182,10 @@ export const createNotificationRoutes = (auth: Auth) =>
             await stream.sleep(5000);
           }
         } finally {
-          await env.DB.prepare(
-            "DELETE FROM notification_stream_leases WHERE user_id = ? AND connection_id = ?"
-          )
+          await getDb()
+            .prepare(
+              "DELETE FROM notification_stream_leases WHERE user_id = ? AND connection_id = ?"
+            )
             .bind(user.id, connectionId)
             .run();
         }
@@ -193,9 +198,10 @@ export const createNotificationRoutes = (auth: Auth) =>
       if (!user) {
         return c.json({ code: "UNAUTHORIZED", error: "Unauthorized" }, 401);
       }
-      const result = await env.DB.prepare(
-        "UPDATE notifications SET read_at = COALESCE(read_at, ?) WHERE id = ? AND user_id = ?"
-      )
+      const result = await getDb()
+        .prepare(
+          "UPDATE notifications SET read_at = COALESCE(read_at, ?) WHERE id = ? AND user_id = ?"
+        )
         .bind(Date.now(), c.req.param("notificationId"), user.id)
         .run();
       return result.meta.changes > 0
@@ -209,9 +215,10 @@ export const createNotificationRoutes = (auth: Auth) =>
       if (!user) {
         return c.json({ code: "UNAUTHORIZED", error: "Unauthorized" }, 401);
       }
-      await env.DB.prepare(
-        "UPDATE notifications SET read_at = COALESCE(read_at, ?) WHERE user_id = ?"
-      )
+      await getDb()
+        .prepare(
+          "UPDATE notifications SET read_at = COALESCE(read_at, ?) WHERE user_id = ?"
+        )
         .bind(Date.now(), user.id)
         .run();
       return c.json({ success: true }, 200);
@@ -223,7 +230,8 @@ export const createNotificationRoutes = (auth: Auth) =>
       if (!user) {
         return c.json({ code: "UNAUTHORIZED", error: "Unauthorized" }, 401);
       }
-      const preferences = await env.DB.prepare(preferenceSelect)
+      const preferences = await getDb()
+        .prepare(preferenceSelect)
         .bind(user.id)
         .first<PreferenceRow>();
       return c.json({
@@ -277,8 +285,9 @@ export const createNotificationRoutes = (auth: Auth) =>
           encryptValue(input.keys.auth),
           encryptValue(input.keys.p256dh),
         ]);
-        await env.DB.prepare(
-          `INSERT INTO web_push_subscriptions
+        await getDb()
+          .prepare(
+            `INSERT INTO web_push_subscriptions
            (auth, endpoint, last_seen_at, p256dh, updated_at, user_id)
            VALUES (?, ?, ?, ?, ?, ?)
            ON CONFLICT(endpoint) DO UPDATE SET
@@ -287,7 +296,7 @@ export const createNotificationRoutes = (auth: Auth) =>
              p256dh = excluded.p256dh,
              updated_at = excluded.updated_at,
              user_id = excluded.user_id`
-        )
+          )
           .bind(
             encryptedAuth,
             input.endpoint,
@@ -311,9 +320,10 @@ export const createNotificationRoutes = (auth: Auth) =>
           return c.json({ code: "UNAUTHORIZED", error: "Unauthorized" }, 401);
         }
         const { endpoint } = c.req.valid("json");
-        const result = await env.DB.prepare(
-          "DELETE FROM web_push_subscriptions WHERE endpoint = ? AND user_id = ?"
-        )
+        const result = await getDb()
+          .prepare(
+            "DELETE FROM web_push_subscriptions WHERE endpoint = ? AND user_id = ?"
+          )
           .bind(endpoint, user.id)
           .run();
         return c.json({ deleted: result.meta.changes > 0 });
@@ -330,13 +340,15 @@ export const createNotificationRoutes = (auth: Auth) =>
           return c.json({ code: "UNAUTHORIZED", error: "Unauthorized" }, 401);
         }
         const input = c.req.valid("json");
-        await env.DB.prepare(
-          "UPDATE user SET phone_number = ?, updated_at = ? WHERE id = ?"
-        )
-          .bind(input.phoneNumber ?? null, Date.now(), user.id)
+        await getDb()
+          .prepare(
+            "UPDATE user SET phone_number = ?, updated_at = ? WHERE id = ?"
+          )
+          .bind(input.phoneNumber ?? null, new Date(), user.id)
           .run();
-        await env.DB.prepare(
-          `INSERT INTO notification_preferences (
+        await getDb()
+          .prepare(
+            `INSERT INTO notification_preferences (
             email_enabled, in_app_enabled, leg_lost, leg_won, push_enabled,
             sms_enabled, ticket_lost, ticket_won, updated_at, user_id
           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -348,7 +360,7 @@ export const createNotificationRoutes = (auth: Auth) =>
             sms_enabled = excluded.sms_enabled,
             ticket_lost = excluded.ticket_lost, ticket_won = excluded.ticket_won,
             updated_at = excluded.updated_at`
-        )
+          )
           .bind(
             Number(input.emailEnabled),
             Number(input.inAppEnabled),
@@ -362,7 +374,8 @@ export const createNotificationRoutes = (auth: Auth) =>
             user.id
           )
           .run();
-        const preferences = await env.DB.prepare(preferenceSelect)
+        const preferences = await getDb()
+          .prepare(preferenceSelect)
           .bind(user.id)
           .first<PreferenceRow>();
         return c.json({ preferences: mapPreferences(preferences) });
@@ -387,9 +400,10 @@ export const createNotificationRoutes = (auth: Auth) =>
         );
       }
       const tokenHash = await hashValue(token);
-      const result = await env.DB.prepare(
-        "DELETE FROM device_tokens WHERE user_id = ? AND token_hash = ?"
-      )
+      const result = await getDb()
+        .prepare(
+          "DELETE FROM device_tokens WHERE user_id = ? AND token_hash = ?"
+        )
         .bind(user.id, tokenHash)
         .run();
       return c.json({ deleted: result.meta.changes > 0 });

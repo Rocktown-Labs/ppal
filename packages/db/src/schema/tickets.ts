@@ -1,12 +1,13 @@
 import { sql } from "drizzle-orm";
 import {
+  bigint,
   check,
+  doublePrecision,
   index,
   integer,
-  real,
-  sqliteTable,
+  pgTable,
   text,
-} from "drizzle-orm/sqlite-core";
+} from "drizzle-orm/pg-core";
 
 import { user } from "./auth";
 import {
@@ -19,10 +20,10 @@ import {
 import { createdAtColumn, updatedAtColumn } from "./columns";
 import { historicalImportBatches, uploads } from "./ingestion";
 
-export const tickets = sqliteTable(
+export const tickets = pgTable(
   "tickets",
   {
-    confirmedAt: integer("confirmed_at", { mode: "timestamp_ms" }),
+    confirmedAt: bigint("confirmed_at", { mode: "number" }),
     createdAt: createdAtColumn(),
     displayedResult: text("displayed_result"),
     historicalImportBatchId: text("historical_import_batch_id").references(
@@ -31,21 +32,21 @@ export const tickets = sqliteTable(
     ),
     id: text("id").primaryKey(),
     ingestionMode: text("ingestion_mode").notNull().default("live"),
-    lastProgressNotifiedAt: integer("last_progress_notified_at", {
-      mode: "timestamp_ms",
+    lastProgressNotifiedAt: bigint("last_progress_notified_at", {
+      mode: "number",
     }),
     notificationIntervalMinutes: integer("notification_interval_minutes")
       .notNull()
       .default(10),
     resultSource: text("result_source"),
-    settledAt: integer("settled_at", { mode: "timestamp_ms" }),
+    settledAt: bigint("settled_at", { mode: "number" }),
     sourceName: text("source_name"),
     sourceUploadId: text("source_upload_id").references(() => uploads.id, {
       onDelete: "set null",
     }),
     status: text("status").notNull().default("needs_review"),
     ticketType: text("ticket_type").notNull().default("parlay"),
-    trackingStartedAt: integer("tracking_started_at", { mode: "timestamp_ms" }),
+    trackingStartedAt: bigint("tracking_started_at", { mode: "number" }),
     updatedAt: updatedAtColumn(),
     userId: text("user_id")
       .notNull()
@@ -53,7 +54,7 @@ export const tickets = sqliteTable(
     verificationStatus: text("verification_status")
       .notNull()
       .default("unverified"),
-    verifiedAt: integer("verified_at", { mode: "timestamp_ms" }),
+    verifiedAt: bigint("verified_at", { mode: "number" }),
     version: integer("version").notNull().default(1),
   },
   (table) => [
@@ -89,25 +90,20 @@ export const tickets = sqliteTable(
   ]
 );
 
-export const ticketLegs = sqliteTable(
+export const ticketLegs = pgTable(
   "ticket_legs",
   {
     createdAt: createdAtColumn(),
-    currentValue: real("current_value"),
+    currentValue: doublePrecision("current_value"),
     displayDescription: text("display_description"),
-    eventHint: text("event_hint", { mode: "json" }).$type<Record<
-      string,
-      unknown
-    > | null>(),
+    eventHint: text("event_hint"),
     id: text("id").primaryKey(),
     lastNotifiedSnapshot: text("last_notified_snapshot"),
     leagueId: text("league_id").references(() => leagues.id, {
       onDelete: "set null",
     }),
-    lostAt: integer("lost_at", { mode: "timestamp_ms" }),
-    marketComponents: text("market_components", { mode: "json" }).$type<
-      string[] | null
-    >(),
+    lostAt: bigint("lost_at", { mode: "number" }),
+    marketComponents: text("market_components"),
     marketId: text("market_id").references(() => markets.id, {
       onDelete: "set null",
     }),
@@ -119,10 +115,10 @@ export const ticketLegs = sqliteTable(
     rawLeagueName: text("raw_league_name"),
     rawMarketName: text("raw_market_name"),
     rawSportName: text("raw_sport_name"),
-    resolverConfidence: real("resolver_confidence"),
+    resolverConfidence: doublePrecision("resolver_confidence"),
     resolverStatus: text("resolver_status").notNull().default("ambiguous"),
-    secondaryTargetValue: real("secondary_target_value"),
-    settledAt: integer("settled_at", { mode: "timestamp_ms" }),
+    secondaryTargetValue: doublePrecision("secondary_target_value"),
+    settledAt: bigint("settled_at", { mode: "number" }),
     sportId: text("sport_id").references(() => sports.id, {
       onDelete: "set null",
     }),
@@ -132,13 +128,13 @@ export const ticketLegs = sqliteTable(
     status: text("status").notNull().default("pending"),
     subjectName: text("subject_name").notNull(),
     subjectType: text("subject_type").notNull().default("player"),
-    targetValue: real("target_value"),
+    targetValue: doublePrecision("target_value"),
     ticketId: text("ticket_id")
       .notNull()
       .references(() => tickets.id, { onDelete: "cascade" }),
     updatedAt: updatedAtColumn(),
     version: integer("version").notNull().default(1),
-    wonAt: integer("won_at", { mode: "timestamp_ms" }),
+    wonAt: bigint("won_at", { mode: "number" }),
   },
   (table) => [
     check(
@@ -162,17 +158,14 @@ export const ticketLegs = sqliteTable(
   ]
 );
 
-export const ticketTimelineEvents = sqliteTable(
+export const ticketTimelineEvents = pgTable(
   "ticket_timeline_events",
   {
     createdAt: createdAtColumn(),
     id: text("id").primaryKey(),
     message: text("message"),
-    metadata: text("metadata", { mode: "json" }).$type<Record<
-      string,
-      unknown
-    > | null>(),
-    occurredAt: integer("occurred_at", { mode: "timestamp_ms" }).notNull(),
+    metadata: text("metadata"),
+    occurredAt: bigint("occurred_at", { mode: "number" }).notNull(),
     ticketId: text("ticket_id")
       .notNull()
       .references(() => tickets.id, { onDelete: "cascade" }),

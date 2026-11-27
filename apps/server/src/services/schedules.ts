@@ -1,7 +1,7 @@
+import { marketDefinitions } from "@ppal/contracts/markets";
 /* oxlint-disable no-await-in-loop -- Sequential provider calls protect the upstream rate limit. */
 
-import { marketDefinitions } from "@ppal/contracts/markets";
-
+import { getDb } from "../lib/database";
 import {
   acquireSportradarProductBudget,
   resolveSportradarAccessLevel,
@@ -211,8 +211,9 @@ const upsertTeam = async ({
     return null;
   }
   const id = `participant:${providerId}`;
-  await workerEnv.DB.prepare(
-    `INSERT INTO participants (
+  await getDb(workerEnv)
+    .prepare(
+      `INSERT INTO participants (
       id, league_id, name, provider, provider_participant_id, short_name,
       sport_id, type, updated_at
     ) VALUES (?, ?, ?, 'sportradar', ?, ?, ?, 'team', ?)
@@ -220,7 +221,7 @@ const upsertTeam = async ({
       league_id = excluded.league_id, name = excluded.name,
       short_name = excluded.short_name, sport_id = excluded.sport_id,
       updated_at = excluded.updated_at`
-  )
+    )
     .bind(
       id,
       leagueId,
@@ -263,8 +264,9 @@ const upsertScheduleEvent = async (
   const awayId = awayRaw
     ? await upsertTeam({ data: awayRaw, leagueId, sportId, workerEnv })
     : null;
-  await workerEnv.DB.prepare(
-    `INSERT INTO sports_events (
+  await getDb(workerEnv)
+    .prepare(
+      `INSERT INTO sports_events (
       away_participant_id, home_participant_id, id, league_id, next_poll_at,
       provider, provider_event_id, provider_payload, starts_at, status, updated_at
     ) VALUES (?, ?, ?, ?, ?, 'sportradar', ?, ?, ?, ?, ?)
@@ -272,7 +274,7 @@ const upsertScheduleEvent = async (
       away_participant_id = excluded.away_participant_id,
       home_participant_id = excluded.home_participant_id,
       league_id = excluded.league_id,
-      next_poll_at = MIN(COALESCE(sports_events.next_poll_at, excluded.next_poll_at), excluded.next_poll_at),
+      next_poll_at = LEAST(COALESCE(sports_events.next_poll_at, excluded.next_poll_at), excluded.next_poll_at),
       provider_payload = excluded.provider_payload,
       starts_at = excluded.starts_at,
       status = CASE
@@ -280,7 +282,7 @@ const upsertScheduleEvent = async (
         ELSE excluded.status
       END,
       updated_at = excluded.updated_at`
-  )
+    )
     .bind(
       awayId,
       homeId,
@@ -378,10 +380,11 @@ export const synchronizeSportsCatalog = async (
     leagues.map((league) => [league[2], league[2]] as const)
   );
   for (const [slug, name] of sportNames) {
-    await workerEnv.DB.prepare(
-      `INSERT INTO sports (id, name, slug, updated_at) VALUES (?, ?, ?, ?)
+    await getDb(workerEnv)
+      .prepare(
+        `INSERT INTO sports (id, name, slug, updated_at) VALUES (?, ?, ?, ?)
        ON CONFLICT(slug) DO UPDATE SET name = excluded.name, updated_at = excluded.updated_at`
-    )
+      )
       .bind(
         `sport:${slug}`,
         name[0]?.toUpperCase() + name.slice(1),
@@ -391,12 +394,13 @@ export const synchronizeSportsCatalog = async (
       .run();
   }
   for (const [slug, name, sport] of leagues) {
-    await workerEnv.DB.prepare(
-      `INSERT INTO leagues (id, name, provider, provider_key, slug, sport_id, updated_at)
+    await getDb(workerEnv)
+      .prepare(
+        `INSERT INTO leagues (id, name, provider, provider_key, slug, sport_id, updated_at)
        VALUES (?, ?, 'sportradar', ?, ?, ?, ?)
        ON CONFLICT(slug) DO UPDATE SET name = excluded.name,
          provider_key = excluded.provider_key, updated_at = excluded.updated_at`
-    )
+      )
       .bind(`league:${slug}`, name, slug, slug, `sport:${sport}`, Date.now())
       .run();
   }
@@ -409,11 +413,12 @@ export const synchronizeSportsCatalog = async (
     } else if (isGameMarket) {
       subjectType = "game";
     }
-    await workerEnv.DB.prepare(
-      `INSERT INTO markets (id, name, slug, subject_type, updated_at, value_type)
+    await getDb(workerEnv)
+      .prepare(
+        `INSERT INTO markets (id, name, slug, subject_type, updated_at, value_type)
        VALUES (?, ?, ?, ?, ?, ?)
        ON CONFLICT(slug) DO UPDATE SET name = excluded.name, updated_at = excluded.updated_at`
-    )
+      )
       .bind(
         `market:${slug}`,
         name,

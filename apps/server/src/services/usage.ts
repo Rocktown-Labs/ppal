@@ -1,3 +1,5 @@
+import type { SqlDatabase } from "@ppal/db";
+
 const MONTHLY_UPLOAD_LIMITS = {
   creator: 1000,
   free: 5,
@@ -20,7 +22,7 @@ export const reserveUploadUsage = async ({
   uploadId,
   userId,
 }: {
-  db: D1Database;
+  db: SqlDatabase;
   idempotencyKey: string;
   uploadId: string;
   userId: string;
@@ -95,7 +97,7 @@ export const reserveUploadUsage = async ({
 };
 
 export const releaseUploadUsage = async (
-  db: D1Database,
+  db: SqlDatabase,
   idempotencyKey: string
 ): Promise<void> => {
   await db

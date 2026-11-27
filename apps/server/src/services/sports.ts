@@ -1,6 +1,5 @@
-/* oxlint-disable no-await-in-loop -- Leg updates are serialized per event for deterministic settlement. */
-
 import { marketDefinitions } from "@ppal/contracts/markets";
+/* oxlint-disable no-await-in-loop -- Leg updates are serialized per event for deterministic settlement. */
 import { sportsPollQueueMessageSchema } from "@ppal/contracts/queues";
 import type {
   NotificationIntervalMinutes,
@@ -13,6 +12,7 @@ import { evaluateLeg } from "@ppal/domain/tracking/evaluate-leg";
 import { evaluateTicket } from "@ppal/domain/tracking/evaluate-ticket";
 
 import type { ProductBudgetDecision } from "../durable-objects/sportradar-product-budget";
+import { getDb } from "../lib/database";
 import { refreshHistoricalBatch } from "./historical-imports";
 import { publishNotification } from "./notifications";
 import {
@@ -252,24 +252,26 @@ const upsertObservedParticipants = async (
       .slice(start, start + 100)
       .map(([providerId, record]) => {
         const name = participantName(record);
-        return workerEnv.DB.prepare(
-          `INSERT INTO participants (id, league_id, name, provider, provider_participant_id, short_name, sport_id, type, updated_at)
+        return getDb(workerEnv)
+          .prepare(
+            `INSERT INTO participants (id, league_id, name, provider, provider_participant_id, short_name, sport_id, type, updated_at)
          VALUES (?, ?, ?, 'sportradar', ?, ?, ?, 'player', ?)
          ON CONFLICT(provider, provider_participant_id) DO UPDATE SET name = excluded.name,
            short_name = excluded.short_name, league_id = excluded.league_id,
            sport_id = excluded.sport_id, updated_at = excluded.updated_at`
-        ).bind(
-          `participant:${providerId}`,
-          event.league_id,
-          name,
-          providerId,
-          String(record.abbr_name ?? record.abbreviation ?? name),
-          event.sport_id,
-          Date.now()
-        );
+          )
+          .bind(
+            `participant:${providerId}`,
+            event.league_id,
+            name,
+            providerId,
+            String(record.abbr_name ?? record.abbreviation ?? name),
+            event.sport_id,
+            Date.now()
+          );
       });
     if (statements.length > 0) {
-      await workerEnv.DB.batch(statements);
+      await getDb(workerEnv).batch(statements);
     }
   }
 };
@@ -357,9 +359,10 @@ const releaseEventLease = async (
   leaseToken: number,
   workerEnv: Env
 ): Promise<void> => {
-  await workerEnv.DB.prepare(
-    "UPDATE sports_events SET poll_lease_until = NULL WHERE id = ? AND poll_lease_until = ?"
-  )
+  await getDb(workerEnv)
+    .prepare(
+      "UPDATE sports_events SET poll_lease_until = NULL WHERE id = ? AND poll_lease_until = ?"
+    )
     .bind(eventId, leaseToken)
     .run();
 };
@@ -418,8 +421,9 @@ const publishTicketProgress = async ({
   ) {
     return;
   }
-  const legs = await workerEnv.DB.prepare(
-    `SELECT away.name AS away_name, e.away_score, l.current_value,
+  const legs = await getDb(workerEnv)
+    .prepare(
+      `SELECT away.name AS away_name, e.away_score, l.current_value,
       home.name AS home_name, e.home_score, l.id, l.last_notified_snapshot,
       m.slug AS market_slug, l.status, l.subject_name, l.target_value
      FROM ticket_legs l
@@ -428,7 +432,7 @@ const publishTicketProgress = async ({
      LEFT JOIN participants away ON away.id = e.away_participant_id
      LEFT JOIN participants home ON home.id = e.home_participant_id
      WHERE l.ticket_id = ? ORDER BY l.created_at, l.id`
-  )
+    )
     .bind(ticketId)
     .all<ProgressLegRow>();
   const lines = legs.results
@@ -453,12 +457,13 @@ const publishTicketProgress = async ({
   }
 
   const cutoff = now - pollingDelayMs(ticketState.notificationIntervalMinutes);
-  const claim = await workerEnv.DB.prepare(
-    terminal
-      ? "UPDATE tickets SET last_progress_notified_at = ? WHERE id = ?"
-      : `UPDATE tickets SET last_progress_notified_at = ? WHERE id = ?
+  const claim = await getDb(workerEnv)
+    .prepare(
+      terminal
+        ? "UPDATE tickets SET last_progress_notified_at = ? WHERE id = ?"
+        : `UPDATE tickets SET last_progress_notified_at = ? WHERE id = ?
          AND (last_progress_notified_at IS NULL OR last_progress_notified_at <= ?)`
-  )
+    )
     .bind(...(terminal ? [now, ticketId] : [now, ticketId, cutoff]))
     .run();
   if (claim.meta.changes === 0) {
@@ -484,11 +489,13 @@ const publishTicketProgress = async ({
     workerEnv,
   });
   if (lines.length > 0) {
-    await workerEnv.DB.batch(
+    await getDb(workerEnv).batch(
       lines.map((line) =>
-        workerEnv.DB.prepare(
-          "UPDATE ticket_legs SET last_notified_snapshot = ? WHERE id = ?"
-        ).bind(line.snapshot, line.legId)
+        getDb(workerEnv)
+          .prepare(
+            "UPDATE ticket_legs SET last_notified_snapshot = ? WHERE id = ?"
+          )
+          .bind(line.snapshot, line.legId)
       )
     );
   }
@@ -501,32 +508,36 @@ export const processSportsMessage = async (
   workerEnv: Env
 ): Promise<void> => {
   const message = sportsPollQueueMessageSchema.parse(body);
-  const event = await workerEnv.DB.prepare(
-    `SELECT e.away_participant_id, e.away_score, e.home_participant_id,
+  const event = await getDb(workerEnv)
+    .prepare(
+      `SELECT e.away_participant_id, e.away_score, e.home_participant_id,
       e.home_score, e.id, e.league_id, e.provider_event_id, e.starts_at, e.status,
       l.slug AS league_slug, l.sport_id FROM sports_events e
       JOIN leagues l ON l.id = e.league_id
       WHERE e.id = ? AND e.poll_lease_until = ?`
-  )
+    )
     .bind(message.eventId, Number(message.leaseToken))
     .first<EventRow>();
   if (!event) {
     return;
   }
-  const cadence = await workerEnv.DB.prepare(
-    `SELECT MIN(t.notification_interval_minutes) AS minutes
+  const cadence = await getDb(workerEnv)
+    .prepare(
+      `SELECT MIN(t.notification_interval_minutes) AS minutes
      FROM tracking_subscriptions s
      JOIN ticket_legs l ON l.id = s.ticket_leg_id
      JOIN tickets t ON t.id = l.ticket_id
      WHERE s.sports_event_id = ? AND s.status = 'active'`
-  )
+    )
     .bind(event.id)
     .first<{ minutes: NotificationIntervalMinutes | null }>();
   if (cadence?.minutes === null || cadence?.minutes === undefined) {
-    await workerEnv.DB.batch([
-      workerEnv.DB.prepare(
-        "UPDATE sports_events SET next_poll_at = NULL, poll_lease_until = NULL, updated_at = ? WHERE id = ? AND poll_lease_until = ?"
-      ).bind(Date.now(), event.id, Number(message.leaseToken)),
+    await getDb(workerEnv).batch([
+      getDb(workerEnv)
+        .prepare(
+          "UPDATE sports_events SET next_poll_at = NULL, poll_lease_until = NULL, updated_at = ? WHERE id = ? AND poll_lease_until = ?"
+        )
+        .bind(Date.now(), event.id, Number(message.leaseToken)),
     ]);
     return;
   }
@@ -537,10 +548,11 @@ export const processSportsMessage = async (
     startsAt: event.starts_at,
   });
   if (event.status === "scheduled" && firstPollAt > now) {
-    await workerEnv.DB.prepare(
-      `UPDATE sports_events SET next_poll_at = ?, poll_lease_until = NULL,
+    await getDb(workerEnv)
+      .prepare(
+        `UPDATE sports_events SET next_poll_at = ?, poll_lease_until = NULL,
        updated_at = ? WHERE id = ? AND poll_lease_until = ?`
-    )
+      )
       .bind(firstPollAt, now, event.id, Number(message.leaseToken))
       .run();
     return;
@@ -551,10 +563,11 @@ export const processSportsMessage = async (
   );
   if (!budget.granted) {
     const retryAt = Date.now() + budget.retryAfterMs;
-    await workerEnv.DB.prepare(
-      `UPDATE sports_events SET next_poll_at = ?, poll_lease_until = NULL,
+    await getDb(workerEnv)
+      .prepare(
+        `UPDATE sports_events SET next_poll_at = ?, poll_lease_until = NULL,
        updated_at = ? WHERE id = ? AND poll_lease_until = ?`
-    )
+      )
       .bind(retryAt, Date.now(), event.id, Number(message.leaseToken))
       .run();
     return;
@@ -572,10 +585,11 @@ export const processSportsMessage = async (
       error instanceof Error ? error.message : "Unknown provider error";
     const quotaHit = /(?<quota>429|403|quota|limit)/iu.test(detail);
     const retryAt = Date.now() + (quotaHit ? 15 * 60 * 1000 : 2 * 60 * 1000);
-    await workerEnv.DB.prepare(
-      `UPDATE sports_events SET next_poll_at = ?, poll_lease_until = NULL,
+    await getDb(workerEnv)
+      .prepare(
+        `UPDATE sports_events SET next_poll_at = ?, poll_lease_until = NULL,
        updated_at = ? WHERE id = ?`
-    )
+      )
       .bind(retryAt, Date.now(), event.id)
       .run();
     workerEnv.ANALYTICS.writeDataPoint({
@@ -599,11 +613,12 @@ export const processSportsMessage = async (
     );
   }
   const leaseToken = Number(message.leaseToken);
-  const eventUpdate = await workerEnv.DB.prepare(
-    `UPDATE sports_events SET away_score = ?, home_score = ?, last_synced_at = ?,
+  const eventUpdate = await getDb(workerEnv)
+    .prepare(
+      `UPDATE sports_events SET away_score = ?, home_score = ?, last_synced_at = ?,
       next_poll_at = ?, provider_payload = ?, status = ?, updated_at = ?
      WHERE id = ? AND poll_lease_until = ?`
-  )
+    )
     .bind(
       scores.away,
       scores.home,
@@ -621,8 +636,9 @@ export const processSportsMessage = async (
   }
 
   try {
-    const tracked = await workerEnv.DB.prepare(
-      `SELECT l.current_value, l.id AS leg_id, l.lost_at, l.operator,
+    const tracked = await getDb(workerEnv)
+      .prepare(
+        `SELECT l.current_value, l.id AS leg_id, l.lost_at, l.operator,
       l.market_components, l.participant_id, l.settled_at, l.status AS leg_status, l.target_value,
       l.ticket_id, l.won_at, m.id AS market_id, m.slug AS market_slug,
       p.provider_participant_id, t.historical_import_batch_id, t.ingestion_mode,
@@ -634,7 +650,7 @@ export const processSportsMessage = async (
      JOIN markets m ON m.id = s.market_id
      LEFT JOIN participants p ON p.id = s.participant_id
      WHERE s.sports_event_id = ? AND s.status = 'active'`
-    )
+      )
       .bind(event.id)
       .all<TrackingRow>();
     const playerRecords: Record<string, unknown>[] = [];
@@ -654,14 +670,18 @@ export const processSportsMessage = async (
     for (const trackedLeg of tracked.results) {
       if (status === "cancelled") {
         const cancelledAt = Date.now();
-        await workerEnv.DB.batch([
-          workerEnv.DB.prepare(
-            `UPDATE ticket_legs SET settled_at = ?, status = 'void', updated_at = ?, version = version + 1
+        await getDb(workerEnv).batch([
+          getDb(workerEnv)
+            .prepare(
+              `UPDATE ticket_legs SET settled_at = ?, status = 'void', updated_at = ?, version = version + 1
            WHERE id = ? AND status IN ('pending', 'live', 'unresolved')`
-          ).bind(cancelledAt, cancelledAt, trackedLeg.leg_id),
-          workerEnv.DB.prepare(
-            "UPDATE tracking_subscriptions SET status = 'completed', updated_at = ? WHERE ticket_leg_id = ?"
-          ).bind(cancelledAt, trackedLeg.leg_id),
+            )
+            .bind(cancelledAt, cancelledAt, trackedLeg.leg_id),
+          getDb(workerEnv)
+            .prepare(
+              "UPDATE tracking_subscriptions SET status = 'completed', updated_at = ? WHERE ticket_leg_id = ?"
+            )
+            .bind(cancelledAt, trackedLeg.leg_id),
         ]);
         affectedTickets.set(trackedLeg.ticket_id, {
           historicalImportBatchId: trackedLeg.historical_import_batch_id,
@@ -737,13 +757,14 @@ export const processSportsMessage = async (
         continue;
       }
       const observationKey = `sportradar:${event.id}:${trackedLeg.participant_id}:${trackedLeg.market_id}:${sequence}`;
-      await workerEnv.DB.prepare(
-        `INSERT INTO stat_observations (
+      await getDb(workerEnv)
+        .prepare(
+          `INSERT INTO stat_observations (
         idempotency_key, market_id, observed_at, participant_id, provider,
         provider_sequence, sports_event_id, value
       ) VALUES (?, ?, ?, ?, 'sportradar', ?, ?, ?)
       ON CONFLICT(idempotency_key) DO NOTHING`
-      )
+        )
         .bind(
           observationKey,
           trackedLeg.market_id,
@@ -778,10 +799,11 @@ export const processSportsMessage = async (
         },
         value
       );
-      await workerEnv.DB.prepare(
-        `UPDATE ticket_legs SET current_value = ?, lost_at = ?, settled_at = ?,
+      await getDb(workerEnv)
+        .prepare(
+          `UPDATE ticket_legs SET current_value = ?, lost_at = ?, settled_at = ?,
         status = ?, updated_at = ?, version = version + 1, won_at = ? WHERE id = ?`
-      )
+        )
         .bind(
           evaluation.currentValue,
           evaluation.lostAt?.getTime() ?? null,
@@ -803,9 +825,8 @@ export const processSportsMessage = async (
     }
 
     for (const [ticketId, ticketState] of affectedTickets) {
-      const legRows = await workerEnv.DB.prepare(
-        "SELECT status FROM ticket_legs WHERE ticket_id = ?"
-      )
+      const legRows = await getDb(workerEnv)
+        .prepare("SELECT status FROM ticket_legs WHERE ticket_id = ?")
         .bind(ticketId)
         .all<{ status: TicketLegStatus }>();
       const result = evaluateTicket({
@@ -819,11 +840,12 @@ export const processSportsMessage = async (
           (result.status === "won" ||
             result.status === "lost" ||
             result.status === "void");
-        await workerEnv.DB.prepare(
-          `UPDATE tickets SET result_source = CASE WHEN ? THEN 'historical_provider' ELSE result_source END,
+        await getDb(workerEnv)
+          .prepare(
+            `UPDATE tickets SET result_source = CASE WHEN ? THEN 'historical_provider' ELSE result_source END,
          settled_at = ?, status = ?, updated_at = ?, verification_status = CASE WHEN ? THEN 'verified' ELSE verification_status END,
          verified_at = CASE WHEN ? THEN ? ELSE verified_at END, version = version + 1 WHERE id = ?`
-        )
+          )
           .bind(
             Number(providerVerified),
             result.settledAt?.getTime() ?? null,
@@ -837,7 +859,7 @@ export const processSportsMessage = async (
           .run();
         if (ticketState.historicalImportBatchId) {
           await refreshHistoricalBatch(
-            workerEnv.DB,
+            getDb(workerEnv),
             ticketState.historicalImportBatchId
           );
         }
@@ -863,15 +885,16 @@ export const processSportsMessage = async (
 export const enqueueDueSportsEvents = async (workerEnv: Env): Promise<void> => {
   const now = Date.now();
   const leaseUntil = now + 60_000;
-  const due = await workerEnv.DB.prepare(
-    `UPDATE sports_events SET poll_lease_until = ?, updated_at = ?
+  const due = await getDb(workerEnv)
+    .prepare(
+      `UPDATE sports_events SET poll_lease_until = ?, updated_at = ?
      WHERE id IN (
        SELECT id FROM sports_events
        WHERE status IN ('scheduled', 'live') AND next_poll_at <= ?
          AND (poll_lease_until IS NULL OR poll_lease_until < ?)
        ORDER BY next_poll_at LIMIT 100
      ) RETURNING id`
-  )
+    )
     .bind(leaseUntil, now, now, now)
     .all<{ id: string }>();
   if (due.results.length === 0) {

@@ -10,7 +10,10 @@
     }
   },
   "scripts": {
-    "check-types": "tsc --noEmit"
+    "check-types": "tsc --noEmit",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
+    "db:push": "drizzle-kit push"
   },
   "dependencies": {
     "@libsql/client": "0.17.4",
@@ -18,11 +21,13 @@
     "dotenv": "catalog:",
     "drizzle-orm": "^0.45.2",
     "libsql": "0.5.29",
+    "postgres": "^4.1.1",
     "zod": "catalog:"
   },
   "devDependencies": {
     "@ppal/config": "workspace:*",
     "@types/node": "catalog:",
+    "drizzle-kit": "^0.31.11",
     "typescript": "^6.0.3"
   }
 }

@@ -1,5 +1,6 @@
 import type { Auth } from "@ppal/auth";
-import { env } from "@ppal/env/server";
+
+import { getDb } from "../lib/database";
 
 /* oxlint-disable no-await-in-loop -- Each seed step checks the previous write; the seeder is intentionally sequential and idempotent. */
 
@@ -806,7 +807,8 @@ const ensureUsers = async (auth: Auth): Promise<UserDirectory> => {
   // Created through better-auth so password hashing and the credential
   // account rows match exactly what sign-in expects.
   for (const seedUser of [DEMO_USER, ...BETTOR_USERS]) {
-    const existing = await env.DB.prepare("SELECT id FROM user WHERE email = ?")
+    const existing = await getDb()
+      .prepare("SELECT id FROM user WHERE email = ?")
       .bind(seedUser.email)
       .first<{ id: string }>();
     if (existing) {
@@ -824,7 +826,8 @@ const ensureUsers = async (auth: Auth): Promise<UserDirectory> => {
     if (!id) {
       throw new Error(`Could not create demo user ${seedUser.email}`);
     }
-    await env.DB.prepare("UPDATE user SET email_verified = 1 WHERE id = ?")
+    await getDb()
+      .prepare("UPDATE user SET email_verified = true WHERE id = ?")
       .bind(id)
       .run();
     idByHandle.set(seedUser.handle, id);
@@ -849,9 +852,10 @@ const ensureProfilesAndFollows = async (
   // a `_demo` variant instead of failing the whole seed.
   for (const seedUser of [DEMO_USER, ...BETTOR_USERS]) {
     const uid = idOf(directory, seedUser.handle);
-    const existing = await env.DB.prepare(
-      "SELECT user_id, username FROM profiles WHERE user_id = ? OR username = ?"
-    )
+    const existing = await getDb()
+      .prepare(
+        "SELECT user_id, username FROM profiles WHERE user_id = ? OR username = ?"
+      )
       .bind(uid, seedUser.handle)
       .first<{ user_id: string; username: string }>();
     if (existing?.user_id === uid) {
@@ -860,19 +864,19 @@ const ensureProfilesAndFollows = async (
     let { handle } = seedUser;
     if (existing?.username === handle) {
       handle = `${seedUser.handle}_demo`;
-      const fallbackTaken = await env.DB.prepare(
-        "SELECT user_id FROM profiles WHERE username = ?"
-      )
+      const fallbackTaken = await getDb()
+        .prepare("SELECT user_id FROM profiles WHERE username = ?")
         .bind(handle)
         .first<{ user_id: string }>();
       if (fallbackTaken) {
         handle = `${seedUser.handle}_${uid.slice(0, 8)}`;
       }
     }
-    await env.DB.prepare(
-      `INSERT INTO profiles (bio, is_public, updated_at, user_id, username)
+    await getDb()
+      .prepare(
+        `INSERT INTO profiles (bio, is_public, updated_at, user_id, username)
        VALUES (?, 1, ?, ?, ?) ON CONFLICT (user_id) DO NOTHING`
-    )
+      )
       .bind(seedUser.bio, now, uid, handle)
       .run();
   }
@@ -885,17 +889,19 @@ const ensureProfilesAndFollows = async (
     ["marcus_prop", "statline_sarah"],
     ["gridironguru", "courtvision_picks"],
   ];
-  await env.DB.batch(
+  await getDb().batch(
     followPairs.map(([follower, followed], index) =>
-      env.DB.prepare(
-        `INSERT INTO follows (created_at, followed_user_id, follower_user_id, id)
+      getDb()
+        .prepare(
+          `INSERT INTO follows (created_at, followed_user_id, follower_user_id, id)
          VALUES (?, ?, ?, ?) ON CONFLICT (id) DO NOTHING`
-      ).bind(
-        now - index * HOUR,
-        idOf(directory, followed),
-        idOf(directory, follower),
-        `demo-follow-${index}`
-      )
+        )
+        .bind(
+          now - index * HOUR,
+          idOf(directory, followed),
+          idOf(directory, follower),
+          `demo-follow-${index}`
+        )
     )
   );
   return followPairs.length;
@@ -906,23 +912,25 @@ const ensureEntitlementAndPreferences = async (
   now: number
 ): Promise<void> => {
   // Pro entitlement so analytics mirrors the demo fixtures.
-  await env.DB.prepare(
-    `INSERT INTO billing_entitlements
+  await getDb()
+    .prepare(
+      `INSERT INTO billing_entitlements
        (created_at, current_period_start, effective_at, id, plan,
         provider_reference, source, status, updated_at, user_id)
      VALUES (?, ?, ?, 'demo-entitlement-1', 'pro', ?, 'manual', 'active', ?, ?)
      ON CONFLICT (id) DO NOTHING`
-  )
+    )
     .bind(now, now, now, `demo-seed:${demoUserId}`, now, demoUserId)
     .run();
 
-  await env.DB.prepare(
-    `INSERT INTO notification_preferences
+  await getDb()
+    .prepare(
+      `INSERT INTO notification_preferences
        (email_enabled, in_app_enabled, leg_lost, leg_won, push_enabled,
         sms_enabled, ticket_lost, ticket_won, updated_at, user_id)
      VALUES (1, 1, 1, 1, 1, 0, 1, 1, ?, ?)
      ON CONFLICT (user_id) DO NOTHING`
-  )
+    )
     .bind(now, demoUserId)
     .run();
 };
@@ -937,11 +945,11 @@ const ensureTickets = async (
 }> => {
   // Retire settled timeline rows an earlier seed run wrote for live and
   // scheduled tickets (only genuinely settled tickets carry them now).
-  await env.DB.batch([
-    env.DB.prepare(
+  await getDb().batch([
+    getDb().prepare(
       "DELETE FROM ticket_timeline_events WHERE transition_key LIKE 'demo-ticket-live-%:seed:settled'"
     ),
-    env.DB.prepare(
+    getDb().prepare(
       "DELETE FROM ticket_timeline_events WHERE transition_key LIKE 'demo-ticket-scheduled-%:seed:settled'"
     ),
   ]);
@@ -952,95 +960,103 @@ const ensureTickets = async (
     const createdAt = now - ticket.createdAtOffset;
     const settled = ticket.status === "won" || ticket.status === "lost";
     ticketStatements.push(
-      env.DB.prepare(
-        `INSERT INTO tickets
+      getDb()
+        .prepare(
+          `INSERT INTO tickets
            (confirmed_at, created_at, displayed_result, id, ingestion_mode,
             notification_interval_minutes, result_source, settled_at, source_name,
             status, ticket_type, tracking_started_at, updated_at, user_id,
             verification_status, verified_at, version)
          VALUES (?, ?, ?, ?, 'live', 5, ?, ?, ?, ?, ?, ?, ?, ?, 'verified', ?, 1)
          ON CONFLICT (id) DO NOTHING`
-      ).bind(
-        createdAt + 60_000,
-        createdAt,
-        ticket.displayedResult ?? null,
-        ticket.id,
-        settled ? "settled_slip" : "live_provider",
-        settled ? createdAt + 3 * HOUR : null,
-        ticket.source,
-        ticket.status,
-        ticket.type,
-        createdAt + 60_000,
-        now,
-        demoUserId,
-        settled ? createdAt + 3 * HOUR : null
-      )
+        )
+        .bind(
+          createdAt + 60_000,
+          createdAt,
+          ticket.displayedResult ?? null,
+          ticket.id,
+          settled ? "settled_slip" : "live_provider",
+          settled ? createdAt + 3 * HOUR : null,
+          ticket.source,
+          ticket.status,
+          ticket.type,
+          createdAt + 60_000,
+          now,
+          demoUserId,
+          settled ? createdAt + 3 * HOUR : null
+        )
     );
     for (const leg of ticket.legs) {
       const legSettled = leg.status === "won" || leg.status === "lost";
       legStatements.push(
-        env.DB.prepare(
-          `INSERT INTO ticket_legs
+        getDb()
+          .prepare(
+            `INSERT INTO ticket_legs
              (created_at, current_value, display_description, id, operator,
               raw_description, resolver_status, settled_at, status,
               subject_name, subject_type, target_value, ticket_id, updated_at,
               version, won_at, lost_at)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
            ON CONFLICT (id) DO NOTHING`
-        ).bind(
-          createdAt,
-          leg.currentValue,
-          leg.display,
-          leg.id,
-          leg.operator,
-          leg.raw,
-          settled ? "resolved" : "ambiguous",
-          legSettled ? createdAt + 2 * HOUR : null,
-          leg.status,
-          leg.subject,
-          leg.subjectType,
-          leg.target,
-          ticket.id,
-          now,
-          leg.status === "won" ? createdAt + 2 * HOUR : null,
-          leg.status === "lost" ? createdAt + 2 * HOUR : null
-        )
+          )
+          .bind(
+            createdAt,
+            leg.currentValue,
+            leg.display,
+            leg.id,
+            leg.operator,
+            leg.raw,
+            settled ? "resolved" : "ambiguous",
+            legSettled ? createdAt + 2 * HOUR : null,
+            leg.status,
+            leg.subject,
+            leg.subjectType,
+            leg.target,
+            ticket.id,
+            now,
+            leg.status === "won" ? createdAt + 2 * HOUR : null,
+            leg.status === "lost" ? createdAt + 2 * HOUR : null
+          )
       );
     }
     timelineStatements.push(
-      env.DB.prepare(
-        `INSERT INTO ticket_timeline_events
+      getDb()
+        .prepare(
+          `INSERT INTO ticket_timeline_events
            (id, occurred_at, ticket_id, title, transition_key, type)
          VALUES (?, ?, ?, 'Ticket confirmed', ?, 'ticket.confirmed')
          ON CONFLICT (transition_key) DO NOTHING`
-      ).bind(
-        `demo-timeline-${ticket.id}-confirmed`,
-        createdAt + 60_000,
-        ticket.id,
-        `${ticket.id}:seed:confirmed`
-      )
+        )
+        .bind(
+          `demo-timeline-${ticket.id}-confirmed`,
+          createdAt + 60_000,
+          ticket.id,
+          `${ticket.id}:seed:confirmed`
+        )
     );
     if (settled) {
       timelineStatements.push(
-        env.DB.prepare(
-          `INSERT INTO ticket_timeline_events
+        getDb()
+          .prepare(
+            `INSERT INTO ticket_timeline_events
              (id, message, occurred_at, ticket_id, title, transition_key, type)
            VALUES (?, ?, ?, ?, ?, ?, 'ticket.settled')
            ON CONFLICT (transition_key) DO NOTHING`
-        ).bind(
-          `demo-timeline-${ticket.id}-settled`,
-          `Recorded from ${ticket.source}`,
-          createdAt + 3 * HOUR,
-          ticket.id,
-          `Ticket settled ${ticket.status}`,
-          `${ticket.id}:seed:settled`
-        )
+          )
+          .bind(
+            `demo-timeline-${ticket.id}-settled`,
+            `Recorded from ${ticket.source}`,
+            createdAt + 3 * HOUR,
+            ticket.id,
+            `Ticket settled ${ticket.status}`,
+            `${ticket.id}:seed:settled`
+          )
       );
     }
   }
-  await env.DB.batch(ticketStatements);
-  await env.DB.batch(legStatements);
-  await env.DB.batch(timelineStatements);
+  await getDb().batch(ticketStatements);
+  await getDb().batch(legStatements);
+  await getDb().batch(timelineStatements);
   return {
     legCount: legStatements.length,
     ticketCount: ticketStatements.length,
@@ -1052,24 +1068,26 @@ const ensureNotifications = async (
   demoUserId: string,
   now: number
 ): Promise<number> => {
-  await env.DB.batch(
+  await getDb().batch(
     SEED_NOTIFICATIONS.map((notification) =>
-      env.DB.prepare(
-        `INSERT INTO notifications
+      getDb()
+        .prepare(
+          `INSERT INTO notifications
            (body, created_at, id, milestone_key, read_at, ticket_id, title, type, user_id)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT (milestone_key) DO NOTHING`
-      ).bind(
-        notification.body,
-        now - notification.offset,
-        notification.id,
-        `demo-seed:${notification.id}`,
-        notification.read ? now - notification.offset + 60_000 : null,
-        notification.ticketId,
-        notification.title,
-        notification.type,
-        demoUserId
-      )
+        )
+        .bind(
+          notification.body,
+          now - notification.offset,
+          notification.id,
+          `demo-seed:${notification.id}`,
+          notification.read ? now - notification.offset + 60_000 : null,
+          notification.ticketId,
+          notification.title,
+          notification.type,
+          demoUserId
+        )
     )
   );
   return SEED_NOTIFICATIONS.length;
@@ -1086,11 +1104,11 @@ const ensureCommunities = async (
 }> => {
   // Retire rows from an earlier seed run whose ids predated the UUID-format
   // requirement for community messages (replyToId validates as a UUID).
-  await env.DB.batch([
-    env.DB.prepare(
+  await getDb().batch([
+    getDb().prepare(
       "DELETE FROM community_messages WHERE id LIKE 'demo-message-%'"
     ),
-    env.DB.prepare(
+    getDb().prepare(
       "DELETE FROM community_messages WHERE id LIKE 'demo-reply-%'"
     ),
   ]);
@@ -1106,80 +1124,88 @@ const ensureCommunities = async (
       continue;
     }
     communityStatements.push(
-      env.DB.prepare(
-        `INSERT INTO communities
+      getDb()
+        .prepare(
+          `INSERT INTO communities
            (access, created_at, description, id, name, owner_user_id,
             price_cents, rules, slug, updated_at, visibility)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'public')
          ON CONFLICT (id) DO NOTHING`
-      ).bind(
-        community.access,
-        now - (index + 1) * DAY,
-        community.description,
-        community.id,
-        community.name,
-        idOf(directory, ownerHandle),
-        community.priceCents ?? null,
-        community.rules ?? null,
-        community.slug,
-        now
-      )
+        )
+        .bind(
+          community.access,
+          now - (index + 1) * DAY,
+          community.description,
+          community.id,
+          community.name,
+          idOf(directory, ownerHandle),
+          community.priceCents ?? null,
+          community.rules ?? null,
+          community.slug,
+          now
+        )
     );
 
     if (community.id === "demo-community-courtvision") {
       for (const channel of COURTVISION_CHANNELS) {
         channelStatements.push(
-          env.DB.prepare(
-            `INSERT INTO community_channels
+          getDb()
+            .prepare(
+              `INSERT INTO community_channels
                (community_id, created_at, description, id, is_archived,
                 is_default, name, position, slug, updated_at)
              VALUES (?, ?, ?, ?, 0, ?, ?, ?, ?, ?)
              ON CONFLICT (id) DO NOTHING`
-          ).bind(
-            community.id,
-            now - DAY,
-            channel.description,
-            channel.id,
-            channel.position === 0 ? 1 : 0,
-            channel.name,
-            channel.position,
-            channel.slug,
-            now
-          )
+            )
+            .bind(
+              community.id,
+              now - DAY,
+              channel.description,
+              channel.id,
+              channel.position === 0 ? 1 : 0,
+              channel.name,
+              channel.position,
+              channel.slug,
+              now
+            )
         );
       }
     } else {
       channelStatements.push(
-        env.DB.prepare(
-          `INSERT INTO community_channels
+        getDb()
+          .prepare(
+            `INSERT INTO community_channels
              (community_id, created_at, description, id, is_archived,
               is_default, name, position, slug, updated_at)
            VALUES (?, ?, ?, ?, 0, 1, 'General', 0, 'general', ?)
            ON CONFLICT (id) DO NOTHING`
-        ).bind(
-          community.id,
-          now - (index + 1) * DAY,
-          "Community discussion",
-          `demo-channel-${community.slug}`,
-          now
-        )
+          )
+          .bind(
+            community.id,
+            now - (index + 1) * DAY,
+            "Community discussion",
+            `demo-channel-${community.slug}`,
+            now
+          )
       );
     }
 
     for (const member of community.members) {
       memberStatements.push(
-        env.DB.prepare(
-          `INSERT INTO community_members
+        getDb()
+          .prepare(
+            `INSERT INTO community_members
              (community_id, joined_at, role, status, updated_at, user_id)
            VALUES (?, ?, ?, 'active', ?, ?)
            ON CONFLICT (community_id, user_id) DO NOTHING`
-        ).bind(
-          community.id,
-          now - index * DAY,
-          member.role,
-          now,
-          idOf(directory, member.handle)
-        )
+          )
+          .bind(
+            community.id,
+            now - index * DAY,
+            member.role,
+            now,
+            idOf(directory, member.handle)
+          )
       );
     }
 
@@ -1200,50 +1226,54 @@ const ensureCommunities = async (
     for (const channel of seededChannelMessages) {
       for (const message of channel.messages) {
         messageStatements.push(
-          env.DB.prepare(
-            `INSERT INTO community_messages
+          getDb()
+            .prepare(
+              `INSERT INTO community_messages
                (author_user_id, body, channel_id, community_id, created_at,
                 id, mentions, reply_to_id)
              VALUES (?, ?, ?, ?, ?, ?, '[]', NULL)
              ON CONFLICT (id) DO NOTHING`
-          ).bind(
-            idOf(directory, message.authorHandle),
-            message.body,
-            channel.channelId,
-            community.id,
-            now - message.offset,
-            message.id
-          )
+            )
+            .bind(
+              idOf(directory, message.authorHandle),
+              message.body,
+              channel.channelId,
+              community.id,
+              now - message.offset,
+              message.id
+            )
         );
         for (const reply of message.replies ?? []) {
           messageStatements.push(
-            env.DB.prepare(
-              `INSERT INTO community_messages
+            getDb()
+              .prepare(
+                `INSERT INTO community_messages
                  (author_user_id, body, channel_id, community_id, created_at,
                   id, mentions, reply_to_id)
                VALUES (?, ?, ?, ?, ?, ?, '[]', ?)
                ON CONFLICT (id) DO NOTHING`
-            ).bind(
-              idOf(directory, reply.authorHandle),
-              reply.body,
-              channel.channelId,
-              community.id,
-              now - reply.offset,
-              reply.id,
-              message.id
-            )
+              )
+              .bind(
+                idOf(directory, reply.authorHandle),
+                reply.body,
+                channel.channelId,
+                community.id,
+                now - reply.offset,
+                reply.id,
+                message.id
+              )
           );
         }
       }
     }
   }
 
-  await env.DB.batch(communityStatements);
-  await env.DB.batch(channelStatements);
-  await env.DB.batch(memberStatements);
+  await getDb().batch(communityStatements);
+  await getDb().batch(channelStatements);
+  await getDb().batch(memberStatements);
   // Parents are inserted before their replies inside the same batch, so the
   // reply_to_id references resolve in order.
-  await env.DB.batch(messageStatements);
+  await getDb().batch(messageStatements);
 
   return {
     channelCount: channelStatements.length,

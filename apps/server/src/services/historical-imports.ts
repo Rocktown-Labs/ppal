@@ -1,5 +1,7 @@
+import type { SqlDatabase } from "@ppal/db";
+
 export const refreshHistoricalBatch = async (
-  db: D1Database,
+  db: SqlDatabase,
   batchId: string
 ): Promise<void> => {
   const counts = await db

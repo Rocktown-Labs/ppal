@@ -30,8 +30,24 @@ const cloudflareZoneId = "f982a1aacdf38eb2657092788c32d113";
 const publicServerUrl = `https://${apiDomain}`;
 const publicWebUrl = `https://${webDomain}`;
 
-export const db = Cloudflare.D1.Database("database", {
-  migrations: "../../packages/db/src/migrations",
+const parseHyperdriveOrigin = (
+  rawUrl: string | undefined
+): Cloudflare.Hyperdrive.PublicOrigin => {
+  const fallback = "postgres://postgres:postgres@127.0.0.1:5432/parlaypal";
+  const parsed = new URL(rawUrl?.trim() || fallback);
+  return {
+    database: parsed.pathname.replace(/^\//u, "") || "parlaypal",
+    host: parsed.hostname,
+    password: Redacted.make(decodeURIComponent(parsed.password)),
+    port: parsed.port ? Number(parsed.port) : 5432,
+    scheme: "postgres",
+    user: decodeURIComponent(parsed.username),
+  };
+};
+
+export const hyperdrive = Cloudflare.Hyperdrive.Connection("parlaypal", {
+  name: "parlaypal",
+  origin: parseHyperdriveOrigin(process.env.DATABASE_URL),
 });
 
 export const uploads = Cloudflare.R2.Bucket("uploads", {
@@ -125,7 +141,7 @@ export const server = Cloudflare.Worker("server", {
     DATA_ENCRYPTION_KEY: Config.redacted("DATA_ENCRYPTION_KEY").pipe(
       Config.withDefault(Redacted.make(""))
     ),
-    DB: db,
+    HYPERDRIVE: hyperdrive,
     EXTRACTION_QUEUE: extractionQueue,
     FACEBOOK_CLIENT_ID: Config.string("FACEBOOK_CLIENT_ID").pipe(
       Config.withDefault("")

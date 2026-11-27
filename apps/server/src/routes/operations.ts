@@ -11,7 +11,7 @@ import { env } from "@ppal/env/server";
 import { Hono } from "hono";
 import { z } from "zod";
 
-import { safeJsonParse } from "../lib/database";
+import { getDb, safeJsonParse } from "../lib/database";
 import { hasOperationsAccess } from "../lib/operations-auth";
 import { seedDemoData } from "../services/demo-seed";
 
@@ -103,16 +103,20 @@ export const createOperationRoutes = (auth: Auth) => {
       }
     })
     .get("/operations/health", async (c) => {
-      const [failures, stuckUploads, staleLeases] = await env.DB.batch([
-        env.DB.prepare(
+      const [failures, stuckUploads, staleLeases] = await getDb().batch([
+        getDb().prepare(
           "SELECT COUNT(*) AS count FROM operation_failures WHERE status = 'failed'"
         ),
-        env.DB.prepare(
-          "SELECT COUNT(*) AS count FROM uploads WHERE status = 'processing' AND updated_at < ?"
-        ).bind(Date.now() - 10 * 60 * 1000),
-        env.DB.prepare(
-          "SELECT COUNT(*) AS count FROM sports_events WHERE poll_lease_until IS NOT NULL AND poll_lease_until < ?"
-        ).bind(Date.now()),
+        getDb()
+          .prepare(
+            "SELECT COUNT(*) AS count FROM uploads WHERE status = 'processing' AND updated_at < ?"
+          )
+          .bind(Date.now() - 10 * 60 * 1000),
+        getDb()
+          .prepare(
+            "SELECT COUNT(*) AS count FROM sports_events WHERE poll_lease_until IS NOT NULL AND poll_lease_until < ?"
+          )
+          .bind(Date.now()),
       ]);
       return c.json({
         failures: Number(
@@ -129,21 +133,23 @@ export const createOperationRoutes = (auth: Auth) => {
       });
     })
     .get("/operations/failures", async (c) => {
-      const rows = await env.DB.prepare(
-        `SELECT attempts, created_at, error_message, id, message_id, payload, queue, replayed_at, status, updated_at
+      const rows = await getDb()
+        .prepare(
+          `SELECT attempts, created_at, error_message, id, message_id, payload, queue, replayed_at, status, updated_at
          FROM operation_failures ORDER BY created_at DESC LIMIT 200`
-      ).all<{
-        attempts: number;
-        created_at: number;
-        error_message: string;
-        id: string;
-        message_id: string;
-        payload: string;
-        queue: string;
-        replayed_at: number | null;
-        status: string;
-        updated_at: number;
-      }>();
+        )
+        .all<{
+          attempts: number;
+          created_at: number;
+          error_message: string;
+          id: string;
+          message_id: string;
+          payload: string;
+          queue: string;
+          replayed_at: number | null;
+          status: string;
+          updated_at: number;
+        }>();
       return c.json({
         failures: rows.results.map((row) => ({
           attempts: row.attempts,
@@ -167,9 +173,10 @@ export const createOperationRoutes = (auth: Auth) => {
       async (c) => {
         const input = c.req.valid("json");
         const placeholders = input.failureIds.map(() => "?").join(",");
-        const rows = await env.DB.prepare(
-          `SELECT id, payload, queue FROM operation_failures WHERE id IN (${placeholders}) AND status = 'failed'`
-        )
+        const rows = await getDb()
+          .prepare(
+            `SELECT id, payload, queue FROM operation_failures WHERE id IN (${placeholders}) AND status = 'failed'`
+          )
           .bind(...input.failureIds)
           .all<{ id: string; payload: string; queue: string }>();
         const replayed: string[] = [];
@@ -180,14 +187,18 @@ export const createOperationRoutes = (auth: Auth) => {
             if (!extraction.success) {
               continue;
             }
-            await env.DB.batch([
-              env.DB.prepare(
-                "UPDATE uploads SET status = 'ready', updated_at = ? WHERE id = ? AND status = 'failed'"
-              ).bind(Date.now(), extraction.data.uploadId),
-              env.DB.prepare(
-                `UPDATE usage_events SET status = 'reserved', updated_at = ?
+            await getDb().batch([
+              getDb()
+                .prepare(
+                  "UPDATE uploads SET status = 'ready', updated_at = ? WHERE id = ? AND status = 'failed'"
+                )
+                .bind(Date.now(), extraction.data.uploadId),
+              getDb()
+                .prepare(
+                  `UPDATE usage_events SET status = 'reserved', updated_at = ?
                  WHERE resource_id = ? AND status = 'released'`
-              ).bind(Date.now(), extraction.data.uploadId),
+                )
+                .bind(Date.now(), extraction.data.uploadId),
             ]);
             await env.EXTRACTION_QUEUE.send(extraction.data, {
               contentType: "json",
@@ -207,10 +218,11 @@ export const createOperationRoutes = (auth: Auth) => {
               continue;
             }
             const leaseToken = String(Date.now() + 60_000);
-            const lease = await env.DB.prepare(
-              `UPDATE sports_events SET poll_lease_until = ?, updated_at = ?
+            const lease = await getDb()
+              .prepare(
+                `UPDATE sports_events SET poll_lease_until = ?, updated_at = ?
                WHERE id = ? AND status IN ('scheduled', 'live', 'final', 'cancelled')`
-            )
+              )
               .bind(Number(leaseToken), Date.now(), sports.data.eventId)
               .run();
             if (lease.meta.changes === 0) {
@@ -227,9 +239,10 @@ export const createOperationRoutes = (auth: Auth) => {
         }
         if (replayed.length > 0) {
           const replayPlaceholders = replayed.map(() => "?").join(",");
-          await env.DB.prepare(
-            `UPDATE operation_failures SET replayed_at = ?, status = 'replayed', updated_at = ? WHERE id IN (${replayPlaceholders})`
-          )
+          await getDb()
+            .prepare(
+              `UPDATE operation_failures SET replayed_at = ?, status = 'replayed', updated_at = ? WHERE id IN (${replayPlaceholders})`
+            )
             .bind(Date.now(), Date.now(), ...replayed)
             .run();
         }
@@ -238,13 +251,17 @@ export const createOperationRoutes = (auth: Auth) => {
     )
     .post("/operations/recover-stale", async (c) => {
       const now = Date.now();
-      const [uploads, events] = await env.DB.batch([
-        env.DB.prepare(
-          "UPDATE uploads SET status = 'ready', updated_at = ? WHERE status = 'processing' AND updated_at < ? RETURNING id"
-        ).bind(now, now - 10 * 60 * 1000),
-        env.DB.prepare(
-          "UPDATE sports_events SET poll_lease_until = NULL, next_poll_at = ?, updated_at = ? WHERE poll_lease_until IS NOT NULL AND poll_lease_until < ? RETURNING id"
-        ).bind(now, now, now),
+      const [uploads, events] = await getDb().batch([
+        getDb()
+          .prepare(
+            "UPDATE uploads SET status = 'ready', updated_at = ? WHERE status = 'processing' AND updated_at < ? RETURNING id"
+          )
+          .bind(now, now - 10 * 60 * 1000),
+        getDb()
+          .prepare(
+            "UPDATE sports_events SET poll_lease_until = NULL, next_poll_at = ?, updated_at = ? WHERE poll_lease_until IS NOT NULL AND poll_lease_until < ? RETURNING id"
+          )
+          .bind(now, now, now),
       ]);
       return c.json({
         recoveredEvents: events?.results?.length ?? 0,
@@ -259,62 +276,69 @@ export const createOperationRoutes = (auth: Auth) => {
         let imported = 0;
         let skipped = 0;
         for (const legacyUser of input.users) {
-          const receipt = await env.DB.prepare(
-            "SELECT target_id FROM migration_receipts WHERE source = ? AND target_type = 'user' AND source_id = ?"
-          )
+          const receipt = await getDb()
+            .prepare(
+              "SELECT target_id FROM migration_receipts WHERE source = ? AND target_type = 'user' AND source_id = ?"
+            )
             .bind(input.source, legacyUser.legacyId)
             .first<{ target_id: string }>();
           if (receipt) {
             skipped += 1;
             continue;
           }
-          const existing = await env.DB.prepare(
-            "SELECT id FROM user WHERE lower(email) = lower(?)"
-          )
+          const existing = await getDb()
+            .prepare("SELECT id FROM user WHERE lower(email) = lower(?)")
             .bind(legacyUser.email)
             .first<{ id: string }>();
           const userId = existing?.id ?? crypto.randomUUID();
           const now = Date.now();
+          const nowDate = new Date(now);
           if (!existing) {
-            await env.DB.batch([
-              env.DB.prepare(
-                `INSERT INTO user (created_at, email, email_verified, id, name, updated_at)
+            await getDb().batch([
+              getDb()
+                .prepare(
+                  `INSERT INTO user (created_at, email, email_verified, id, name, updated_at)
                VALUES (?, lower(?), ?, ?, ?, ?)`
-              ).bind(
-                legacyUser.createdAt
-                  ? new Date(legacyUser.createdAt).getTime()
-                  : now,
-                legacyUser.email,
-                Number(legacyUser.emailVerified),
-                userId,
-                legacyUser.name,
-                now
-              ),
-              env.DB.prepare(
-                `INSERT INTO account (account_id, created_at, id, issuer, password, provider_id, updated_at, user_id)
+                )
+                .bind(
+                  legacyUser.createdAt
+                    ? new Date(legacyUser.createdAt)
+                    : nowDate,
+                  legacyUser.email,
+                  legacyUser.emailVerified,
+                  userId,
+                  legacyUser.name,
+                  nowDate
+                ),
+              getDb()
+                .prepare(
+                  `INSERT INTO account (account_id, created_at, id, issuer, password, provider_id, updated_at, user_id)
                VALUES (?, ?, ?, 'credential', ?, 'credential', ?, ?)`
-              ).bind(
-                userId,
-                now,
-                crypto.randomUUID(),
-                legacyUser.passwordHash.replace(/^\$2y\$/u, "$2b$"),
-                now,
-                userId
-              ),
+                )
+                .bind(
+                  userId,
+                  nowDate,
+                  crypto.randomUUID(),
+                  legacyUser.passwordHash.replace(/^\$2y\$/u, "$2b$"),
+                  nowDate,
+                  userId
+                ),
             ]);
           }
           if (legacyUser.username) {
-            await env.DB.prepare(
-              `INSERT INTO profiles (updated_at, user_id, username) VALUES (?, ?, ?)
+            await getDb()
+              .prepare(
+                `INSERT INTO profiles (updated_at, user_id, username) VALUES (?, ?, ?)
              ON CONFLICT(user_id) DO NOTHING`
-            )
+              )
               .bind(now, userId, legacyUser.username.toLowerCase())
               .run();
           }
-          await env.DB.prepare(
-            `INSERT INTO migration_receipts (id, source, source_id, target_id, target_type)
+          await getDb()
+            .prepare(
+              `INSERT INTO migration_receipts (id, source, source_id, target_id, target_type)
            VALUES (?, ?, ?, ?, 'user')`
-          )
+            )
             .bind(
               crypto.randomUUID(),
               input.source,

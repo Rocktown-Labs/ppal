@@ -1,8 +1,8 @@
 import type { Auth } from "@ppal/auth";
-import { env } from "@ppal/env/server";
 import { Hono } from "hono";
 
 import { getAuthUser } from "../lib/auth";
+import { getDb } from "../lib/database";
 import { assertPlan, EntitlementError } from "../lib/entitlements";
 
 interface PlayerSummaryRow {
@@ -60,7 +60,7 @@ export const createAnalyticsRoutes = (auth: Auth) =>
       }
       c.set("user", user);
       try {
-        await assertPlan(env.DB, user.id, "pro");
+        await assertPlan(getDb(), user.id, "pro");
       } catch (error) {
         if (error instanceof EntitlementError) {
           return c.json(
@@ -78,15 +78,16 @@ export const createAnalyticsRoutes = (auth: Auth) =>
     })
     .get("/analytics/overview", async (c) => {
       const { user } = c.var;
-      const summary = await env.DB.prepare(
-        `SELECT
+      const summary = await getDb()
+        .prepare(
+          `SELECT
         COUNT(*) AS total,
         SUM(CASE WHEN status = 'won' THEN 1 ELSE 0 END) AS won,
         SUM(CASE WHEN status = 'lost' THEN 1 ELSE 0 END) AS lost,
         SUM(CASE WHEN status IN ('scheduled', 'live') THEN 1 ELSE 0 END) AS active,
         SUM(CASE WHEN verification_status = 'verified' THEN 1 ELSE 0 END) AS verified
        FROM tickets WHERE user_id = ?`
-      )
+        )
         .bind(user.id)
         .first<{
           active: number;
@@ -109,9 +110,10 @@ export const createAnalyticsRoutes = (auth: Auth) =>
     })
     .get("/analytics/players", async (c) => {
       const { user } = c.var;
-      const rows = await env.DB.prepare(
-        `${playerSummarySql} GROUP BY COALESCE(l.participant_id, lower(l.subject_name)) ORDER BY selections DESC LIMIT 100`
-      )
+      const rows = await getDb()
+        .prepare(
+          `${playerSummarySql} GROUP BY COALESCE(l.participant_id, lower(l.subject_name)) ORDER BY selections DESC LIMIT 100`
+        )
         .bind(user.id)
         .all<PlayerSummaryRow>();
       return c.json({ players: rows.results.map(mapPlayer) });
@@ -119,9 +121,10 @@ export const createAnalyticsRoutes = (auth: Auth) =>
     .get("/analytics/players/:participantId", async (c) => {
       const { user } = c.var;
       const participantId = c.req.param("participantId");
-      const summary = await env.DB.prepare(
-        `${playerSummarySql} AND l.participant_id = ? GROUP BY l.participant_id`
-      )
+      const summary = await getDb()
+        .prepare(
+          `${playerSummarySql} AND l.participant_id = ? GROUP BY l.participant_id`
+        )
         .bind(user.id, participantId)
         .first<PlayerSummaryRow>();
       if (!summary) {
@@ -130,8 +133,9 @@ export const createAnalyticsRoutes = (auth: Auth) =>
           404
         );
       }
-      const markets = await env.DB.prepare(
-        `SELECT COALESCE(m.name, l.raw_market_name, 'Other') AS market, COUNT(*) AS selections,
+      const markets = await getDb()
+        .prepare(
+          `SELECT COALESCE(m.name, l.raw_market_name, 'Other') AS market, COUNT(*) AS selections,
           SUM(CASE WHEN l.status = 'won' THEN 1 ELSE 0 END) AS won,
           SUM(CASE WHEN l.status = 'lost' THEN 1 ELSE 0 END) AS lost
          FROM ticket_legs l JOIN tickets t ON t.id = l.ticket_id LEFT JOIN markets m ON m.id = l.market_id
@@ -139,7 +143,7 @@ export const createAnalyticsRoutes = (auth: Auth) =>
            AND t.status NOT IN ('draft', 'needs_review')
          GROUP BY COALESCE(m.name, l.raw_market_name, 'Other')
          ORDER BY selections DESC`
-      )
+        )
         .bind(user.id, participantId)
         .all<{
           lost: number;
@@ -147,12 +151,13 @@ export const createAnalyticsRoutes = (auth: Auth) =>
           selections: number;
           won: number;
         }>();
-      const recent = await env.DB.prepare(
-        `SELECT l.status FROM ticket_legs l JOIN tickets t ON t.id = l.ticket_id
+      const recent = await getDb()
+        .prepare(
+          `SELECT l.status FROM ticket_legs l JOIN tickets t ON t.id = l.ticket_id
          WHERE t.user_id = ? AND l.participant_id = ? AND l.subject_type = 'player'
            AND t.status NOT IN ('draft', 'needs_review') AND l.status IN ('won', 'lost')
          ORDER BY l.settled_at DESC LIMIT 5`
-      )
+        )
         .bind(user.id, participantId)
         .all<{ status: string }>();
       return c.json({

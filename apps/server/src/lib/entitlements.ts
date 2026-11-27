@@ -1,4 +1,4 @@
-import type { D1Database } from "@cloudflare/workers-types";
+import type { SqlDatabase } from "@ppal/db";
 
 type Plan = "free" | "pro" | "creator";
 
@@ -18,7 +18,7 @@ const activeStatuses = new Set(["trialing", "active", "grace_period"]);
  * Otherwise they are Free.
  */
 export const getUserPlan = async (
-  db: D1Database,
+  db: SqlDatabase,
   userId: string
 ): Promise<Plan> => {
   const now = Date.now();
@@ -59,7 +59,7 @@ export const getUserPlan = async (
  * Return true when the user's effective plan is at least `minPlan`.
  */
 export const hasPlan = async (
-  db: D1Database,
+  db: SqlDatabase,
   userId: string,
   minPlan: Plan
 ): Promise<boolean> => {
@@ -84,7 +84,7 @@ export class EntitlementError extends Error {
  * clear error that route handlers can turn into a 403 response.
  */
 export const assertPlan = async (
-  db: D1Database,
+  db: SqlDatabase,
   userId: string,
   minPlan: Plan
 ): Promise<void> => {

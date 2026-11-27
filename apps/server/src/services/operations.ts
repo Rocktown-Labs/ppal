@@ -1,3 +1,5 @@
+import { getDb } from "../lib/database";
+
 export const recordOperationFailure = async ({
   attempts,
   body,
@@ -15,13 +17,14 @@ export const recordOperationFailure = async ({
 }): Promise<void> => {
   const errorMessage =
     error instanceof Error ? error.message : "Unknown queue error";
-  await workerEnv.DB.prepare(
-    `INSERT INTO operation_failures (attempts, error_message, id, message_id, payload, queue, status, updated_at)
+  await getDb(workerEnv)
+    .prepare(
+      `INSERT INTO operation_failures (attempts, error_message, id, message_id, payload, queue, status, updated_at)
      VALUES (?, ?, ?, ?, ?, ?, 'failed', ?)
      ON CONFLICT(queue, message_id) DO UPDATE SET attempts = excluded.attempts,
        error_message = excluded.error_message, payload = excluded.payload, status = 'failed',
        updated_at = excluded.updated_at`
-  )
+    )
     .bind(
       attempts,
       errorMessage.slice(0, 2000),

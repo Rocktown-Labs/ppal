@@ -1,17 +1,17 @@
 import { sql } from "drizzle-orm";
 import {
+  bigint,
   check,
+  doublePrecision,
   index,
-  integer,
-  real,
-  sqliteTable,
+  pgTable,
   text,
   uniqueIndex,
-} from "drizzle-orm/sqlite-core";
+} from "drizzle-orm/pg-core";
 
 import { createdAtColumn, updatedAtColumn } from "./columns";
 
-export const sports = sqliteTable("sports", {
+export const sports = pgTable("sports", {
   createdAt: createdAtColumn(),
   icon: text("icon"),
   id: text("id").primaryKey(),
@@ -20,7 +20,7 @@ export const sports = sqliteTable("sports", {
   updatedAt: updatedAtColumn(),
 });
 
-export const leagues = sqliteTable(
+export const leagues = pgTable(
   "leagues",
   {
     createdAt: createdAtColumn(),
@@ -43,7 +43,7 @@ export const leagues = sqliteTable(
   ]
 );
 
-export const participants = sqliteTable(
+export const participants = pgTable(
   "participants",
   {
     createdAt: createdAtColumn(),
@@ -51,10 +51,7 @@ export const participants = sqliteTable(
     leagueId: text("league_id").references(() => leagues.id, {
       onDelete: "set null",
     }),
-    metadata: text("metadata", { mode: "json" }).$type<Record<
-      string,
-      unknown
-    > | null>(),
+    metadata: text("metadata"),
     name: text("name").notNull(),
     provider: text("provider").notNull(),
     providerParticipantId: text("provider_participant_id"),
@@ -77,15 +74,12 @@ export const participants = sqliteTable(
   ]
 );
 
-export const markets = sqliteTable(
+export const markets = pgTable(
   "markets",
   {
     createdAt: createdAtColumn(),
     id: text("id").primaryKey(),
-    metadata: text("metadata", { mode: "json" }).$type<Record<
-      string,
-      unknown
-    > | null>(),
+    metadata: text("metadata"),
     name: text("name").notNull(),
     slug: text("slug").notNull().unique(),
     sportId: text("sport_id").references(() => sports.id, {
@@ -108,7 +102,7 @@ export const markets = sqliteTable(
   ]
 );
 
-export const sportsEvents = sqliteTable(
+export const sportsEvents = pgTable(
   "sports_events",
   {
     awayParticipantId: text("away_participant_id").references(
@@ -117,7 +111,7 @@ export const sportsEvents = sqliteTable(
         onDelete: "set null",
       }
     ),
-    awayScore: real("away_score"),
+    awayScore: doublePrecision("away_score"),
     createdAt: createdAtColumn(),
     homeParticipantId: text("home_participant_id").references(
       () => participants.id,
@@ -125,21 +119,18 @@ export const sportsEvents = sqliteTable(
         onDelete: "set null",
       }
     ),
-    homeScore: real("home_score"),
+    homeScore: doublePrecision("home_score"),
     id: text("id").primaryKey(),
-    lastSyncedAt: integer("last_synced_at", { mode: "timestamp_ms" }),
+    lastSyncedAt: bigint("last_synced_at", { mode: "number" }),
     leagueId: text("league_id")
       .notNull()
       .references(() => leagues.id, { onDelete: "cascade" }),
-    nextPollAt: integer("next_poll_at", { mode: "timestamp_ms" }),
-    pollLeaseUntil: integer("poll_lease_until", { mode: "timestamp_ms" }),
+    nextPollAt: bigint("next_poll_at", { mode: "number" }),
+    pollLeaseUntil: bigint("poll_lease_until", { mode: "number" }),
     provider: text("provider").notNull(),
     providerEventId: text("provider_event_id").notNull(),
-    providerPayload: text("provider_payload", { mode: "json" }).$type<Record<
-      string,
-      unknown
-    > | null>(),
-    startsAt: integer("starts_at", { mode: "timestamp_ms" }).notNull(),
+    providerPayload: text("provider_payload"),
+    startsAt: bigint("starts_at", { mode: "number" }).notNull(),
     status: text("status").notNull().default("scheduled"),
     updatedAt: updatedAtColumn(),
   },
@@ -160,6 +151,26 @@ export const sportsEvents = sqliteTable(
     uniqueIndex("sports_events_provider_id_uidx").on(
       table.provider,
       table.providerEventId
+    ),
+  ]
+);
+
+export const providerScheduleSyncs = pgTable(
+  "provider_schedule_syncs",
+  {
+    createdAt: createdAtColumn(),
+    id: text("id").primaryKey(),
+    provider: text("provider").notNull(),
+    scheduleDate: text("schedule_date").notNull(),
+    sportSlug: text("sport_slug").notNull(),
+    syncedAt: bigint("synced_at", { mode: "number" }).notNull(),
+    updatedAt: updatedAtColumn(),
+  },
+  (table) => [
+    uniqueIndex("provider_schedule_syncs_key_uidx").on(
+      table.provider,
+      table.sportSlug,
+      table.scheduleDate
     ),
   ]
 );

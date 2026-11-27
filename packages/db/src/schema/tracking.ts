@@ -1,18 +1,19 @@
 import { sql } from "drizzle-orm";
 import {
+  bigint,
   check,
+  doublePrecision,
   index,
-  integer,
-  real,
-  sqliteTable,
+  pgTable,
+  serial,
   text,
-} from "drizzle-orm/sqlite-core";
+} from "drizzle-orm/pg-core";
 
 import { markets, participants, sportsEvents } from "./catalog";
 import { createdAtColumn, updatedAtColumn } from "./columns";
 import { ticketLegs } from "./tickets";
 
-export const trackingSubscriptions = sqliteTable(
+export const trackingSubscriptions = pgTable(
   "tracking_subscriptions",
   {
     createdAt: createdAtColumn(),
@@ -53,20 +54,17 @@ export const trackingSubscriptions = sqliteTable(
   ]
 );
 
-export const statObservations = sqliteTable(
+export const statObservations = pgTable(
   "stat_observations",
   {
     createdAt: createdAtColumn(),
-    id: integer("id").primaryKey({ autoIncrement: true }),
+    id: serial("id").primaryKey(),
     idempotencyKey: text("idempotency_key").notNull().unique(),
     marketId: text("market_id")
       .notNull()
       .references(() => markets.id, { onDelete: "cascade" }),
-    metadata: text("metadata", { mode: "json" }).$type<Record<
-      string,
-      unknown
-    > | null>(),
-    observedAt: integer("observed_at", { mode: "timestamp_ms" }).notNull(),
+    metadata: text("metadata"),
+    observedAt: bigint("observed_at", { mode: "number" }).notNull(),
     participantId: text("participant_id").references(() => participants.id, {
       onDelete: "set null",
     }),
@@ -75,7 +73,7 @@ export const statObservations = sqliteTable(
     sportsEventId: text("sports_event_id")
       .notNull()
       .references(() => sportsEvents.id, { onDelete: "cascade" }),
-    value: real("value").notNull(),
+    value: doublePrecision("value").notNull(),
   },
   (table) => [
     index("stat_observations_lookup_idx").on(
